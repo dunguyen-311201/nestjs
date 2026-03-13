@@ -1,0 +1,156 @@
+# Comments are provided throughout this file to help you get started.
+# If you need more help, visit the Docker Compose reference guide at
+# https://docs.docker.com/go/compose-spec-reference/
+
+# Here the instructions define your application as a service called "server".
+# This service is built from the Dockerfile in the current directory.
+# You can add other services your application may depend on here, such as a
+# database or a cache. For examples, see the Awesome Compose repository:
+# https://github.com/docker/awesome-compose
+services:
+  server:
+    build:
+      context: .
+    environment:
+      NODE_ENV: production
+    ports:
+      - 8080:8080
+
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: todoapp-dev
+    ports:
+      - '${APP_PORT:-3000}:3000' # API server
+      - '${VITE_PORT:-5173}:5173' # Vite dev server
+      - '${DEBUG_PORT:-9229}:9229' # Node.js debugger
+    environment:
+      NODE_ENV: development
+      DOCKER_ENV: 'true'
+      POSTGRES_HOST: '${POSTGRES_HOST:-db}'
+      POSTGRES_PORT: '${POSTGRES_PORT:-5432}'
+      POSTGRES_DB: '${POSTGRES_DB:-todoapp}'
+      POSTGRES_USER: '${POSTGRES_USER:-todoapp_username}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-todoapp_password}'
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}'
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json
+      - ./vite.config.ts:/app/vite.config.ts:ro
+      - ./tailwind.config.js:/app/tailwind.config.js:ro
+      - ./postcss.config.js:/app/postcss.config.js:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          ignore:
+            - '**/*.test.*'
+            - '**/__tests__/**'
+        - action: rebuild
+          path: ./package.json
+        - action: sync
+          path: ./vite.config.ts
+          target: /app/vite.config.ts
+        - action: sync
+          path: ./tailwind.config.js
+          target: /app/tailwind.config.js
+        - action: sync
+          path: ./postcss.config.js
+          target: /app/postcss.config.js
+    restart: unless-stopped
+    networks:
+      - todoapp-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: todoapp-test
+    environment:
+      NODE_ENV: test
+      POSTGRES_HOST: '${POSTGRES_HOST:-db}'
+      POSTGRES_PORT: '${POSTGRES_PORT:-5432}'
+      POSTGRES_DB: '${POSTGRES_DB:-todoapp}'
+      POSTGRES_USER: '${POSTGRES_USER:-todoapp_username}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-todoapp_password}'
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ['npm', 'run', 'test:coverage']
+    networks:
+      - todoapp-network
+    profiles:
+      - test
+
+  db:
+    image: postgres:18-alpine
+    container_name: todoapp-db
+    environment:
+      POSTGRES_DB: '${POSTGRES_DB:-todoapp}'
+      POSTGRES_USER: '${POSTGRES_USER:-todoapp}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-todoapp_password}'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-todoapp} -d ${POSTGRES_DB:-todoapp}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - todoapp-network
+
+# The commented out section below is an example of how to define a PostgreSQL
+# database that your application can use. `depends_on` tells Docker Compose to
+# start the database before your application. The `db-data` volume persists the
+# database data between container restarts. The `db-password` secret is used
+# to set the database password. You must create `db/password.txt` and add
+# a password of your choosing to it before running `docker-compose up`.
+#     depends_on:
+#       db:
+#         condition: service_healthy
+#   db:
+#     image: postgres
+#     restart: always
+#     user: postgres
+#     secrets:
+#       - db-password
+#     volumes:
+#       - db-data:/var/lib/postgresql/data
+#     environment:
+#       - POSTGRES_DB=example
+#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+#     expose:
+#       - 5432
+#     healthcheck:
+#       test: [ "CMD", "pg_isready" ]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+# volumes:
+#   db-data:
+# secrets:
+#   db-password:
+#     file: db/password.txt
+
+volumes:
+  postgres_data:
+    name: todoapp-postgres-data
+    driver: local
+
+networks:
+  todoapp-network:
+    name: todoapp-network
+    driver: bridge

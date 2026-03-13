@@ -1,0 +1,25 @@
+ARG NODE_VERSION=24.13.0
+FROM node:${NODE_VERSION}-alpine
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /usr/src/app
+
+# Copy manifest files first for dependency caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/ ./packages/
+
+# Install all dependencies
+RUN --mount=type=cache,target=/pnpm/store \
+    pnpm install --no-frozen-lockfile
+
+WORKDIR /usr/src/app/apps/web
+
+EXPOSE 3000
+
+# next dev with Turbopack for fast HMR
+CMD ["pnpm", "dev"]

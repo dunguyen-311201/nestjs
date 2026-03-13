@@ -1,0 +1,86 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2024"],
+    "baseUrl": ".",
+    "rootDir": "./src",
+    "outDir": "./build",
+    "sourceMap": true,
+
+    // Decorator support for TypeORM
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+
+    // Type checking
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+
+    // Additional checks
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    // Module resolution
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    // Performance
+    "skipLibCheck": true,
+
+    // Other
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+
+    "declaration": true,
+    "paths": {
+      "#entities": ["./src/database/entities/index.ts"],
+      "#env": ["./src/configs/env.ts"],
+      "#providers": ["./src/providers/index.ts"],
+      "#providers/*": ["./src/providers/*.ts"],
+      "#services": ["./src/services/index.ts"],
+      "#services/*": ["./src/services/*.ts"],
+      "#controllers": ["./src/controllers/index.ts"],
+      "#controllers/*": ["./src/controllers/*.ts"],
+      "#repositories": ["./src/repositories/index.ts"],
+      "#repositories/*": ["./src/repositories/*.ts"],
+      "#dtos/*": ["./src/dtos/*.ts"],
+      "#adapters": ["./src/adapters/index.ts"],
+      "#middlewares": ["./src/middlewares/index.ts"],
+      "#middlewares/*": ["./src/middlewares/*.ts"],
+      "#schemas": ["./src/schemas/index.ts"],
+      "#schemas/*": ["./src/schemas/*.ts"],
+      "#types": ["./src/types/index.ts"],
+      "#types/*": ["./src/types/*.ts"],
+      "#utils/*": ["./src/utils/*.ts"],
+      "#utils/response": ["./src/utils/response.ts"],
+      "#configs/*": ["./src/configs/*.ts"],
+      "#data-source": ["./src/database/data-source.ts"],
+      "#database/*": ["./src/database/*.ts"],
+      "#test-utils": ["./src/test-utils.ts"],
+      "#plugins/*": ["./src/plugins/*.ts"],
+      "#routes": ["./src/routes/index.ts"],
+      "#routes/admin-order": ["./src/routes/admin-order/index.ts"],
+      "#routes/checkout": ["./src/routes/checkout/index.ts"],
+      "#routes/metric": ["./src/routes/metric/index.ts"],
+      "#routes/order": ["./src/routes/order/index.ts"],
+      "#routes/product": ["./src/routes/product/index.ts"],
+      "#routes/user": ["./src/routes/user/index.ts"],
+      "#routes/*": ["./src/routes/*.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "build", "dist"]
+}

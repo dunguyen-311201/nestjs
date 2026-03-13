@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Receipt from {{company_name}}</title>
+  </head>
+
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background: #f6f9fc;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        Segoe UI,
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+    "
+  >
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center" style="padding: 40px 16px">
+          <!-- Brand -->
+          <h2 style="margin-bottom: 24px; color: #111">{{company_name}}</h2>
+
+          <!-- Summary card -->
+          <table
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              background: #ffffff;
+              border-radius: 8px;
+              padding: 24px;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            "
+          >
+            <tr>
+              <td>
+                <p style="margin: 0; color: #666; font-size: 14px">
+                  Receipt from {{company_name}}
+                </p>
+                <h1 style="margin: 8px 0; font-size: 32px">{{amount_paid}}</h1>
+                <p style="margin: 0; color: #666">Paid {{paid_date}}</p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding-top: 16px">
+                <a
+                  href="{{invoice_url}}"
+                  style="color: #5469d4; text-decoration: none"
+                  >⬇ Download invoice</a
+                >
+                &nbsp;&nbsp;
+                <a
+                  href="{{receipt_url}}"
+                  style="color: #5469d4; text-decoration: none"
+                  >⬇ Download receipt</a
+                >
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding-top: 20px; font-size: 14px; color: #444">
+                <table width="100%">
+                  <tr>
+                    <td>Receipt number</td>
+                    <td align="right">{{receipt_number}}</td>
+                  </tr>
+                  <tr>
+                    <td>Invoice number</td>
+                    <td align="right">{{invoice_number}}</td>
+                  </tr>
+                  <tr>
+                    <td>Payment method</td>
+                    <td align="right"><strong>{{payment_method}}</strong></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Items card -->
+          <table
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              background: #ffffff;
+              border-radius: 8px;
+              padding: 24px;
+              margin-top: 24px;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            "
+          >
+            <tr>
+              <td>
+                <h3 style="margin-top: 0">Receipt #{{receipt_number}}</h3>
+              </td>
+            </tr>
+
+            {{#each items}}
+            <tr>
+              <td style="padding: 12px 0; border-bottom: 1px solid #eee">
+                <strong>{{name}}</strong>
+                <span style="float: right">{{total}}</span>
+                <br />
+                <span style="color: #777; font-size: 13px"
+                  >Qty {{quantity}} · {{unit_price}} each</span
+                >
+              </td>
+            </tr>
+            {{/each}}
+
+            <tr>
+              <td style="padding-top: 16px">
+                <table width="100%">
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td align="right"><strong>{{amount_paid}}</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Amount paid</td>
+                    <td align="right">{{amount_paid}}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding-top: 16px; font-size: 13px; color: #666">
+                Questions? Contact us at
+                <a href="mailto:{{support_email}}" style="color: #5469d4"
+                  >{{support_email}}</a
+                >.
+              </td>
+            </tr>
+          </table>
+
+          <!-- Footer -->
+          <p style="margin: 32px 0 8px; font-size: 12px; color: #888">
+            Powered by <strong>Stripe</strong> | Learn more about Stripe
+            Invoicing
+          </p>
+
+          <!-- Required SendGrid unsubscribe -->
+          <div
+            data-role="module-unsubscribe"
+            style="font-size: 12px; text-align: center"
+          >
+            <a href="{{{unsubscribe}}}">Unsubscribe</a> ·
+            <a href="{{{unsubscribe_preferences}}}">Preferences</a>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

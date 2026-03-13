@@ -8,3 +8,8 @@ coverage/
 
 # Secret key
 *.key
+
+# Auto Format Editor configs
+.vscode/
+
+docker-with-turborepo/

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@typeorm-service/*": ["packages/typeorm-service/src/*"],
+      "@core/*": ["apps/core/src/*"],
+      "@server/*": ["apps/e-commerce-api/src/*"],
+      "@ui/*": ["packages/ui/src/*"],
+      "@/lib/*": ["apps/web/lib/*"],
+      "@/context/*": ["apps/web/context/*"],
+      "@/components/*": ["apps/web/components/*"]
+    }
+  }
+}

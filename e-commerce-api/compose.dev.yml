@@ -1,0 +1,77 @@
+# Development override — use with:
+#   docker compose -f compose.yml -f compose.dev.yml up --build
+#
+# Key differences from production:
+#   - Uses Dockerfile.dev (no build step, faster startup)
+#   - Mounts source code as volumes for hot-reload / HMR
+#   - Sets NODE_ENV=development
+#   - Passes full .env variables to both services
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/e-commerce-api/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      # Database
+      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_NAME=${POSTGRES_DATABASE:-postgres}
+      # Auth
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_WEBHOOK_SIGNING_SECRET=${CLERK_WEBHOOK_SIGNING_SECRET}
+      - CLERK_TOKEN_TEMPLATE=${CLERK_TOKEN_TEMPLATE}
+      # Client
+      - CLIENT_BASE_URL=${CLIENT_BASE_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - CLIENT_LOGIN_PATH=${CLIENT_LOGIN_PATH:-/sign-in}
+      # Stripe
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SIGNING_SECRET=${STRIPE_WEBHOOK_SIGNING_SECRET}
+      # Sendgrid
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
+      - SENDGRID_SUPPORT_EMAIL=${SENDGRID_SUPPORT_EMAIL}
+      # App
+      - APP_NAME=${APP_NAME}
+      - APP_LOGO_URL=${APP_LOGO_URL}
+      - APP_YEAR=${APP_YEAR}
+    volumes:
+      # Mount the full monorepo source — tsx --watch will detect changes
+      - .:/usr/src/app
+      # Preserve container's node_modules (don't overwrite with host)
+      - /usr/src/app/node_modules
+      - /usr/src/app/apps/e-commerce-api/node_modules
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      # Internal docker network URL for SSR fetch calls
+      - API_URL=http://api:8080/api/v1
+      - NEXT_PUBLIC_API_ENDPOINT=http://localhost:8081/api/v1
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - NEXT_HMR_POLLING=true
+      # Clerk
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+    volumes:
+      # Mount full monorepo — Next.js HMR will pick up changes
+      - .:/usr/src/app
+      # Preserve container node_modules
+      - /usr/src/app/node_modules
+      - /usr/src/app/apps/web/node_modules
+      # Preserve Next.js build cache
+      - /usr/src/app/apps/web/.next
+    restart: "no"
