@@ -4,10 +4,19 @@ data/*.db
 coverage/
 .env
 .env.local
+.env.staging.local
+.env.production.local
 
 
 # Secret key
 *.key
+
+# Turbo repo
+.turbo/
+build/
+
+# Nextjs
+.next
 
 # Auto Format Editor configs
 .vscode/
