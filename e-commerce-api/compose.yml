@@ -1,0 +1,35 @@
+services:
+  # Fastify TypeScript API
+  api:
+    build:
+      context: .
+      dockerfile: apps/e-commerce-api/Dockerfile
+    ports:
+      - '8081:8080'
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      # Database Connection
+      - POSTGRES_HOST=${POSTGRES_HOST:-host.docker.internal}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5433}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password@123}
+      - POSTGRES_DB=${POSTGRES_DB:-e-commerce-db}
+    restart: always
+
+  # Next.js App Router Web App
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      # Server-side URL (Internal Docker network)
+      - API_URL=http://api:8080
+      # Client-side URL (Browser access)
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+    depends_on:
+      - api
+    restart: always

@@ -1,0 +1,130 @@
+name: CI/CD — Web
+
+on:
+  push:
+    branches:
+      - main
+      - feat/apply-devops
+    paths:
+      - "e-commerce-api/apps/web/**"
+      - "e-commerce-api/packages/**"
+      - "e-commerce-api/package.json"
+      - "e-commerce-api/pnpm-lock.yaml"
+      - "e-commerce-api/turbo.json"
+      - ".github/workflows/web.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "e-commerce-api/apps/web/**"
+      - "e-commerce-api/packages/**"
+      - "e-commerce-api/package.json"
+      - "e-commerce-api/pnpm-lock.yaml"
+      - "e-commerce-api/turbo.json"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: e-commerce-api
+
+jobs:
+  build-web:
+    name: Validate Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.13.0"
+          cache: "pnpm"
+          cache-dependency-path: e-commerce-api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter web lint
+
+      - name: Check types
+        run: pnpm --filter web check-types
+
+  # docker-build-web runs after build-web; deploy-web runs after docker-build-web succeeds
+  docker-build-web:
+    name: Docker Build & Push Web
+    needs: build-web
+    runs-on: ubuntu-latest
+    environment: Development
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push e-commerce-web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: e-commerce-api
+          file: e-commerce-api/apps/web/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/e-commerce-web:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/e-commerce-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-web:
+    name: Deploy Web to Vercel
+    needs: docker-build-web
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/apply-devops')
+    runs-on: ubuntu-latest
+    environment: Development
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@39
+
+      - name: Pull Vercel Environment Information
+        working-directory: ${{ github.workspace }}
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # Let Vercel build on their servers — they natively understand rootDirectory
+      # and pnpm workspaces, avoiding the cd ../.. path conflict in local vercel build
+      - name: Deploy to Vercel
+        working-directory: ${{ github.workspace }}
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

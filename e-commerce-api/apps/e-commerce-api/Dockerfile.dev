@@ -1,0 +1,25 @@
+ARG NODE_VERSION=24.13.0
+FROM node:${NODE_VERSION}-alpine
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /usr/src/app
+
+# Copy the full monorepo (source will be overridden by volume mount in dev)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/e-commerce-api/package.json ./apps/e-commerce-api/
+COPY packages/ ./packages/
+
+# Install all dependencies (including devDependencies for tsx, etc.)
+RUN --mount=type=cache,target=/pnpm/store \
+    pnpm install --no-frozen-lockfile
+
+WORKDIR /usr/src/app/apps/e-commerce-api
+
+EXPOSE 8080
+
+# tsx --watch gives hot-reload on file changes
+CMD ["pnpm", "dev"]

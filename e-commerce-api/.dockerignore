@@ -1,0 +1,12 @@
+**/node_modules
+**/.turbo
+**/build
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/coverage
+**/__tests__
+**/*.spec.ts
+**/*.test.ts

@@ -1,0 +1,130 @@
+name: CI/CD — API
+
+on:
+  push:
+    branches:
+      - main
+      - feat/apply-devops
+    paths:
+      - "e-commerce-api/apps/e-commerce-api/**"
+      - "e-commerce-api/packages/**"
+      - "e-commerce-api/package.json"
+      - "e-commerce-api/pnpm-lock.yaml"
+      - "e-commerce-api/turbo.json"
+      - ".github/workflows/api.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "e-commerce-api/apps/e-commerce-api/**"
+      - "e-commerce-api/packages/**"
+      - "e-commerce-api/package.json"
+      - "e-commerce-api/pnpm-lock.yaml"
+      - "e-commerce-api/turbo.json"
+      - ".github/workflows/api.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: e-commerce-api
+
+jobs:
+  build-api:
+    name: Build e-commerce-api
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.13.0"
+          cache: "pnpm"
+          cache-dependency-path: e-commerce-api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter e-commerce-api lint
+
+      - name: Check types
+        run: pnpm --filter e-commerce-api check-types
+
+      - name: Build
+        run: pnpm turbo run build --filter=e-commerce-api
+
+  docker-build-api:
+    name: Docker Build & Push API
+    runs-on: ubuntu-latest
+    needs: build-api
+    environment: Development
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/e-commerce-api
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and Push e-commerce-api Image
+        uses: docker/build-push-action@v6
+        with:
+          context: e-commerce-api
+          file: e-commerce-api/apps/e-commerce-api/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-api-railway:
+    name: Deploy API to Railway
+    needs: docker-build-api
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/apply-devops')
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Deploy to Railway
+        run: railway redeploy --service e-commerce-api --yes
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

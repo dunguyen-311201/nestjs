@@ -1,0 +1,8 @@
+export { AbstractProductRepository as TProductRepository } from './product/type'
+export { AbstractUserRepository as TUserRepository } from './user/type'
+export { AbstractCartRepository as TCartRepository } from './cart/type'
+export { AbstractCartItemRepository as TCartItemRepository } from './cart-item/type'
+export { AbstractCategoryRepository as TCategoryRepository } from './category/type'
+export { AbstractOrderRepository as TOrderRepository } from './order/type'
+export { AbstractOrderItemRepository as TOrderItemRepository } from './order-item/type'
+export { AbstractStockReservationRepository as TStockreservationRepository } from './stock-reservation/type'

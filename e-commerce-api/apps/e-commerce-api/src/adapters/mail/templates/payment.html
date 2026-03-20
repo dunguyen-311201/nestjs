@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      /* Base styles for email clients */
+      body {
+        margin: 0;
+        padding: 0;
+        min-width: 100%;
+        width: 100% !important;
+        height: 100% !important;
+        background-color: #f4f7f9;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      }
+      table {
+        border-spacing: 0;
+        font-family: sans-serif;
+        color: #333333;
+      }
+      td {
+        padding: 0;
+      }
+      img {
+        border: 0;
+      }
+      .wrapper {
+        width: 100%;
+        table-layout: fixed;
+        background-color: #f4f7f9;
+        padding-bottom: 40px;
+      }
+      .webkit {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+      }
+      .outer {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 600px;
+        border-spacing: 0;
+        color: #4b5563;
+      }
+      .header {
+        background-color: #6772e5; /* Stripe Purple */
+        padding: 40px;
+        text-align: center;
+        color: #ffffff;
+      }
+      .content {
+        padding: 30px;
+        line-height: 1.6;
+        font-size: 16px;
+      }
+      .invoice-card {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 24px;
+        margin: 24px 0;
+        text-align: center;
+      }
+      .button-container {
+        padding: 20px 0 30px 0;
+        text-align: center;
+      }
+      .button {
+        background-color: #6772e5;
+        color: #ffffff !important;
+        padding: 14px 28px;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: bold;
+        display: inline-block;
+      }
+      .footer {
+        padding: 20px;
+        text-align: center;
+        font-size: 12px;
+        color: #9ca3af;
+      }
+      a {
+        color: #6772e5;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <center class="wrapper">
+      <div class="webkit">
+        <table class="outer" align="center">
+          <tr>
+            <td class="header">
+              <h1 style="margin: 0; font-size: 28px; letter-spacing: -0.5px">
+                {{company_name}}
+              </h1>
+              <p style="margin: 5px 0 0 0; opacity: 0.9">
+                Invoice {{invoice_id}}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="content">
+              <p style="font-size: 18px; font-weight: bold; color: #1f2937">
+                Hello {{customer_name}},
+              </p>
+              <p>
+                We appreciate your business with
+                <strong>{{company_name}}</strong>. Your invoice is now ready for
+                payment.
+              </p>
+
+              <div class="invoice-card">
+                <p
+                  style="
+                    margin: 0;
+                    text-transform: uppercase;
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #6b7280;
+                    letter-spacing: 1px;
+                  "
+                >
+                  Amount Due
+                </p>
+                <h2 style="margin: 8px 0; font-size: 36px; color: #111827">
+                  {{amount_due}}
+                </h2>
+                <p style="margin: 0; font-size: 14px; color: #374151">
+                  Due by: <strong>{{due_date}}</strong>
+                </p>
+              </div>
+
+              <p>
+                To view your itemized receipt and pay online securely via
+                Stripe, please click the button below:
+              </p>
+
+              <div class="button-container">
+                <a href="{{invoice_url}}" class="button">Pay This Invoice</a>
+              </div>
+
+              <p
+                style="
+                  font-size: 14px;
+                  border-top: 1px solid #f1f5f9;
+                  padding-top: 20px;
+                "
+              >
+                <strong>Questions?</strong><br />
+                If you have any issues with this payment, please contact us at
+                <a href="mailto:{{support_email}}">{{support_email}}</a> or
+                visit our <a href="{{help_center_url}}">Help Center</a>.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="footer">
+              <p style="margin: 0 0 10px 0">
+                <strong>{{company_name}}</strong>
+              </p>
+              <p style="margin: 0">
+                &copy; 2026 {{company_name}}. All rights reserved.
+              </p>
+              <p style="margin: 5px 0">
+                If you didn't expect this email, please disregard it.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </center>
+  </body>
+</html>

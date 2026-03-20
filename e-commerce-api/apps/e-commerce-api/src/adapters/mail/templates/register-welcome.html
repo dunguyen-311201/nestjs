@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Account Created Successfully</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f6f6f6;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        padding: 20px 0;
+      }
+      .header img {
+        max-width: 120px;
+      }
+      .content {
+        padding: 20px;
+      }
+      .btn {
+        display: inline-block;
+        padding: 12px 24px;
+        margin-top: 20px;
+        background-color: #1a73e8;
+        color: #ffffff;
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .footer {
+        text-align: center;
+        font-size: 12px;
+        color: #888888;
+        padding: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        {{#if logo_url}}
+        <img src="{{logo_url}}" alt="{{app_name}} Logo" />
+        {{else}}
+        <h1>{{app_name}}</h1>
+        {{/if}}
+      </div>
+
+      <!-- Main content -->
+      <div class="content">
+        <h2>🎉 Welcome, {{name}}!</h2>
+        <p>Your account has been successfully created.</p>
+
+        <p><strong>Email:</strong> {{email}}</p>
+
+        <p>Click the button below to log in and get started:</p>
+
+        <a href="{{login_url}}" class="btn">Log in to your account</a>
+
+        {{#if support_email}}
+        <p style="margin-top: 24px">
+          If you need help, contact
+          <a href="mailto:{{support_email}}">{{support_email}}</a>.
+        </p>
+        {{/if}}
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p>© {{year}} {{app_name}}. All rights reserved.</p>
+        <p>This is an automated message — please do not reply.</p>
+      </div>
+    </div>
+  </body>
+</html>

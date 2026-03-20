@@ -1,0 +1,48 @@
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      enabled: false,
+      provider: 'v8',
+      reporter: ['text', 'html', 'json-summary'],
+      reportsDirectory: './coverage',
+      exclude: [
+        'node_modules/**',
+        'dist/**',
+        '**/*.spec.ts',
+        '**/__tests__/**',
+        '**/types.ts',
+        '**/type.ts',
+        'src/database/entities/**',
+        'src/database/migrations/**',
+        'src/database/seed-data/**',
+        'src/configs/**',
+        'src/utils/container.ts',
+        'src/server.ts',
+        'src/index.ts',
+        'src/constants/**',
+        'src/routes/**',
+        'src/schemas/**',
+        'src/plugins/**',
+        'src/types/**',
+        'src/test-utils.ts',
+        'src/database/**',
+        'src/dtos/**',
+        'src/adapters/**',
+        'src/middlewares/**',
+      ],
+      include: ['src/**/*.ts'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
+    },
+    setupFiles: ['./src/setup-tests.ts'],
+    exclude: ['node_modules/**', 'dist/**', 'build/**'],
+  },
+})

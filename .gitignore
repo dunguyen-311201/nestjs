@@ -18,3 +18,7 @@ build/
 # Nextjs
 .next
 
+# Auto Format Editor configs
+.vscode/
+
+docker-with-turborepo/
