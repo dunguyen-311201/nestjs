@@ -21,8 +21,8 @@ describe('MockAuthGuard', () => {
     expect(guard).toBeDefined();
   });
 
-  it('should return true for valid mock-token', () => {
-    const ctx = createMockContext('mock-token');
+  it('should return true for valid Bearer mock-token', () => {
+    const ctx = createMockContext('Bearer mock-token');
     expect(guard.canActivate(ctx)).toBe(true);
   });
 

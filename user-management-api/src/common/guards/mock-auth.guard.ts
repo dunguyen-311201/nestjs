@@ -12,7 +12,7 @@ export class MockAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const token = request.headers['authorization'];
 
-    if (token !== 'mock-token') {
+    if (token !== 'Bearer mock-token') {
       throw new UnauthorizedException('Missing or invalid token');
     }
 
