@@ -8,4 +8,9 @@ export class CreateUserDto {
 
   @IsEmail()
   email: string;
+
+  constructor(name: string, email: string) {
+    this.name = name;
+    this.email = email;
+  }
 }
