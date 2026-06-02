@@ -1,27 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
-import { User } from './entities/user.entity';
+
+const mockUsersService = {
+  create: jest.fn(),
+  findAll: jest.fn(),
+  findOne: jest.fn(),
+  update: jest.fn(),
+  remove: jest.fn(),
+};
 
 describe('UsersController', () => {
   let controller: UsersController;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
-        UsersService,
         {
-          provide: getRepositoryToken(User),
-          useValue: {
-            create: jest.fn(),
-            save: jest.fn(),
-            find: jest.fn(),
-            findOneBy: jest.fn(),
-            merge: jest.fn(),
-            remove: jest.fn(),
-          },
+          provide: UsersService,
+          useValue: mockUsersService,
         },
       ],
     }).compile();
@@ -31,5 +30,20 @@ describe('UsersController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('findAll() should delegate to UsersService', async () => {
+    mockUsersService.findAll.mockResolvedValue([]);
+    const result = await controller.findAll();
+    expect(mockUsersService.findAll).toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
+  it('findOne() should delegate to UsersService with numeric id', async () => {
+    const user = { id: 1, name: 'Alice', email: 'alice@example.com' };
+    mockUsersService.findOne.mockResolvedValue(user);
+    const result = await controller.findOne(1);
+    expect(mockUsersService.findOne).toHaveBeenCalledWith(1);
+    expect(result).toEqual(user);
   });
 });
