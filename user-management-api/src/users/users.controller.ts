@@ -7,10 +7,8 @@ import {
   ParseIntPipe,
   Post,
   Put,
-  UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { MockAuthGuard } from './guards/mock-auth.guard';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -18,7 +16,6 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 @UseGuards(MockAuthGuard)
-@UseFilters(HttpExceptionFilter)
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
