@@ -1,8 +1,10 @@
 ### Get all users
 GET http://localhost:3000/users
+Authorization: mock-token
 
 ### Create a new user
 POST http://localhost:3000/users
+Authorization: mock-token
 Content-Type: application/json
 
 {
@@ -11,11 +13,13 @@ Content-Type: application/json
 }
 
 ### Get a user by ID
-GET http://localhost:3000/users/17797703033071
+GET http://localhost:3000/users/1
+Authorization: mock-token
 
 
 ### Update a user by ID
-PUT http://localhost:3000/users/1779770303307
+PUT http://localhost:3000/users/1
+Authorization: mock-token
 Content-Type: application/json
 
 {
@@ -24,4 +28,5 @@ Content-Type: application/json
 }
 
 ### Delete a user by ID
-DELETE http://localhost:3000/users/1779769650823
+DELETE http://localhost:3000/users/2
+Authorization: mock-token
