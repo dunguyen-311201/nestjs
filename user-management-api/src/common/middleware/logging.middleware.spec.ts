@@ -15,16 +15,14 @@ describe('LoggingMiddleware', () => {
   });
 
   it('should be defined', () => {
-    expect(middleware).toBeTruthy();
+    expect(middleware).toBeDefined();
   });
 
   it('should call next()', () => {
     const req = { method: 'GET', path: '/users' } as any;
     const res = {} as any;
     const next = jest.fn();
-
     middleware.use(req, res, next);
-
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -32,9 +30,7 @@ describe('LoggingMiddleware', () => {
     const req = { method: 'POST', path: '/users' } as any;
     const res = {} as any;
     const next = jest.fn();
-
     middleware.use(req, res, next);
-
     expect(logSpy).toHaveBeenCalledWith('[POST] /users');
   });
 
@@ -42,9 +38,7 @@ describe('LoggingMiddleware', () => {
     const req = { method: 'DELETE', path: '/users/1' } as any;
     const res = {} as any;
     const next = jest.fn();
-
     middleware.use(req, res, next);
-
     expect(logSpy).toHaveBeenCalledWith('[DELETE] /users/1');
     expect(next).toHaveBeenCalledTimes(1);
   });
