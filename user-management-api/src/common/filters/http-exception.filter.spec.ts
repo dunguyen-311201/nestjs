@@ -42,7 +42,10 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('should respond with 401 for UnauthorizedException', () => {
-    const exception = new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    const exception = new HttpException(
+      'Unauthorized',
+      HttpStatus.UNAUTHORIZED,
+    );
     filter.catch(exception, createMockHost(mockResponse));
     expect(mockResponse.status).toHaveBeenCalledWith(401);
     expect(mockResponse.json).toHaveBeenCalledWith(
