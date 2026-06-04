@@ -30,3 +30,58 @@ Content-Type: application/json
 ### Delete a user by ID
 DELETE http://localhost:3000/users/2
 Authorization: Bearer mock-token
+
+
+### Get all products
+GET http://localhost:3000/v1/products?page=5
+Authorization: Bearer mock-token
+
+
+### Get all categories
+GET http://localhost:3000/v1/categories
+Authorization: Bearer mock-token
+
+### Create a new Category
+POST http://localhost:3000/v1/categories
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Category A",
+  "description": "Description of Category A"
+}
+
+### Create a new product
+POST http://localhost:3000/v1/products
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Product A",
+  "description": "Description of Product A",
+  "price": 19.99,
+  "stock": 100,
+  "categoryId": "e4ecc3fd-fb0f-4aae-9413-c34e28f2db4e"
+}
+
+### Get a product by ID
+GET http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+Authorization: Bearer mock-token
+
+
+### Update a product by ID
+PUT http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Product A Updated",
+  "description": "Description of Product A Updated",
+  "price": 24.99,
+  "stock": 80,
+  "categoryId": "e4ecc3fd-fb0f-4aae-9413-c34e28f2db4e"
+}
+
+### Delete a product by ID
+DELETE http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+Authorization: Bearer mock-token
