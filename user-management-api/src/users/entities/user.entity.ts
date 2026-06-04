@@ -17,7 +17,7 @@ export class User {
   @Column({ unique: true })
   email!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   avatarUrl!: string | null;
 
   @CreateDateColumn()
