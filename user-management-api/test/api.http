@@ -8,17 +8,17 @@ Authorization: Bearer mock-token
 Content-Type: application/json
 
 {
-  "name": "John Doe",
-  "email": "john.doe@example.com"
+  "name": "Peter Parker",
+  "email": "peter.parker@example.com",
 }
 
 ### Get a user by ID
-GET http://localhost:3000/users/1
+GET http://localhost:3000/v1/users/2bf0de85-d1e8-44c1-9e35-40a68441d540
 Authorization: Bearer mock-token
 
 
 ### Update a user by ID
-PUT http://localhost:3000/users/1
+PUT http://localhost:3000/v1/users/2bf0de85-d1e8-44c1-9e35-40a68441d540
 Authorization: Bearer mock-token
 Content-Type: application/json
 
@@ -47,8 +47,8 @@ Authorization: Bearer mock-token
 Content-Type: application/json
 
 {
-  "name": "Category A",
-  "description": "Description of Category A"
+  "name": "Category B",
+  "description": "Description of Category B"
 }
 
 ### Create a new product

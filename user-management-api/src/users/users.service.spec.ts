@@ -1,10 +1,15 @@
 import { NotFoundException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
-const mockUser: User = { id: 1, name: 'Alice', email: 'alice@example.com' };
+const mockUser: User = {
+  id: '1',
+  name: 'Alice',
+  email: 'alice@example.com',
+  avatarUrl: '',
+};
 
 const mockRepository = {
   create: jest.fn().mockReturnValue(mockUser),

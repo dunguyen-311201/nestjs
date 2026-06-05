@@ -1,4 +1,4 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { MockAuthGuard } from './mock-auth.guard';
 
 const createMockContext = (authorization?: string): ExecutionContext =>

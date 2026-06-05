@@ -1,4 +1,4 @@
-import { ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import { type ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 
 const createMockHost = (mockResponse: object): ArgumentsHost =>
