@@ -39,11 +39,11 @@ describe('UsersController', () => {
     expect(result).toEqual([]);
   });
 
-  it('findOne() should delegate to UsersService with numeric id', async () => {
-    const user = { id: 1, name: 'Alice', email: 'alice@example.com' };
+  it('findOne() should delegate to UsersService with id', async () => {
+    const user = { id: '1', name: 'Alice', email: 'alice@example.com' };
     mockUsersService.findOne.mockResolvedValue(user);
-    const result = await controller.findOne(1);
-    expect(mockUsersService.findOne).toHaveBeenCalledWith(1);
+    const result = await controller.findOne('1');
+    expect(mockUsersService.findOne).toHaveBeenCalledWith('1');
     expect(result).toEqual(user);
   });
 });
