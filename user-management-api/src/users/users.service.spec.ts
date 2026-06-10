@@ -4,12 +4,11 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
-const mockUser: User = {
+const mockUser = {
   id: '1',
   name: 'Alice',
   email: 'alice@example.com',
-  avatarUrl: '',
-};
+} as User;
 
 const mockRepository = {
   create: jest.fn().mockReturnValue(mockUser),
@@ -57,28 +56,28 @@ describe('UsersService', () => {
   });
 
   it('findOne() should return a user by id', async () => {
-    const result = await service.findOne(1);
-    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
+    const result = await service.findOne('1');
+    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(result).toEqual(mockUser);
   });
 
   it('findOne() should throw NotFoundException when user is not found', async () => {
     mockRepository.findOneBy.mockResolvedValueOnce(null);
-    await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne('999')).rejects.toThrow(NotFoundException);
   });
 
   it('update() should merge the dto and save the user', async () => {
     const dto = { name: 'Bob' };
-    const result = await service.update(1, dto);
-    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
+    const result = await service.update('1', dto);
+    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(mockRepository.merge).toHaveBeenCalledWith(mockUser, dto);
     expect(mockRepository.save).toHaveBeenCalledWith(mockUser);
     expect(result).toEqual(mockUser);
   });
 
   it('remove() should delete and return the user', async () => {
-    const result = await service.remove(1);
-    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
+    const result = await service.remove('1');
+    expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(mockRepository.remove).toHaveBeenCalledWith(mockUser);
     expect(result).toEqual(mockUser);
   });

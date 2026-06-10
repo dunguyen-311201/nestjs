@@ -9,7 +9,7 @@ Content-Type: application/json
 
 {
   "name": "Peter Parker",
-  "email": "peter.parker@example.com",
+  "email": "peter.parker@example.com"
 }
 
 ### Get a user by ID
@@ -33,7 +33,7 @@ Authorization: Bearer mock-token
 
 
 ### Get all products
-GET http://localhost:3000/v1/products?page=5
+GET http://localhost:3000/v1/products?page=1
 Authorization: Bearer mock-token
 
 
@@ -61,16 +61,16 @@ Content-Type: application/json
   "description": "Description of Product A",
   "price": 19.99,
   "stock": 100,
-  "categoryId": "e4ecc3fd-fb0f-4aae-9413-c34e28f2db4e"
+  "categoryId": "95f272c3-52bd-47f6-b004-c42397d76341"
 }
 
 ### Get a product by ID
-GET http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+GET http://localhost:3000/v1/products/7102ca97-56a1-4cbe-9f48-97bb257d8472
 Authorization: Bearer mock-token
 
 
 ### Update a product by ID
-PUT http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+PUT http://localhost:3000/v1/products/7102ca97-56a1-4cbe-9f48-97bb257d8472
 Authorization: Bearer mock-token
 Content-Type: application/json
 
@@ -83,5 +83,5 @@ Content-Type: application/json
 }
 
 ### Delete a product by ID
-DELETE http://localhost:3000/v1/products/bc888046-ca23-44eb-a474-22634666894c
+DELETE http://localhost:3000/v1/products/7102ca97-56a1-4cbe-9f48-97bb257d8472
 Authorization: Bearer mock-token
