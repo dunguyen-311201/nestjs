@@ -1,2 +1,0 @@
-cd user-management-api
-pnpm exec lint-staged
