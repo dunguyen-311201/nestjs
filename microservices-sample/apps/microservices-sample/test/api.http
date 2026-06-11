@@ -1,5 +1,17 @@
 ### Create Order
-POST http://localhost:3000/create-order
+POST http://localhost:3001/create-order
+Content-Type: application/json
+
+{
+    "name": "Order 1",
+    "product": "Product 1",
+    "price": 100,
+    "quantity": 1
+}
+
+
+### Create Order with API Gateway
+POST http://localhost:3000/orders
 Content-Type: application/json
 
 {
@@ -11,4 +23,6 @@ Content-Type: application/json
 
 
 ### Get Orders
-GET http://localhost:3000/orders
+GET http://localhost:3001/orders
+
+    

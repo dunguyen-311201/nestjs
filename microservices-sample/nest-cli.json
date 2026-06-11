@@ -10,6 +10,15 @@
   "monorepo": true,
   "root": "apps/microservices-sample",
   "projects": {
+    "api-gateway": {
+      "type": "application",
+      "root": "apps/api-gateway",
+      "entryFile": "main",
+      "sourceRoot": "apps/api-gateway/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api-gateway/tsconfig.app.json"
+      }
+    },
     "constants": {
       "type": "library",
       "root": "libs/constants",
