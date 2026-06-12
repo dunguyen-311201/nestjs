@@ -1,98 +1,149 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# NestJS Microservices Sample
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS monorepo demonstrating microservices architecture with service discovery via Consul.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Architecture
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+```
+┌─────────────────────────────────────────────────────┐
+│                    Consul (port 8500)                │
+│              Service Registry & Discovery            │
+└──────────┬─────────────────────┬────────────────────┘
+           │ register            │ register
+           ▼                     ▼
+┌──────────────────┐   ┌──────────────────────┐
+│   Order Service  │   │  Inventory Service   │
+│  HTTP :3001      │◄──│  HTTP :3002          │
+│  TCP  :8001      │   │  TCP  :8002          │
+└──────────────────┘   └──────────────────────┘
+           ▲
+           │ discover via Consul
+┌──────────────────┐
+│   API Gateway    │
+│   HTTP :3000     │
+└──────────────────┘
 ```
 
-## Compile and run the project
+| Service | HTTP Port | TCP Port | Purpose |
+|---|---|---|---|
+| api-gateway | 3000 | — | Routes client requests, discovers services via Consul |
+| order | 3001 | 8001 | Manages orders |
+| inventory | 3002 | 8002 | Manages inventory |
 
+## Prerequisites
+
+- Node.js >= 18
+- pnpm
+- Consul
+
+## Install Consul
+
+**macOS:**
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+brew install consul
 ```
 
-## Run tests
-
+**Linux:**
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# Download and install
+wget https://releases.hashicorp.com/consul/1.18.1/consul_1.18.1_linux_amd64.zip
+unzip consul_1.18.1_linux_amd64.zip
+sudo mv consul /usr/local/bin/
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+**Docker:**
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker run -d --name consul -p 8500:8500 hashicorp/consul agent -dev -client=0.0.0.0
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Setup
 
-## Resources
+```bash
+pnpm install
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Running the App
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### 1. Start Consul
 
-## Support
+```bash
+consul agent -dev
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Consul UI is available at http://localhost:8500
 
-## Stay in touch
+### 2. Start each service in separate terminals
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+# Terminal 1 — Order service
+pnpm nest start order --watch
 
-## License
+# Terminal 2 — Inventory service
+pnpm nest start inventory --watch
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+# Terminal 3 — API Gateway
+pnpm nest start api-gateway --watch
+```
+
+### Verify services are registered
+
+Open http://localhost:8500/ui/dc1/services — you should see `order-service` and `inventory-service` listed with passing health checks.
+
+## API Endpoints
+
+### API Gateway (port 3000)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/orders` | Create a new order (proxied to order service via Consul discovery) |
+
+### Order Service (port 3001)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Health check (used by Consul) |
+| GET | `/orders` | List all orders |
+| POST | `/create-order` | Create an order |
+
+### Inventory Service (port 3002)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Health check (used by Consul) |
+
+## Example Request
+
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{"productId": "abc123", "quantity": 2}'
+```
+
+## How Service Discovery Works
+
+1. On startup, `order-service` and `inventory-service` register themselves with Consul (name, host, port, health check URL).
+2. Consul periodically calls each service's `GET /health` endpoint to verify availability.
+3. When the API Gateway receives a request, it queries Consul for the current address of `order-service` before forwarding — no hardcoded URLs.
+4. On shutdown, each service deregisters itself from Consul.
+
+## Tests
+
+```bash
+# Unit tests
+pnpm test
+
+# Test coverage
+pnpm test:cov
+```
+
+## Project Structure
+
+```
+apps/
+  api-gateway/     # HTTP gateway, port 3000
+  order/           # Order microservice, HTTP :3001 / TCP :8001
+  inventory/       # Inventory microservice, HTTP :3002 / TCP :8002
+libs/
+  constants/       # Shared event constants
+  shared/          # Shared types/DTOs
+```

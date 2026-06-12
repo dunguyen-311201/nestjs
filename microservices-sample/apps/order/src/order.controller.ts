@@ -14,6 +14,11 @@ export class OrderController {
     return this.orderService.getHello();
   }
 
+  @Get('health')
+  healthCheck() {
+    return { status: 'ok' };
+  }
+
   @Post('create-order')
   createOrder(@Body() createOrderInput: CreateOrderInput) {
     return this.orderService.createOrder(createOrderInput);
