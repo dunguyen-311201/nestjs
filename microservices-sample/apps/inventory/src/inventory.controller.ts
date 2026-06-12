@@ -13,6 +13,11 @@ export class InventoryController {
     return this.inventoryService.getHello();
   }
 
+  @Get('health')
+  healthCheck() {
+    return { status: 'ok' };
+  }
+
   @EventPattern(EVENTS.ORDER_CREATED)
   handleOrderCreated(order: Order) {
     this.inventoryService.handleOrderCreated(order);
