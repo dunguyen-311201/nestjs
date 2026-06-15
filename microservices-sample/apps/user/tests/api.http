@@ -1,0 +1,32 @@
+### Get all users
+GET http://localhost:3003/v1/users
+Authorization: Bearer mock-token
+
+### Create a new user
+POST http://localhost:3003/v2/users
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Peter Parker",
+  "email": "peter.parker@example.com"
+}
+
+### Get a user by ID
+GET http://localhost:3003/v1/users/2bf0de85-d1e8-44c1-9e35-40a68441d540
+Authorization: Bearer mock-token
+
+
+### Update a user by ID
+PUT http://localhost:3003/v1/users/2bf0de85-d1e8-44c1-9e35-40a68441d540
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "John Doe Updated",
+  "email": "john.doe.updated@example.com"
+}
+
+### Delete a user by ID
+DELETE http://localhost:3003/v1/users/2bf0de85-d1e8-44c1-9e35-40a68441d540
+Authorization: Bearer mock-token

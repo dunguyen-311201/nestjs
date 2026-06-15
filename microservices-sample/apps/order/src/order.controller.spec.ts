@@ -40,7 +40,12 @@ describe('OrderController', () => {
 
   describe('createOrder', () => {
     it('should return the created order', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
 
       const result = controller.createOrder(input);
 
@@ -50,7 +55,12 @@ describe('OrderController', () => {
 
   describe('getOrders', () => {
     it('should return all orders', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
       service.createOrder(input);
       service.createOrder(input);
 
