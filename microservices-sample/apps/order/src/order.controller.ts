@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Param } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderInput } from './dto/CreateOrderInput';
 import { EventPattern } from '@nestjs/microservices';
@@ -27,6 +27,11 @@ export class OrderController {
   @Get('orders')
   getOrders() {
     return this.orderService.getOrders();
+  }
+
+  @Get('orders/:id')
+  getOrderById(@Param('id') id: string) {
+    return this.orderService.getOrderById(id);
   }
 
   @EventPattern(EVENTS.ORDER_PROCESSED)

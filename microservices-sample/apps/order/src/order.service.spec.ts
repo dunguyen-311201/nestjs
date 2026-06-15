@@ -30,7 +30,12 @@ describe('OrderService', () => {
 
   describe('createOrder', () => {
     it('should create an order with PENDING status and auto-generated id', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 2 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 2,
+      };
 
       const order = service.createOrder(input);
 
@@ -42,7 +47,12 @@ describe('OrderService', () => {
     });
 
     it('should increment id for each new order', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
 
       const first = service.createOrder(input);
       const second = service.createOrder(input);
@@ -52,7 +62,12 @@ describe('OrderService', () => {
     });
 
     it('should persist the order so getOrders returns it', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
 
       const order = service.createOrder(input);
 
@@ -60,12 +75,20 @@ describe('OrderService', () => {
     });
 
     it('should emit order_created event to inventory service', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
 
       const order = service.createOrder(input);
 
       expect(mockInventoryClient.emit).toHaveBeenCalledTimes(1);
-      expect(mockInventoryClient.emit).toHaveBeenCalledWith('order_created', order);
+      expect(mockInventoryClient.emit).toHaveBeenCalledWith(
+        'order_created',
+        order,
+      );
     });
   });
 
@@ -75,7 +98,12 @@ describe('OrderService', () => {
     });
 
     it('should return all created orders', () => {
-      const input = { name: 'Alice', product: 'Widget', price: 10, quantity: 1 };
+      const input = {
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      };
       service.createOrder(input);
       service.createOrder({ ...input, name: 'Bob' });
 
@@ -92,7 +120,11 @@ describe('OrderService', () => {
         quantity: 1,
       });
 
-      service.handleOrderProcessed({ orderId: order.id, success: true, message: 'ok' });
+      service.handleOrderProcessed({
+        orderId: order.id,
+        success: true,
+        message: 'ok',
+      });
 
       expect(service.getOrders()[0].status).toBe(OrderStatus.COMPLETED);
     });
@@ -105,15 +137,28 @@ describe('OrderService', () => {
         quantity: 1,
       });
 
-      service.handleOrderProcessed({ orderId: order.id, success: false, message: 'failed' });
+      service.handleOrderProcessed({
+        orderId: order.id,
+        success: false,
+        message: 'failed',
+      });
 
       expect(service.getOrders()[0].status).toBe(OrderStatus.CANCELLED);
     });
 
     it('should not change any order when orderId does not exist', () => {
-      service.createOrder({ name: 'Alice', product: 'Widget', price: 10, quantity: 1 });
+      service.createOrder({
+        name: 'Alice',
+        product: 'Widget',
+        price: 10,
+        quantity: 1,
+      });
 
-      service.handleOrderProcessed({ orderId: 'nonexistent', success: true, message: 'ok' });
+      service.handleOrderProcessed({
+        orderId: 'nonexistent',
+        success: true,
+        message: 'ok',
+      });
 
       expect(service.getOrders()[0].status).toBe(OrderStatus.PENDING);
     });

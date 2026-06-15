@@ -30,6 +30,10 @@ export class OrderService {
     return this.orders;
   }
 
+  getOrderById(id: string): Order | undefined {
+    return this.orders.find((order) => order.id === id);
+  }
+
   handleOrderProcessed(data: OrderProcessPayload) {
     const order = this.orders.find((order) => order.id === data.orderId);
     if (order) {
