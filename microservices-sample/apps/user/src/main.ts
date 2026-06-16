@@ -1,9 +1,10 @@
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { HttpExceptionFilter, LoggingInterceptor } from '@app/common';
 import { UsersModule } from './users.module';
 
 async function bootstrap() {
+  const logger = new Logger('UserService');
   const app = await NestFactory.create(UsersModule);
   app.enableVersioning({
     type: VersioningType.URI,
@@ -13,6 +14,8 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor());
-  await app.listen(process.env.PORT ?? 3003);
+  const port = process.env.PORT ?? 3003;
+  await app.listen(port);
+  logger.log(`User Service running on http://localhost:${port}`);
 }
 void bootstrap();
