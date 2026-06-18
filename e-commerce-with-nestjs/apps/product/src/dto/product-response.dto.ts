@@ -18,6 +18,12 @@ export class ProductResponseDto {
   stock!: number;
 
   @Expose()
+  image!: string;
+
+  @Expose()
+  specs!: Record<string, string>;
+
+  @Expose()
   @Transform(({ obj }: { obj: Product }) => obj.category?.id ?? null)
   categoryId!: string | null;
 

@@ -1,17 +1,37 @@
-import { Body, Controller, Get, Post, Param } from '@nestjs/common';
-import { OrderService } from './order.service';
-import { CreateOrderInput } from './dto/CreateOrderInput';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
 import { EVENTS } from '@app/constants';
-import type { OrderProcessPayload } from '@app/shared';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { Order } from './entities/order.entity';
+import { OrderService } from './order.service';
+import { JwtAuthGuard } from '@app/common';
 
-@Controller()
+@UseGuards(JwtAuthGuard)
+@Controller({ path: 'orders', version: '1' })
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @Post()
+  create(@Body() dto: CreateOrderDto): Promise<Order> {
+    return this.orderService.create(dto);
+  }
+
   @Get()
-  getHello(): string {
-    return this.orderService.getHello();
+  findAll(
+    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ): Promise<Order[]> {
+    return this.orderService.findAll(page, limit);
   }
 
   @Get('health')
@@ -19,23 +39,17 @@ export class OrderController {
     return { status: 'ok' };
   }
 
-  @Post('create-order')
-  createOrder(@Body() createOrderInput: CreateOrderInput) {
-    return this.orderService.createOrder(createOrderInput);
-  }
-
-  @Get('orders')
-  getOrders() {
-    return this.orderService.getOrders();
-  }
-
-  @Get('orders/:id')
-  getOrderById(@Param('id') id: string) {
-    return this.orderService.getOrderById(id);
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Order> {
+    return this.orderService.findOne(id);
   }
 
   @EventPattern(EVENTS.ORDER_PROCESSED)
-  handleOrderProcessed(order: OrderProcessPayload) {
-    this.orderService.handleOrderProcessed(order);
+  handleOrderProcessed(data: {
+    orderId: string;
+    success: boolean;
+    message: string;
+  }): Promise<void> {
+    return this.orderService.handleOrderProcessed(data);
   }
 }

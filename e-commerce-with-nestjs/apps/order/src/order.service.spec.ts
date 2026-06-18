@@ -1,90 +1,92 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Order, OrderStatus } from './entities/order.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { OrderService } from './order.service';
-import { OrderStatus } from '@app/shared';
-import { ClientProxy } from '@nestjs/microservices';
 
-const mockInventoryClient: jest.Mocked<Pick<ClientProxy, 'emit'>> = {
-  emit: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
-};
+const mockRepo = () => ({
+  create: jest.fn(),
+  save: jest.fn(),
+  find: jest.fn(),
+  findOne: jest.fn(),
+});
+
+const mockInventoryClient = { emit: jest.fn() };
+
+const baseItem = (): OrderItem => ({
+  id: 'item-uuid',
+  productId: 'prod-uuid',
+  quantity: 2,
+  unitPrice: 10,
+  order: null as unknown as Order,
+});
+
+const baseOrder = (): Order => ({
+  id: 'uuid-1',
+  customerId: 'user-uuid',
+  totalPrice: 20,
+  status: OrderStatus.PENDING,
+  createdAt: new Date(),
+  items: [baseItem()],
+});
 
 describe('OrderService', () => {
   let service: OrderService;
+  let repo: jest.Mocked<
+    Pick<Repository<Order>, 'create' | 'save' | 'find' | 'findOne'>
+  >;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrderService,
+        { provide: getRepositoryToken(Order), useFactory: mockRepo },
         { provide: 'INVENTORY_SERVICE', useValue: mockInventoryClient },
       ],
     }).compile();
 
     service = module.get<OrderService>(OrderService);
+    repo = module.get(getRepositoryToken(Order));
     jest.clearAllMocks();
   });
 
-  describe('getHello', () => {
-    it('should return "Hello World!"', () => {
-      expect(service.getHello()).toBe('Hello World!');
-    });
-  });
-
-  describe('createOrder', () => {
-    it('should create an order with PENDING status and auto-generated id', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 2,
+  describe('create', () => {
+    it('should compute totalPrice from items and save a PENDING order', async () => {
+      const dto = {
+        customerId: 'user-uuid',
+        items: [
+          { productId: 'prod-1', quantity: 2, unitPrice: 10 },
+          { productId: 'prod-2', quantity: 1, unitPrice: 25 },
+        ],
       };
+      const order = baseOrder();
+      (repo.create as jest.Mock).mockReturnValue(order);
+      (repo.save as jest.Mock).mockResolvedValue(order);
 
-      const order = service.createOrder(input);
+      const result = await service.create(dto);
 
-      expect(order).toMatchObject({
-        ...input,
-        id: '1',
-        status: OrderStatus.PENDING,
-      });
-    });
-
-    it('should increment id for each new order', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      };
-
-      const first = service.createOrder(input);
-      const second = service.createOrder(input);
-
-      expect(first.id).toBe('1');
-      expect(second.id).toBe('2');
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalPrice: 45,
+          status: OrderStatus.PENDING,
+        }),
+      );
+      expect(result.status).toBe(OrderStatus.PENDING);
     });
 
-    it('should persist the order so getOrders returns it', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
+    it('should emit ORDER_CREATED after saving', async () => {
+      const dto = {
+        customerId: 'user-uuid',
+        items: [{ productId: 'prod-uuid', quantity: 1, unitPrice: 9.99 }],
       };
+      const order = baseOrder();
+      (repo.create as jest.Mock).mockReturnValue(order);
+      (repo.save as jest.Mock).mockResolvedValue(order);
 
-      const order = service.createOrder(input);
+      await service.create(dto);
 
-      expect(service.getOrders()).toContainEqual(order);
-    });
-
-    it('should emit order_created event to inventory service', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      };
-
-      const order = service.createOrder(input);
-
-      expect(mockInventoryClient.emit).toHaveBeenCalledTimes(1);
       expect(mockInventoryClient.emit).toHaveBeenCalledWith(
         'order_created',
         order,
@@ -92,75 +94,101 @@ describe('OrderService', () => {
     });
   });
 
-  describe('getOrders', () => {
-    it('should return an empty array when no orders exist', () => {
-      expect(service.getOrders()).toEqual([]);
+  describe('findAll', () => {
+    it('should return orders with items relation and default pagination', async () => {
+      const orders = [baseOrder()];
+      (repo.find as jest.Mock).mockResolvedValue(orders);
+
+      const result = await service.findAll();
+
+      expect(repo.find).toHaveBeenCalledWith({
+        relations: ['items'],
+        order: { createdAt: 'DESC' },
+        skip: 0,
+        take: 10,
+      });
+      expect(result).toEqual(orders);
     });
 
-    it('should return all created orders', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      };
-      service.createOrder(input);
-      service.createOrder({ ...input, name: 'Bob' });
+    it('should apply page and limit when provided', async () => {
+      (repo.find as jest.Mock).mockResolvedValue([]);
 
-      expect(service.getOrders()).toHaveLength(2);
+      await service.findAll(2, 5);
+
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 5, take: 5 }),
+      );
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return the order with items when found', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
+
+      const result = await service.findOne('uuid-1');
+
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 'uuid-1' },
+        relations: ['items'],
+      });
+      expect(result).toEqual(order);
+    });
+
+    it('should throw NotFoundException when order does not exist', async () => {
+      (repo.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('handleOrderProcessed', () => {
-    it('should set order status to COMPLETED when success is true', () => {
-      const order = service.createOrder({
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
+    it('should set status to APPROVED when success is true', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
+      (repo.save as jest.Mock).mockResolvedValue({
+        ...order,
+        status: OrderStatus.APPROVED,
       });
 
-      service.handleOrderProcessed({
-        orderId: order.id,
+      await service.handleOrderProcessed({
+        orderId: 'uuid-1',
         success: true,
         message: 'ok',
       });
 
-      expect(service.getOrders()[0].status).toBe(OrderStatus.COMPLETED);
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: OrderStatus.APPROVED }),
+      );
     });
 
-    it('should set order status to CANCELLED when success is false', () => {
-      const order = service.createOrder({
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      });
+    it('should set status to DECLINED when success is false', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
 
-      service.handleOrderProcessed({
-        orderId: order.id,
+      await service.handleOrderProcessed({
+        orderId: 'uuid-1',
         success: false,
-        message: 'failed',
+        message: 'fail',
       });
 
-      expect(service.getOrders()[0].status).toBe(OrderStatus.CANCELLED);
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: OrderStatus.DECLINED }),
+      );
     });
 
-    it('should not change any order when orderId does not exist', () => {
-      service.createOrder({
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      });
+    it('should do nothing when order is not found', async () => {
+      (repo.findOne as jest.Mock).mockResolvedValue(null);
 
-      service.handleOrderProcessed({
-        orderId: 'nonexistent',
+      await service.handleOrderProcessed({
+        orderId: 'missing',
         success: true,
         message: 'ok',
       });
 
-      expect(service.getOrders()[0].status).toBe(OrderStatus.PENDING);
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 });

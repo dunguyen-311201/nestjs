@@ -1,48 +1,70 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
-import { CreateOrderInput } from './dto/CreateOrderInput';
-import { Order, OrderProcessPayload, OrderStatus } from '@app/shared';
+import { Repository } from 'typeorm';
+import { EVENTS } from '@app/constants';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { Order, OrderStatus } from './entities/order.entity';
 
 @Injectable()
 export class OrderService {
-  getHello(): string {
-    return 'Hello World!';
-  }
-
   constructor(
-    @Inject('INVENTORY_SERVICE') private readonly inventoryClient: ClientProxy,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
+    @Inject('INVENTORY_SERVICE')
+    private readonly inventoryClient: ClientProxy,
   ) {}
 
-  private orders: Order[] = [];
+  async create(dto: CreateOrderDto): Promise<Order> {
+    const totalPrice = dto.items.reduce(
+      (sum, item) => sum + item.quantity * Number(item.unitPrice),
+      0,
+    );
 
-  createOrder(createOrderInput: CreateOrderInput): Order {
-    const order: Order = {
-      ...createOrderInput,
-      id: `${this.orders.length + 1}`,
+    const order = this.orderRepository.create({
+      customerId: dto.customerId,
+      totalPrice,
       status: OrderStatus.PENDING,
-    };
-    this.orders.push(order);
-    this.inventoryClient.emit('order_created', order);
+      items: dto.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+    });
+
+    const saved = await this.orderRepository.save(order);
+    this.inventoryClient.emit(EVENTS.ORDER_CREATED, saved);
+    return saved;
+  }
+
+  async findAll(page = 1, limit = 10): Promise<Order[]> {
+    return this.orderRepository.find({
+      relations: ['items'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+  }
+
+  async findOne(id: string): Promise<Order> {
+    const order = await this.orderRepository.findOne({
+      where: { id },
+      relations: ['items'],
+    });
+    if (!order) throw new NotFoundException(`Order ${id} not found`);
     return order;
   }
 
-  getOrders(): Order[] {
-    return this.orders;
-  }
-
-  getOrderById(id: string): Order | undefined {
-    return this.orders.find((order) => order.id === id);
-  }
-
-  handleOrderProcessed(data: OrderProcessPayload) {
-    const order = this.orders.find((order) => order.id === data.orderId);
-    if (order) {
-      order.status = data.success
-        ? OrderStatus.COMPLETED
-        : OrderStatus.CANCELLED;
-      console.log('Order status updated: ', order, this.orders);
-    } else {
-      console.log('Order not found: ');
-    }
+  async handleOrderProcessed(data: {
+    orderId: string;
+    success: boolean;
+    message: string;
+  }): Promise<void> {
+    const order = await this.orderRepository.findOne({
+      where: { id: data.orderId },
+    });
+    if (!order) return;
+    order.status = data.success ? OrderStatus.APPROVED : OrderStatus.DECLINED;
+    await this.orderRepository.save(order);
   }
 }

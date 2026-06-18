@@ -1,9 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
+
+interface PostgresDriverError extends Error {
+  code: string;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error.driverError as PostgresDriverError).code === '23505'
+  );
+}
 
 @Injectable()
 export class CategoriesService {
@@ -14,7 +29,14 @@ export class CategoriesService {
 
   async create(dto: CreateCategoryDto): Promise<Category> {
     const category = this.categoryRepository.create(dto);
-    return this.categoryRepository.save(category);
+    try {
+      return await this.categoryRepository.save(category);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(`Category "${dto.name}" already exists`);
+      }
+      throw error;
+    }
   }
 
   findAll(): Promise<Category[]> {
@@ -30,7 +52,16 @@ export class CategoriesService {
   async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
     const category = await this.findOne(id);
     Object.assign(category, dto);
-    return this.categoryRepository.save(category);
+    try {
+      return await this.categoryRepository.save(category);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `Category "${category.name}" already exists`,
+        );
+      }
+      throw error;
+    }
   }
 
   async remove(id: string): Promise<void> {

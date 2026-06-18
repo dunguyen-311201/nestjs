@@ -1,22 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { of } from 'rxjs';
+import { EVENTS, MESSAGES } from '@app/constants';
+import { Order } from '@app/shared';
 import { InventoryService } from './inventory.service';
-import { ClientProxy } from '@nestjs/microservices';
-import { EVENTS } from '@app/constants';
-import { Order, OrderStatus } from '@app/shared';
 
-const mockOrderClient: jest.Mocked<Pick<ClientProxy, 'emit'>> = {
-  emit: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
-};
+const mockOrderClient = { emit: jest.fn() };
+const mockProductClient = { send: jest.fn() };
 
-const makeOrder = (overrides: Partial<Order> = {}): Order => ({
-  id: '1',
-  name: 'Alice',
-  product: 'Product 1',
-  price: 10,
-  quantity: 1,
-  status: OrderStatus.PENDING,
-  ...overrides,
-});
+const makeOrder = (
+  items: { productId: string; quantity: number }[] = [
+    { productId: 'prod-uuid', quantity: 10 },
+  ],
+  id = 'order-uuid',
+): Order => ({ id, items });
 
 describe('InventoryService', () => {
   let service: InventoryService;
@@ -26,6 +22,7 @@ describe('InventoryService', () => {
       providers: [
         InventoryService,
         { provide: 'ORDER_SERVICE', useValue: mockOrderClient },
+        { provide: 'PRODUCT_SERVICE', useValue: mockProductClient },
       ],
     }).compile();
 
@@ -33,115 +30,82 @@ describe('InventoryService', () => {
     jest.clearAllMocks();
   });
 
-  describe('getHello', () => {
-    it('should return "Hello World!"', () => {
-      expect(service.getHello()).toBe('Hello World!');
-    });
-  });
-
   describe('handleOrderCreated', () => {
-    it('should decrement inventory quantity when product exists and stock is sufficient', () => {
-      const order = makeOrder({ product: 'Product 1', quantity: 10 });
+    it('should call product service with RESERVE_STOCK and the order', async () => {
+      mockProductClient.send.mockReturnValue(
+        of({ success: true, message: 'Order processed successfully' }),
+      );
+      const order = makeOrder();
 
-      service.handleOrderCreated(order);
+      await service.handleOrderCreated(order);
 
-      expect(mockOrderClient.emit).toHaveBeenCalledWith(
-        EVENTS.ORDER_PROCESSED,
-        expect.objectContaining({ orderId: '1', success: true }),
+      expect(mockProductClient.send).toHaveBeenCalledWith(
+        MESSAGES.RESERVE_STOCK,
+        order,
       );
     });
 
-    it('should emit success=true and correct message on successful processing', () => {
-      const order = makeOrder({ product: 'Product 1', quantity: 1 });
+    it('should emit ORDER_PROCESSED with success when product service returns success', async () => {
+      mockProductClient.send.mockReturnValue(
+        of({ success: true, message: 'Order processed successfully' }),
+      );
 
-      service.handleOrderCreated(order);
+      await service.handleOrderCreated(makeOrder());
 
       expect(mockOrderClient.emit).toHaveBeenCalledWith(
         EVENTS.ORDER_PROCESSED,
         {
-          orderId: order.id,
+          orderId: 'order-uuid',
           success: true,
           message: 'Order processed successfully',
         },
       );
     });
 
-    it('should emit success=false when quantity is insufficient', () => {
-      const order = makeOrder({ product: 'Product 1', quantity: 9999 });
+    it('should emit ORDER_PROCESSED with failure when product service returns failure', async () => {
+      mockProductClient.send.mockReturnValue(
+        of({
+          success: false,
+          message: 'Insufficient stock for product prod-uuid',
+        }),
+      );
 
-      service.handleOrderCreated(order);
+      await service.handleOrderCreated(makeOrder());
 
       expect(mockOrderClient.emit).toHaveBeenCalledWith(
         EVENTS.ORDER_PROCESSED,
         {
-          orderId: order.id,
+          orderId: 'order-uuid',
           success: false,
-          message: 'Insufficient quantity in inventory',
+          message: 'Insufficient stock for product prod-uuid',
         },
       );
     });
 
-    it('should not modify inventory when quantity is insufficient', () => {
-      const order = makeOrder({ product: 'Product 1', quantity: 9999 });
-
-      service.handleOrderCreated(order);
-
-      // Verify stock was  not changed by processing valid order after
-      const followUp = makeOrder({
-        id: '2',
-        product: 'Product 1',
-        quantity: 1,
-      });
-      service.handleOrderCreated(followUp);
-
-      expect(mockOrderClient.emit).toHaveBeenNthCalledWith(
-        2,
-        EVENTS.ORDER_PROCESSED,
-        expect.objectContaining({ success: true }),
+    it('should emit exactly once per order regardless of outcome', async () => {
+      mockProductClient.send.mockReturnValue(
+        of({ success: true, message: 'Order processed successfully' }),
       );
-    });
 
-    it('should emit success=false when product does not exist in inventory', () => {
-      const order = makeOrder({ product: 'Unknown Product' });
-
-      service.handleOrderCreated(order);
-
-      expect(mockOrderClient.emit).toHaveBeenCalledWith(
-        EVENTS.ORDER_PROCESSED,
-        {
-          orderId: order.id,
-          success: false,
-          message: 'Product Unknown Product not found in inventory',
-        },
-      );
-    });
-
-    it('should emit exactly once per order', () => {
-      const order = makeOrder();
-
-      service.handleOrderCreated(order);
+      await service.handleOrderCreated(makeOrder());
 
       expect(mockOrderClient.emit).toHaveBeenCalledTimes(1);
     });
 
-    it('should reduce inventory across multiple orders', () => {
-      const first = makeOrder({ id: '1', product: 'Product 2', quantity: 100 });
-      const second = makeOrder({
-        id: '2',
-        product: 'Product 2',
-        quantity: 100,
-      });
-      const third = makeOrder({ id: '3', product: 'Product 2', quantity: 1 });
+    it('should pass the full order payload to the product service', async () => {
+      mockProductClient.send.mockReturnValue(
+        of({ success: true, message: 'Order processed successfully' }),
+      );
+      const order = makeOrder([
+        { productId: 'prod-1', quantity: 3 },
+        { productId: 'prod-2', quantity: 7 },
+      ]);
 
-      service.handleOrderCreated(first);
-      service.handleOrderCreated(second);
-      service.handleOrderCreated(third);
+      await service.handleOrderCreated(order);
 
-      // first two consume 200 (full stock), third should fail
-      expect(mockOrderClient.emit).toHaveBeenNthCalledWith(
-        3,
-        EVENTS.ORDER_PROCESSED,
-        expect.objectContaining({ success: false }),
+      expect(mockProductClient.send).toHaveBeenCalledWith(
+        MESSAGES.RESERVE_STOCK,
+        order,
       );
     });
   });

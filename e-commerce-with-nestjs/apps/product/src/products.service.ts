@@ -29,6 +29,8 @@ export class ProductsService {
       description: dto.description ?? null,
       price: dto.price,
       stock: dto.stock ?? 0,
+      image: dto.image ?? 'no-image.png',
+      specs: dto.specs ?? {},
     });
     if (dto.categoryId) {
       product.category = await this.categoriesService.findOne(dto.categoryId);

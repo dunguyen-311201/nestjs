@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
+import { JwtAuthGuard } from '@app/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
@@ -10,6 +11,8 @@ const mockUsersService = {
   remove: jest.fn(),
 };
 
+const mockJwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
+
 describe('UsersController', () => {
   let controller: UsersController;
 
@@ -17,13 +20,11 @@ describe('UsersController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: mockUsersService,
-        },
-      ],
-    }).compile();
+      providers: [{ provide: UsersService, useValue: mockUsersService }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(mockJwtAuthGuard)
+      .compile();
 
     controller = module.get<UsersController>(UsersController);
   });

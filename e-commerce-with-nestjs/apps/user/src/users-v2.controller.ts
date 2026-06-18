@@ -8,13 +8,13 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { MockAuthGuard } from '@app/common';
+import { JwtAuthGuard } from '@app/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller({ path: 'users', version: '2' })
-@UseGuards(MockAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class UsersV2Controller {
   constructor(private readonly usersService: UsersService) {}
 

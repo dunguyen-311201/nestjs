@@ -1,21 +1,11 @@
-export interface Inventory {
-  id: string;
-  name: string;
+export interface OrderItem {
+  productId: string;
   quantity: number;
 }
 
-export enum OrderStatus {
-  PENDING = 'Pending',
-  COMPLETED = 'Completed',
-  CANCELLED = 'Cancelled',
-}
 export interface Order {
   id: string;
-  name: string;
-  product: string;
-  price: number;
-  status: OrderStatus;
-  quantity: number;
+  items: OrderItem[];
 }
 
 export interface OrderProcessPayload {

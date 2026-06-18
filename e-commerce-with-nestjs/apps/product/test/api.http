@@ -1,53 +1,169 @@
-### Get all products
-GET http://localhost:3004/v1/products?page=1
-Authorization: Bearer mock-token
+### ─── CATEGORIES ─────────────────────────────────────────────
 
-
-### Get all categories
-GET http://localhost:3004/v1/categories
-Authorization: Bearer mock-token
-
-### Create a new Category
+### 1. Create category — Electronics
 POST http://localhost:3004/v1/categories
 Authorization: Bearer mock-token
 Content-Type: application/json
 
 {
-  "name": "Category A",
-  "description": "Description of Category B"
+  "name": "Electronics",
+  "description": "Phones, laptops, tablets and accessories"
 }
 
-### Create a new product
+###
+
+### 2. Create category — Clothing
+POST http://localhost:3004/v1/categories
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Clothing",
+  "description": "T-shirts, jackets, shoes and more"
+}
+
+###
+
+### 3. List all categories
+GET http://localhost:3004/v1/categories
+Authorization: Bearer mock-token
+
+###
+
+### 4. Get category by ID  (replace with real UUID from step 1)
+GET http://localhost:3004/v1/categories/ad7ef565-00c0-4490-96df-ec44871b7d72
+Authorization: Bearer mock-token
+
+
+### ─── PRODUCTS ────────────────────────────────────────────────
+
+### 5. Create product — iPhone 15 Pro (replace categoryId with UUID from step 1)
 POST http://localhost:3004/v1/products
 Authorization: Bearer mock-token
 Content-Type: application/json
 
 {
-  "name": "Product A",
-  "description": "Description of Product A",
-  "price": 19.99,
-  "stock": 100,
-  "categoryId": "85c6137a-417c-4dec-a278-072fe44d28ce"
+  "name": "iPhone 15 Pro",
+  "description": "Apple flagship smartphone with titanium frame and A17 Pro chip",
+  "price": 999.99,
+  "stock": 50,
+  "image": "https://store.storeimages.cdn-apple.com/iphone15pro.jpg",
+  "specs": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "chip": "A17 Pro",
+    "color": "Natural Titanium",
+    "weight": "187g"
+  },
+  "categoryId": "ad7ef565-00c0-4490-96df-ec44871b7d72"
 }
 
-### Get a product by ID
-GET http://localhost:3004/v1/products/3bf4cba5-8de2-4aa1-bf29-0e00eae70ff9
-Authorization: Bearer mock-token
+###
 
-
-### Update a product by ID
-PUT http://localhost:3004/v1/products/3bf4cba5-8de2-4aa1-bf29-0e00eae70ff9
+### 6. Create product — Samsung Galaxy S24 (replace categoryId)
+POST http://localhost:3004/v1/products
 Authorization: Bearer mock-token
 Content-Type: application/json
 
 {
-  "name": "Product A Updated",
-  "description": "Description of Product A Updated",
-  "price": 24.99,
-  "stock": 80,
-  "categoryId": "f71ab1bf-a70b-4257-aeab-03dbdace5dc9"
+  "name": "Samsung Galaxy S24",
+  "description": "Samsung flagship with Snapdragon 8 Gen 3 and 50MP camera",
+  "price": 799.99,
+  "stock": 30,
+  "image": "https://image.samsung.com/is/image/samsung/galaxy-s24.jpg",
+  "specs": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "processor": "Snapdragon 8 Gen 3",
+    "color": "Onyx Black",
+    "weight": "167g"
+  },
+  "categoryId": "ad7ef565-00c0-4490-96df-ec44871b7d72"
 }
 
-### Delete a product by ID
-DELETE http://localhost:3004/v1/products/3bf4cba5-8de2-4aa1-bf29-0e00eae70ff9
+###
+
+### 7. Create product — minimal (no image/specs/category — uses defaults)
+POST http://localhost:3004/v1/products
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Basic T-Shirt",
+  "description": "100% cotton unisex t-shirt available in multiple sizes",
+  "price": 19.99,
+  "stock": 200
+}
+
+###
+
+### 8. List products (page 1, default limit 10)
+GET http://localhost:3004/v1/products?page=1&limit=10
+Authorization: Bearer mock-token
+
+###
+
+### 9. Filter products by category  (replace with real UUID)
+GET http://localhost:3004/v1/products?categoryId=ad7ef565-00c0-4490-96df-ec44871b7d72
+Authorization: Bearer mock-token
+
+###
+
+### 10. Get product by ID  (replace with real UUID from step 5)
+GET http://localhost:3004/v1/products/4b21efbb-481d-4f7b-9497-7eb7ade12255
+Authorization: Bearer mock-token
+
+###
+
+### 11. Update product  (replace with real UUID)
+PUT http://localhost:3004/v1/products/4b21efbb-481d-4f7b-9497-7eb7ade12255
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "price": 899.99,
+  "stock": 45,
+  "specs": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "chip": "A17 Pro",
+    "color": "Desert Titanium",
+    "weight": "187g"
+  }
+}
+
+###
+
+### 12. Validation error — invalid specs key
+POST http://localhost:3004/v1/products
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Bad Product",
+  "description": "This should fail because specs has a disallowed key",
+  "price": 9.99,
+  "specs": {
+    "invalidKey": "oops"
+  }
+}
+
+###
+
+### 13. Validation error — invalid image URL
+POST http://localhost:3004/v1/products
+Authorization: Bearer mock-token
+Content-Type: application/json
+
+{
+  "name": "Bad Image",
+  "description": "This should fail because image is not a valid URL",
+  "price": 9.99,
+  "image": "not-a-url"
+}
+
+###
+
+### 14. Delete product  (replace with real UUID)
+DELETE http://localhost:3004/v1/products/4b21efbb-481d-4f7b-9497-7eb7ade12255
 Authorization: Bearer mock-token
