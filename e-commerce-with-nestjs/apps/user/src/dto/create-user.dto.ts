@@ -1,16 +1,42 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsStrongPassword,
+  Length,
+} from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  @MinLength(2)
-  name: string;
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  username!: string;
+
+  @IsString()
+  @Length(8, 20)
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'password should contain at least one lowercase letter, one uppercase letter, one number, and one symbol',
+    },
+  )
+  password!: string;
 
   @IsEmail()
-  email: string;
+  email!: string;
 
-  constructor(name: string, email: string) {
-    this.name = name;
-    this.email = email;
-  }
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
 }

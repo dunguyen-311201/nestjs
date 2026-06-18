@@ -1,0 +1,240 @@
+@baseUrl = http://localhost:3000
+
+
+############################################
+### AUTH
+############################################
+
+### signupWeakPassword
+# Expect 400 - missing uppercase/symbol, fails the strong-password rule
+POST {{baseUrl}}/v1/auth/signup
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "username": "johndoe",
+  "email": "johndoe@example.com",
+  "password": "password123"
+}
+
+### signupAlex
+POST {{baseUrl}}/v1/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Alex Johnson",
+  "username": "alexjohnson",
+  "email": "alexjohnson@example.com",
+  "password": "Password@123"
+}
+
+### login
+# @name login
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "alexjohnson",
+  "password": "Password@123"
+}
+
+###
+
+@token = {{login.response.body.$.data.accessToken}}
+@userId = {{login.response.body.$.data.id}}
+
+
+############################################
+### USERS (requires Authorization header)
+############################################
+
+### createUser
+# @name createUser
+POST {{baseUrl}}/v1/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Mary Jane",
+  "username": "maryjane",
+  "email": "maryjane@example.com",
+  "password": "Password@123"
+}
+
+###
+
+@createdUserId = {{createUser.response.body.$.id}}
+
+### getAllUsers
+GET {{baseUrl}}/v1/users
+Authorization: Bearer {{token}}
+
+### getUserById
+GET {{baseUrl}}/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### updateUser
+PUT {{baseUrl}}/v1/users/{{createdUserId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Mary J. Watson"
+}
+
+### deleteUser
+DELETE {{baseUrl}}/v1/users/{{createdUserId}}
+Authorization: Bearer {{token}}
+
+
+############################################
+### CATEGORIES
+############################################
+
+### createCategory
+# @name createCategory
+POST {{baseUrl}}/v1/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Electronics4",
+  "description": "Phones, laptops, and other electronic devices"
+}
+
+###
+
+@categoryId = {{createCategory.response.body.$.data.id}}
+
+### getAllCategories
+GET {{baseUrl}}/v1/categories
+Authorization: Bearer {{token}}
+
+### getCategoryById
+GET {{baseUrl}}/v1/categories/{{categoryId}}
+Authorization: Bearer {{token}}
+
+### updateCategory
+PUT {{baseUrl}}/v1/categories/{{categoryId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "description": "Phones, laptops, tablets, and accessories"
+}
+
+### createCategoryToDelete
+# @name createCategoryToDelete
+POST {{baseUrl}}/v1/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Temporary Category",
+  "description": "Created only to test DELETE"
+}
+
+###
+
+@tempCategoryId = {{createCategoryToDelete.response.body.$.id}}
+
+### deleteCategory
+DELETE {{baseUrl}}/v1/categories/{{tempCategoryId}}
+Authorization: Bearer {{token}}
+
+
+############################################
+### PRODUCTS
+############################################
+
+### createProduct
+# @name createProduct
+POST {{baseUrl}}/v1/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "iPhone 15",
+  "description": "Apple smartphone",
+  "price": 999.99,
+  "stock": 50,
+  "image": "https://example.com/iphone15.jpg",
+  "specs": { "color": "black", "capacity": "128GB" },
+  "categoryId": "{{categoryId}}"
+}
+
+###
+
+@productId = {{createProduct.response.body.$.data.id}}
+
+### getAllProducts
+GET {{baseUrl}}/v1/products?page=1&limit=10&categoryId={{categoryId}}
+Authorization: Bearer {{token}}
+
+### getProductById
+GET {{baseUrl}}/v1/products/{{productId}}
+Authorization: Bearer {{token}}
+
+### updateProduct
+PUT {{baseUrl}}/v1/products/{{productId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "price": 949.99,
+  "stock": 45
+}
+
+### createProductToDelete
+# @name createProductToDelete
+POST {{baseUrl}}/v1/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Temporary Product",
+  "price": 1,
+  "categoryId": "{{categoryId}}"
+}
+
+###
+
+@tempProductId = {{createProductToDelete.response.body.$.data.id}}
+
+### deleteProduct
+DELETE {{baseUrl}}/v1/products/{{tempProductId}}
+Authorization: Bearer {{token}}
+
+
+############################################
+### ORDERS
+############################################
+
+### createOrder
+# @name createOrder
+POST {{baseUrl}}/v1/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "{{userId}}",
+  "items": [
+    {
+      "productId": "{{productId}}",
+      "quantity": 2,
+      "unitPrice": 949.99
+    }
+  ]
+}
+
+###
+
+@orderId = {{createOrder.response.body.$.id}}
+
+### getAllOrders
+GET {{baseUrl}}/v1/orders?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### getOrderById
+GET {{baseUrl}}/v1/orders/{{orderId}}
+Authorization: Bearer {{token}}

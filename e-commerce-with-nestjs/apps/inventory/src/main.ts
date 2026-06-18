@@ -1,7 +1,12 @@
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { InventoryModule } from './inventory.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import {
+  HttpExceptionFilter,
+  LoggingInterceptor,
+  TransformInterceptor,
+} from '@app/common';
+import { InventoryModule } from './inventory.module';
 
 async function bootstrap() {
   const logger = new Logger('InventoryService');
@@ -10,6 +15,12 @@ async function bootstrap() {
     transport: Transport.TCP,
     options: { host: 'localhost', port: 8002 },
   });
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new TransformInterceptor(),
+  );
   await app.startAllMicroservices();
   logger.log('TCP microservice listening on port 8002');
   const port = process.env.PORT ?? 3002;

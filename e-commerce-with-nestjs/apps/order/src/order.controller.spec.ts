@@ -1,35 +1,51 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtAuthGuard } from '@app/common';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
-import { OrderStatus } from '@app/shared';
-import { ClientProxy } from '@nestjs/microservices';
+import { Order, OrderStatus } from './entities/order.entity';
+import { OrderItem } from './entities/order-item.entity';
 
-const mockInventoryClient: jest.Mocked<Pick<ClientProxy, 'emit'>> = {
-  emit: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
+const baseItem = (): OrderItem => ({
+  id: 'item-uuid',
+  productId: 'prod-uuid',
+  quantity: 2,
+  unitPrice: 10,
+  order: null as unknown as Order,
+});
+
+const baseOrder = (): Order => ({
+  id: 'uuid-1',
+  customerId: 'user-uuid',
+  totalPrice: 20,
+  status: OrderStatus.PENDING,
+  createdAt: new Date(),
+  items: [baseItem()],
+});
+
+const mockOrderService = {
+  create: jest.fn(),
+  findAll: jest.fn(),
+  findOne: jest.fn(),
+  handleOrderProcessed: jest.fn(),
 };
+
+const mockJwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
 describe('OrderController', () => {
   let controller: OrderController;
-  let service: OrderService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrderController],
-      providers: [
-        OrderService,
-        { provide: 'INVENTORY_SERVICE', useValue: mockInventoryClient },
-      ],
-    }).compile();
+      providers: [{ provide: OrderService, useValue: mockOrderService }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(mockJwtAuthGuard)
+      .compile();
 
     controller = module.get<OrderController>(OrderController);
-    service = module.get<OrderService>(OrderService);
     jest.clearAllMocks();
-  });
-
-  describe('getHello', () => {
-    it('should return "Hello World!"', () => {
-      expect(controller.getHello()).toBe('Hello World!');
-    });
   });
 
   describe('healthCheck', () => {
@@ -38,53 +54,80 @@ describe('OrderController', () => {
     });
   });
 
-  describe('createOrder', () => {
-    it('should return the created order', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
+  describe('create', () => {
+    it('should return the created order', async () => {
+      const dto = {
+        customerId: 'user-uuid',
+        items: [{ productId: 'prod-uuid', quantity: 2, unitPrice: 10 }],
       };
+      const order = baseOrder();
+      mockOrderService.create.mockResolvedValue(order);
 
-      const result = controller.createOrder(input);
+      const result = await controller.create(dto);
 
-      expect(result).toMatchObject({ ...input, status: OrderStatus.PENDING });
+      expect(mockOrderService.create).toHaveBeenCalledWith(dto);
+      expect(result).toEqual(order);
     });
   });
 
-  describe('getOrders', () => {
-    it('should return all orders', () => {
-      const input = {
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      };
-      service.createOrder(input);
-      service.createOrder(input);
+  describe('findAll', () => {
+    it('should return all orders from service', async () => {
+      const orders = [baseOrder()];
+      mockOrderService.findAll.mockResolvedValue(orders);
 
-      expect(controller.getOrders()).toHaveLength(2);
+      const result = await controller.findAll();
+
+      expect(mockOrderService.findAll).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+      );
+      expect(result).toEqual(orders);
+    });
+
+    it('should forward page and limit to service', async () => {
+      mockOrderService.findAll.mockResolvedValue([]);
+
+      await controller.findAll(2, 5);
+
+      expect(mockOrderService.findAll).toHaveBeenCalledWith(2, 5);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a single order', async () => {
+      const order = baseOrder();
+      mockOrderService.findOne.mockResolvedValue(order);
+
+      const result = await controller.findOne('uuid-1');
+
+      expect(mockOrderService.findOne).toHaveBeenCalledWith('uuid-1');
+      expect(result).toEqual(order);
+    });
+
+    it('should propagate NotFoundException from service', async () => {
+      mockOrderService.findOne.mockRejectedValue(new NotFoundException());
+
+      await expect(controller.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('handleOrderProcessed', () => {
-    it('should delegate to service without returning a value', () => {
-      const order = service.createOrder({
-        name: 'Alice',
-        product: 'Widget',
-        price: 10,
-        quantity: 1,
-      });
+    it('should delegate to service', async () => {
+      mockOrderService.handleOrderProcessed.mockResolvedValue(undefined);
 
-      const result = controller.handleOrderProcessed({
-        orderId: order.id,
+      await controller.handleOrderProcessed({
+        orderId: 'uuid-1',
         success: true,
         message: 'ok',
       });
 
-      expect(result).toBeUndefined();
-      expect(service.getOrders()[0].status).toBe(OrderStatus.COMPLETED);
+      expect(mockOrderService.handleOrderProcessed).toHaveBeenCalledWith({
+        orderId: 'uuid-1',
+        success: true,
+        message: 'ok',
+      });
     });
   });
 });

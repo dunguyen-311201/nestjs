@@ -25,6 +25,12 @@ export class Product {
   @Column({ default: 0 })
   stock!: number;
 
+  @Column({ type: 'text', default: 'no-image.png' })
+  image!: string;
+
+  @Column({ type: 'simple-json', default: '{}' })
+  specs!: Record<string, string>;
+
   @ManyToOne(() => Category, (category) => category.products, {
     nullable: true,
     eager: false,

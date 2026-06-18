@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { InventoryController } from './inventory.controller';
-import { InventoryService } from './inventory.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConsulService } from './consul.service';
+import { InventoryController } from './inventory.controller';
+import { InventoryService } from './inventory.service';
 
 @Module({
   imports: [
@@ -10,10 +10,12 @@ import { ConsulService } from './consul.service';
       {
         name: 'ORDER_SERVICE',
         transport: Transport.TCP,
-        options: {
-          host: 'localhost',
-          port: 8001,
-        },
+        options: { host: 'localhost', port: 8001 },
+      },
+      {
+        name: 'PRODUCT_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'localhost', port: 8003 },
       },
     ]),
   ],

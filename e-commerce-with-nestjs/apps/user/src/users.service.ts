@@ -1,9 +1,25 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
+
+interface PostgresDriverError extends Error {
+  code: string;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error.driverError as PostgresDriverError).code === '23505'
+  );
+}
 
 @Injectable()
 export class UsersService {
@@ -17,9 +33,16 @@ export class UsersService {
   async create(createUserDto: CreateUserDto): Promise<User> {
     this.logger.log(`Creating user with email: ${createUserDto.email}`);
     const user = this.usersRepository.create(createUserDto);
-    const saved = await this.usersRepository.save(user);
-    this.logger.log(`User created with ID: ${saved.id}`);
-    return saved;
+    try {
+      const saved = await this.usersRepository.save(user);
+      this.logger.log(`User created with ID: ${saved.id}`);
+      return saved;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('Username or email already exists');
+      }
+      throw error;
+    }
   }
 
   async findAll(): Promise<User[]> {
@@ -41,12 +64,23 @@ export class UsersService {
     this.logger.log(`Updating user: ${id}`);
     const user = await this.findOne(id);
     this.usersRepository.merge(user, updateUserDto);
-    return this.usersRepository.save(user);
+    try {
+      return await this.usersRepository.save(user);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('Username or email already exists');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string): Promise<User> {
     this.logger.log(`Removing user: ${id}`);
     const user = await this.findOne(id);
     return this.usersRepository.remove(user);
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ username });
   }
 }
