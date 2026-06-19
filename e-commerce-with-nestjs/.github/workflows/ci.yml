@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Code
+        run: pnpm lint
+
+      - name: Run Tests
+        run: pnpm test
+
+      - name: Build Application
+        run: pnpm build
+
+      - name: Build Docker images
+        run: |
+          for app in api-gateway order inventory product user; do
+            docker build --build-arg APP_NAME=$app -t ecommerce-$app .
+          done
