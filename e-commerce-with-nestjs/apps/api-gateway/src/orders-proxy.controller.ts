@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '@app/common';
 import { RouteProxyService } from './route-proxy.service';
@@ -21,5 +29,10 @@ export class OrdersProxyController {
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
     return this.proxy.forward('order-service', `/v1/orders/${id}`, req);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.proxy.forward('order-service', `/v1/orders/${id}/status`, req);
   }
 }

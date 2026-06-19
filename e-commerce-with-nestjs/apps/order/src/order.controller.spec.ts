@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { JwtAuthGuard } from '@app/common';
+import { JwtAuthGuard, RolesGuard } from '@app/common';
+import { UserRole } from '@app/shared';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { Order, OrderStatus } from './entities/order.entity';
@@ -27,10 +28,12 @@ const mockOrderService = {
   create: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+  updateStatus: jest.fn(),
   handleOrderProcessed: jest.fn(),
 };
 
 const mockJwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
+const mockRolesGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
 describe('OrderController', () => {
   let controller: OrderController;
@@ -42,6 +45,8 @@ describe('OrderController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(mockJwtAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue(mockRolesGuard)
       .compile();
 
     controller = module.get<OrderController>(OrderController);
@@ -88,22 +93,41 @@ describe('OrderController', () => {
   });
 
   describe('findOne', () => {
+    const user = { sub: 'user-uuid', username: 'alice', role: UserRole.USER };
+
     it('should return a single order', async () => {
       const order = baseOrder();
       mockOrderService.findOne.mockResolvedValue(order);
 
-      const result = await controller.findOne('uuid-1');
+      const result = await controller.findOne('uuid-1', user);
 
-      expect(mockOrderService.findOne).toHaveBeenCalledWith('uuid-1');
+      expect(mockOrderService.findOne).toHaveBeenCalledWith('uuid-1', user);
       expect(result).toEqual(order);
     });
 
     it('should propagate NotFoundException from service', async () => {
       mockOrderService.findOne.mockRejectedValue(new NotFoundException());
 
-      await expect(controller.findOne('missing')).rejects.toThrow(
+      await expect(controller.findOne('missing', user)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('should delegate to service with the new status', async () => {
+      const order = { ...baseOrder(), status: OrderStatus.CANCELLED };
+      mockOrderService.updateStatus.mockResolvedValue(order);
+
+      const result = await controller.updateStatus('uuid-1', {
+        status: OrderStatus.CANCELLED,
+      });
+
+      expect(mockOrderService.updateStatus).toHaveBeenCalledWith(
+        'uuid-1',
+        OrderStatus.CANCELLED,
+      );
+      expect(result).toEqual(order);
     });
   });
 

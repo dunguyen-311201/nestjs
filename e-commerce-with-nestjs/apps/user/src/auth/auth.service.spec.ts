@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import { UserRole } from '@app/shared';
 import type { User } from '../entities/user.entity';
 import { UsersService } from '../users.service';
 import { AuthService } from './auth.service';
@@ -18,6 +19,7 @@ const mockUser: User = {
   email: 'alice@example.com',
   password: 'hashed-password',
   avatarUrl: null,
+  role: UserRole.USER,
 } as User;
 
 const mockUsersService = {
@@ -59,6 +61,9 @@ describe('AuthService', () => {
       expect(result.message).toBe('Login successful');
       expect(result.data).toHaveProperty('accessToken', 'jwt-token');
       expect(result.data).not.toHaveProperty('password');
+      expect(mockJwtService.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ role: UserRole.USER }),
+      );
     });
 
     it('should return error message when user not found', async () => {

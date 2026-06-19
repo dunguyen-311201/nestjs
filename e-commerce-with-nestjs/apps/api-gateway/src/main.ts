@@ -1,11 +1,13 @@
 import { Logger, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { HttpExceptionFilter, LoggingInterceptor } from '@app/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('ApiGateway');
   const app = await NestFactory.create(AppModule);
+  app.use(helmet());
   app.enableVersioning({
     type: VersioningType.URI,
     prefix: 'v',

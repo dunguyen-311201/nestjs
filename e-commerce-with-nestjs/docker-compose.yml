@@ -1,0 +1,49 @@
+services:
+  api-gateway:
+    build:
+      context: .
+      args:
+        APP_NAME: api-gateway
+    network_mode: 'host'
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+
+  order:
+    build:
+      context: .
+      args:
+        APP_NAME: order
+    network_mode: 'host'
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      DB_NAME: order_db
+
+  inventory:
+    build:
+      context: .
+      args:
+        APP_NAME: inventory
+    network_mode: 'host'
+    depends_on:
+      - order
+      - product
+
+  product:
+    build:
+      context: .
+      args:
+        APP_NAME: product
+    network_mode: 'host'
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      DB_NAME: product_db
+
+  user:
+    build:
+      context: .
+      args:
+        APP_NAME: user
+    network_mode: 'host'
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      DB_NAME: user_db

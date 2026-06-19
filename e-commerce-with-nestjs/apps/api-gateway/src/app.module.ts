@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { TerminusModule } from '@nestjs/terminus';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { JwtAuthGuard } from '@app/common';
 import { AuthProxyController } from './auth-proxy.controller';
 import { CategoriesProxyController } from './categories-proxy.controller';
@@ -18,6 +20,7 @@ import { UsersProxyController } from './users-proxy.controller';
     TerminusModule,
     HttpModule,
     JwtModule.register({ secret: process.env.JWT_SECRET }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 20 }]),
   ],
   controllers: [
     AuthProxyController,
@@ -26,6 +29,11 @@ import { UsersProxyController } from './users-proxy.controller';
     CategoriesProxyController,
     OrdersProxyController,
   ],
-  providers: [ConsulService, RouteProxyService, JwtAuthGuard],
+  providers: [
+    ConsulService,
+    RouteProxyService,
+    JwtAuthGuard,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

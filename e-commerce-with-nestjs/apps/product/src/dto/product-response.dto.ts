@@ -32,6 +32,9 @@ export class ProductResponseDto {
   categoryName!: string | null;
 
   @Expose()
+  ownerId!: string | null;
+
+  @Expose()
   createdAt!: Date;
 
   @Expose()
