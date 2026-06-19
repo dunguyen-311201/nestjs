@@ -3,11 +3,20 @@ name: CI
 on:
   push:
     branches: ['**']
+    paths:
+      - 'e-commerce-with-nestjs/**'
+      - '.github/workflows/e-commerce.yml'
   pull_request:
+    paths:
+      - 'e-commerce-with-nestjs/**'
+      - '.github/workflows/e-commerce.yml'
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e-commerce-with-nestjs
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +28,7 @@ jobs:
         with:
           node-version: 22
           cache: 'pnpm'
+          cache-dependency-path: e-commerce-with-nestjs/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
