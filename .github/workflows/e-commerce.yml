@@ -2,11 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: ['feat/e-commerce']
     paths:
       - 'e-commerce-with-nestjs/**'
       - '.github/workflows/e-commerce.yml'
   pull_request:
+    branches: ['feat/e-commerce']
     paths:
       - 'e-commerce-with-nestjs/**'
       - '.github/workflows/e-commerce.yml'
