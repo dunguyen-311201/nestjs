@@ -167,13 +167,22 @@ Content-Type: application/json
 
 @productId = {{createProduct.response.body.$.data.id}}
 
-### getAllProducts
+### getAllProducts with category filter
 GET {{baseUrl}}/v1/products?page=1&limit=10&categoryId={{categoryId}}
+Authorization: Bearer {{token}}
+
+### getAllProducts
+GET {{baseUrl}}/v1/products?page=1&limit=10
 Authorization: Bearer {{token}}
 
 ### getProductById
 GET {{baseUrl}}/v1/products/{{productId}}
 Authorization: Bearer {{token}}
+
+### getProductById
+GET {{baseUrl}}/v1/products/f5ac5287-0f85-4d42-8da6-1750331d6903
+Authorization: Bearer {{token}}
+
 
 ### updateProduct
 PUT {{baseUrl}}/v1/products/{{productId}}
@@ -209,6 +218,24 @@ Authorization: Bearer {{token}}
 ############################################
 ### ORDERS
 ############################################
+
+### createOrder
+# "{{productId}}",
+# @name createOrder
+POST {{baseUrl}}/v1/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "{{userId}}",
+  "items": [
+    {
+      "productId": "f5ac5287-0f85-4d42-8da6-1750331d6903",
+      "quantity": 2,
+      "unitPrice": "799.99"
+    }
+  ]
+}
 
 ### createOrder
 # @name createOrder

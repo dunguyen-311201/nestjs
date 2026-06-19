@@ -8,11 +8,6 @@ import type { Order } from '@app/shared';
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
-  @Get()
-  getHello(): string {
-    return this.inventoryService.getHello();
-  }
-
   @Get('health')
   healthCheck() {
     return { status: 'ok' };

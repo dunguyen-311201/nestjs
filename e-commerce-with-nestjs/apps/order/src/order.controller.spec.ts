@@ -48,12 +48,6 @@ describe('OrderController', () => {
     jest.clearAllMocks();
   });
 
-  describe('healthCheck', () => {
-    it('should return { status: "ok" }', () => {
-      expect(controller.healthCheck()).toEqual({ status: 'ok' });
-    });
-  });
-
   describe('create', () => {
     it('should return the created order', async () => {
       const dto = {

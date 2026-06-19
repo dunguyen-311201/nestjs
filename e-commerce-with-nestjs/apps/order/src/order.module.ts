@@ -4,6 +4,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConsulService } from './consul.service';
 import { OrderItem } from './entities/order-item.entity';
 import { Order } from './entities/order.entity';
+import { HealthController } from './health.controller';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { JwtModule } from '@nestjs/jwt/dist/jwt.module';
@@ -33,7 +34,7 @@ import { ConfigModule } from '@nestjs/config/dist/config.module';
     ]),
     JwtModule.register({ secret: process.env.JWT_SECRET }),
   ],
-  controllers: [OrderController],
+  controllers: [HealthController, OrderController],
   providers: [OrderService, ConsulService, JwtAuthGuard],
 })
 export class OrderModule {}

@@ -34,11 +34,6 @@ export class OrderController {
     return this.orderService.findAll(page, limit);
   }
 
-  @Get('health')
-  healthCheck() {
-    return { status: 'ok' };
-  }
-
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Order> {
     return this.orderService.findOne(id);
