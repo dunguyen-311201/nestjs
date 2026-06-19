@@ -1,5 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import { JwtAuthGuard } from '@app/common';
+import { JwtAuthGuard, RolesGuard } from '@app/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
@@ -12,6 +12,7 @@ const mockUsersService = {
 };
 
 const mockJwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
+const mockRolesGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -24,6 +25,8 @@ describe('UsersController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(mockJwtAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue(mockRolesGuard)
       .compile();
 
     controller = module.get<UsersController>(UsersController);

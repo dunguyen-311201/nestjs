@@ -1,7 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { UserRole } from '@app/shared';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderService } from './order.service';
@@ -122,11 +123,24 @@ describe('OrderService', () => {
   });
 
   describe('findOne', () => {
-    it('should return the order with items when found', async () => {
+    const owner = { sub: 'user-uuid', username: 'alice', role: UserRole.USER };
+    const otherUser = {
+      sub: 'someone-else',
+      username: 'bob',
+      role: UserRole.USER,
+    };
+    const admin = { sub: 'admin-uuid', username: 'root', role: UserRole.ADMIN };
+    const merchant = {
+      sub: 'merchant-uuid',
+      username: 'shopkeeper',
+      role: UserRole.MERCHANT,
+    };
+
+    it('should return the order with items when the owner requests it', async () => {
       const order = baseOrder();
       (repo.findOne as jest.Mock).mockResolvedValue(order);
 
-      const result = await service.findOne('uuid-1');
+      const result = await service.findOne('uuid-1', owner);
 
       expect(repo.findOne).toHaveBeenCalledWith({
         where: { id: 'uuid-1' },
@@ -135,10 +149,36 @@ describe('OrderService', () => {
       expect(result).toEqual(order);
     });
 
+    it('should return the order when an admin requests it', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
+
+      const result = await service.findOne('uuid-1', admin);
+
+      expect(result).toEqual(order);
+    });
+
+    it('should return the order when a merchant requests it', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
+
+      const result = await service.findOne('uuid-1', merchant);
+
+      expect(result).toEqual(order);
+    });
+
+    it('should throw ForbiddenException when a non-owner, non-admin requests it', async () => {
+      (repo.findOne as jest.Mock).mockResolvedValue(baseOrder());
+
+      await expect(service.findOne('uuid-1', otherUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
     it('should throw NotFoundException when order does not exist', async () => {
       (repo.findOne as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.findOne('missing')).rejects.toThrow(
+      await expect(service.findOne('missing', owner)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -189,6 +229,35 @@ describe('OrderService', () => {
       });
 
       expect(repo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('should set the new status and save the order', async () => {
+      const order = baseOrder();
+      (repo.findOne as jest.Mock).mockResolvedValue(order);
+      (repo.save as jest.Mock).mockResolvedValue({
+        ...order,
+        status: OrderStatus.CANCELLED,
+      });
+
+      const result = await service.updateStatus(
+        'uuid-1',
+        OrderStatus.CANCELLED,
+      );
+
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: OrderStatus.CANCELLED }),
+      );
+      expect(result.status).toBe(OrderStatus.CANCELLED);
+    });
+
+    it('should throw NotFoundException when order does not exist', async () => {
+      (repo.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.updateStatus('missing', OrderStatus.CANCELLED),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

@@ -1,7 +1,12 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
+import { UserRole } from '@app/shared';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
@@ -22,6 +27,10 @@ const mockUser = {
   username: 'alice',
   email: 'alice@example.com',
 } as User;
+
+const owner = { sub: '1', username: 'alice', role: UserRole.USER };
+const otherUser = { sub: '2', username: 'bob', role: UserRole.USER };
+const admin = { sub: '99', username: 'root', role: UserRole.ADMIN };
 
 const mockRepository = {
   create: jest.fn().mockReturnValue(mockUser),
@@ -107,27 +116,50 @@ describe('UsersService', () => {
     await expect(service.findOne('999')).rejects.toThrow(NotFoundException);
   });
 
-  it('update() should merge the dto and save the user', async () => {
+  it('update() should merge the dto and save the user when the requester is the owner', async () => {
     const dto = { name: 'Bob' };
-    const result = await service.update('1', dto);
+    const result = await service.update('1', dto, owner);
     expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(mockRepository.merge).toHaveBeenCalledWith(mockUser, dto);
     expect(mockRepository.save).toHaveBeenCalledWith(mockUser);
     expect(result).toEqual(mockUser);
   });
 
+  it('update() should allow an admin to update another user', async () => {
+    const dto = { name: 'Bob' };
+    const result = await service.update('1', dto, admin);
+    expect(result).toEqual(mockUser);
+  });
+
+  it('update() should throw ForbiddenException when requester is neither owner nor admin', async () => {
+    await expect(
+      service.update('1', { name: 'Bob' }, otherUser),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
   it('update() should throw ConflictException when username/email already exists', async () => {
     mockRepository.save.mockRejectedValueOnce(duplicateKeyError);
     await expect(
-      service.update('1', { email: 'taken@example.com' }),
+      service.update('1', { email: 'taken@example.com' }, owner),
     ).rejects.toThrow(ConflictException);
   });
 
-  it('remove() should delete and return the user', async () => {
-    const result = await service.remove('1');
+  it('remove() should delete and return the user when the requester is the owner', async () => {
+    const result = await service.remove('1', owner);
     expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(mockRepository.remove).toHaveBeenCalledWith(mockUser);
     expect(result).toEqual(mockUser);
+  });
+
+  it('remove() should allow an admin to delete another user', async () => {
+    const result = await service.remove('1', admin);
+    expect(result).toEqual(mockUser);
+  });
+
+  it('remove() should throw ForbiddenException when requester is neither owner nor admin', async () => {
+    await expect(service.remove('1', otherUser)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('findByUsername() should return a user by username', async () => {

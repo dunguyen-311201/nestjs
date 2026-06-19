@@ -113,6 +113,38 @@ docker exec postgres-dev psql -U postgres -d order_db -c "\dt"
 docker exec -it postgres-dev psql -U postgres -d order_db
 ```
 
+## Docker (local multi-service stack)
+
+Instead of running each service natively with `pnpm nest start`, you can run all 5 as containers via a single parameterized multi-stage `Dockerfile` (build arg `APP_NAME` selects which app gets built/run) and `docker-compose.yml`.
+
+**Important constraint**: the containers use `network_mode: "host"` (Linux only) so the existing hardcoded `localhost` references between services (Consul registration, inter-service TCP clients) keep working unmodified. This means:
+
+- `postgres-dev` and a `consul agent -dev` process must already be running on the **host** (not in compose) — the containers reach them via shared host networking, same as native processes do.
+- You **cannot** run the Docker stack and the native `pnpm nest start` processes at the same time — both would try to bind the same host ports (3000-3004, 8001-8003).
+
+### Build and run
+
+```bash
+# Build all 5 service images
+docker compose build
+
+# Start the full stack
+docker compose up -d
+
+# Tail logs for one service
+docker compose logs -f order
+
+# Stop and remove all containers
+docker compose down
+```
+
+### Build a single service image manually
+
+```bash
+docker build --build-arg APP_NAME=order -t ecommerce-order .
+docker run --rm --network host -e JWT_SECRET=<secret> -e DB_NAME=order_db ecommerce-order
+```
+
 ## Setup
 
 ```bash

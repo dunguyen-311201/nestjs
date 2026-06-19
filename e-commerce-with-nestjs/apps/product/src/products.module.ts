@@ -1,7 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtAuthGuard, LoggingMiddleware } from '@app/common';
+import { JwtAuthGuard, LoggingMiddleware, RolesGuard } from '@app/common';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 import { Category } from './entities/category.entity';
@@ -39,6 +39,7 @@ import { JwtModule } from '@nestjs/jwt/dist/jwt.module';
     CategoriesService,
     ReservationService,
     JwtAuthGuard,
+    RolesGuard,
   ],
 })
 export class ProductsModule implements NestModule {

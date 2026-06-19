@@ -37,6 +37,9 @@ export class Product {
   })
   category!: Category | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  ownerId!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

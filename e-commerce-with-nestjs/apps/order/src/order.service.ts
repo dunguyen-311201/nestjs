@@ -1,8 +1,15 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { Repository } from 'typeorm';
 import { EVENTS } from '@app/constants';
+import type { JwtPayload } from '@app/common';
+import { UserRole } from '@app/shared';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order, OrderStatus } from './entities/order.entity';
 
@@ -46,13 +53,25 @@ export class OrderService {
     });
   }
 
-  async findOne(id: string): Promise<Order> {
+  async findOne(id: string, user: JwtPayload): Promise<Order> {
     const order = await this.orderRepository.findOne({
       where: { id },
       relations: ['items'],
     });
     if (!order) throw new NotFoundException(`Order ${id} not found`);
+    const isStaff =
+      user.role === UserRole.ADMIN || user.role === UserRole.MERCHANT;
+    if (!isStaff && order.customerId !== user.sub) {
+      throw new ForbiddenException('You can only view your own orders');
+    }
     return order;
+  }
+
+  async updateStatus(id: string, status: OrderStatus): Promise<Order> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) throw new NotFoundException(`Order ${id} not found`);
+    order.status = status;
+    return this.orderRepository.save(order);
   }
 
   async handleOrderProcessed(data: {

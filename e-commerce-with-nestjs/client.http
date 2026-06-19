@@ -22,9 +22,9 @@ POST {{baseUrl}}/v1/auth/signup
 Content-Type: application/json
 
 {
-  "name": "Alex Johnson",
-  "username": "alexjohnson",
-  "email": "alexjohnson@example.com",
+  "name": "Admin User",
+  "username": "admin",
+  "email": "admin@example.com",
   "password": "Password@123"
 }
 
@@ -34,7 +34,7 @@ POST {{baseUrl}}/v1/auth/login
 Content-Type: application/json
 
 {
-  "username": "alexjohnson",
+  "username": "admin",
   "password": "Password@123"
 }
 
@@ -98,7 +98,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "name": "Electronics4",
+  "name": "Electronics 5",
   "description": "Phones, laptops, and other electronic devices"
 }
 

@@ -9,6 +9,7 @@ import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { JwtModule } from '@nestjs/jwt/dist/jwt.module';
 import { JwtAuthGuard } from '@app/common/guards/jwt-auth.guard';
+import { RolesGuard } from '@app/common/guards/roles.guard';
 import { ConfigModule } from '@nestjs/config/dist/config.module';
 
 @Module({
@@ -35,6 +36,6 @@ import { ConfigModule } from '@nestjs/config/dist/config.module';
     JwtModule.register({ secret: process.env.JWT_SECRET }),
   ],
   controllers: [HealthController, OrderController],
-  providers: [OrderService, ConsulService, JwtAuthGuard],
+  providers: [OrderService, ConsulService, JwtAuthGuard, RolesGuard],
 })
 export class OrderModule {}

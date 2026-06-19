@@ -1,11 +1,14 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import type { JwtPayload } from '@app/common';
+import { UserRole } from '@app/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
@@ -60,9 +63,14 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+    requester: JwtPayload,
+  ): Promise<User> {
     this.logger.log(`Updating user: ${id}`);
     const user = await this.findOne(id);
+    this.assertSelfOrAdmin(id, requester, 'update');
     this.usersRepository.merge(user, updateUserDto);
     try {
       return await this.usersRepository.save(user);
@@ -74,10 +82,21 @@ export class UsersService {
     }
   }
 
-  async remove(id: string): Promise<User> {
+  async remove(id: string, requester: JwtPayload): Promise<User> {
     this.logger.log(`Removing user: ${id}`);
     const user = await this.findOne(id);
+    this.assertSelfOrAdmin(id, requester, 'delete');
     return this.usersRepository.remove(user);
+  }
+
+  private assertSelfOrAdmin(
+    id: string,
+    requester: JwtPayload,
+    action: 'update' | 'delete',
+  ): void {
+    if (requester.role !== UserRole.ADMIN && requester.sub !== id) {
+      throw new ForbiddenException(`You can only ${action} your own account`);
+    }
   }
 
   async findByUsername(username: string): Promise<User | null> {

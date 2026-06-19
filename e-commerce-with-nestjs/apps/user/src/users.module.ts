@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtAuthGuard, LoggingMiddleware } from '@app/common';
+import { JwtAuthGuard, LoggingMiddleware, RolesGuard } from '@app/common';
 import { User } from './entities/user.entity';
 import { UsersController } from './users.controller';
 import { UsersV2Controller } from './users-v2.controller';
@@ -21,7 +21,7 @@ import { UsersService } from './users.service';
     TypeOrmModule.forFeature([User]),
   ],
   controllers: [UsersController, UsersV2Controller],
-  providers: [UsersService, JwtAuthGuard],
+  providers: [UsersService, JwtAuthGuard, RolesGuard],
   exports: [UsersService],
 })
 export class UsersModule implements NestModule {
