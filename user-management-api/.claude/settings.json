@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm start:dev)",
+      "Bash(pnpm start)",
+      "Bash(pnpm build)",
+      "Bash(pnpm test)",
+      "Bash(pnpm test:cov)",
+      "Bash(pnpm test:e2e)",
+      "Bash(pnpm test:watch)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm format)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm remove *)",
+      "Bash(npx nest generate *)",
+      "Bash(npx nest g *)"
+    ]
+  }
+}
