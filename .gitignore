@@ -22,3 +22,5 @@ build/
 .vscode/
 
 docker-with-turborepo/
+
+*.pdf
