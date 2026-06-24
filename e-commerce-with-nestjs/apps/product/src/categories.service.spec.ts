@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
@@ -17,6 +18,10 @@ const mockRepository = {
   find: jest.fn().mockResolvedValue([mockCategory]),
   findOne: jest.fn().mockResolvedValue(mockCategory),
   remove: jest.fn().mockResolvedValue(mockCategory),
+};
+
+const mockCacheManager = {
+  del: jest.fn(),
 };
 
 const duplicateKeyError = new QueryFailedError(
@@ -42,6 +47,7 @@ describe('CategoriesService', () => {
           provide: getRepositoryToken(Category),
           useValue: mockRepository,
         },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -58,6 +64,11 @@ describe('CategoriesService', () => {
     expect(mockRepository.create).toHaveBeenCalledWith(dto);
     expect(mockRepository.save).toHaveBeenCalledWith(mockCategory);
     expect(result).toEqual(mockCategory);
+  });
+
+  it('create() should invalidate the categories list cache', async () => {
+    await service.create({ name: 'Electronics', description: 'Gadgets' });
+    expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/categories');
   });
 
   it('create() should throw ConflictException when the name already exists', async () => {
@@ -110,11 +121,23 @@ describe('CategoriesService', () => {
     );
   });
 
+  it('update() should invalidate the detail and list cache entries', async () => {
+    await service.update('1', { description: 'Updated' });
+    expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/categories/1');
+    expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/categories');
+  });
+
   it('remove() should delete the category', async () => {
     await service.remove('1');
     expect(mockRepository.findOne).toHaveBeenCalledWith({
       where: { id: '1' },
     });
     expect(mockRepository.remove).toHaveBeenCalledWith(mockCategory);
+  });
+
+  it('remove() should invalidate the detail and list cache entries', async () => {
+    await service.remove('1');
+    expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/categories/1');
+    expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/categories');
   });
 });

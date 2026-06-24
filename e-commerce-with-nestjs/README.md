@@ -113,6 +113,28 @@ docker exec postgres-dev psql -U postgres -d order_db -c "\dt"
 docker exec -it postgres-dev psql -U postgres -d order_db
 ```
 
+## Redis (caching)
+
+The product service caches `GET /v1/products`, `GET /v1/products/:id`, `GET /v1/categories`, and `GET /v1/categories/:id` via `@nestjs/cache-manager` + `@keyv/redis`, so cached responses are shared across multiple product-service instances rather than living in each process's own memory.
+
+### Start Redis
+
+```bash
+docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
+```
+
+### Environment variables
+
+| Var | Default | Notes |
+|---|---|---|
+| `REDIS_HOST` | `localhost` | Read by `ProductsModule`'s `CacheModule.registerAsync` |
+| `REDIS_PORT` | `6379` | |
+| `CACHE_TTL_MS` | `30000` (30s) | Applied via `@CacheTTL` on the 4 cached routes |
+
+### How invalidation works
+
+`ProductsService`/`CategoriesService` call `cacheManager.del()` on every create/update/remove. The detail routes (`:id`) and `GET /v1/categories` (no query params) have exactly one possible cache key, so invalidation is precise. `GET /v1/products` is parameterized by `page`/`limit`/`categoryId`, so a write only deletes the unfiltered `/v1/products` entry — other filter/page combinations fall back to the `CACHE_TTL_MS` expiry rather than being deleted individually.
+
 ## Docker (local multi-service stack)
 
 Instead of running each service natively with `pnpm nest start`, you can run all 5 as containers via a single parameterized multi-stage `Dockerfile` (build arg `APP_NAME` selects which app gets built/run) and `docker-compose.yml`.

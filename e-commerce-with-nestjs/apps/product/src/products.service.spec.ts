@@ -1,4 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserRole } from '@app/shared';
@@ -33,6 +34,10 @@ const mockCategoriesService = {
   findOne: jest.fn(),
 };
 
+const mockCacheManager = {
+  del: jest.fn(),
+};
+
 const admin = { sub: 'admin-uuid', username: 'root', role: UserRole.ADMIN };
 const merchant = {
   sub: 'merchant-uuid',
@@ -55,6 +60,7 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: getRepositoryToken(Product), useValue: mockRepository },
         { provide: CategoriesService, useValue: mockCategoriesService },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -84,6 +90,16 @@ describe('ProductsService', () => {
       expect(mockRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({ ownerId: null }),
       );
+    });
+
+    it('should invalidate the products list cache', async () => {
+      const product = baseProduct();
+      mockRepository.create.mockReturnValue(product);
+      mockRepository.save.mockResolvedValue(product);
+
+      await service.create({ name: 'Widget', price: 9.99 }, admin);
+
+      expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/products');
     });
   });
 
@@ -124,6 +140,17 @@ describe('ProductsService', () => {
         service.update('missing', { name: 'New name' }, admin),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should invalidate the detail and list cache entries', async () => {
+      const product = baseProduct({ ownerId: merchant.sub });
+      mockRepository.findOne.mockResolvedValue(product);
+      mockRepository.save.mockResolvedValue(product);
+
+      await service.update('prod-1', { name: 'New name' }, admin);
+
+      expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/products/prod-1');
+      expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/products');
+    });
   });
 
   describe('remove', () => {
@@ -163,6 +190,16 @@ describe('ProductsService', () => {
       await expect(service.remove('prod-1', regularUser)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    it('should invalidate the detail and list cache entries', async () => {
+      const product = baseProduct({ ownerId: merchant.sub });
+      mockRepository.findOne.mockResolvedValue(product);
+
+      await service.remove('prod-1', admin);
+
+      expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/products/prod-1');
+      expect(mockCacheManager.del).toHaveBeenCalledWith('/v1/products');
     });
   });
 });

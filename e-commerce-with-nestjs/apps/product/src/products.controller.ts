@@ -11,10 +11,13 @@ import {
   Put,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '@app/common';
 import type { JwtPayload } from '@app/common';
 import { UserRole } from '@app/shared';
+import { CACHE_TTL_MS } from './cache.constants';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -36,11 +39,15 @@ export class ProductsController {
   }
 
   @Get()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(CACHE_TTL_MS)
   findAll(@Query() query: ProductQueryDto): Promise<ProductResponseDto[]> {
     return this.productsService.findAll(query);
   }
 
   @Get(':id')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(CACHE_TTL_MS)
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ProductResponseDto> {
     return this.productsService.findOne(id);
   }

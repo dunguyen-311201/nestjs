@@ -1,8 +1,10 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { FindManyOptions, Repository } from 'typeorm';
@@ -15,13 +17,26 @@ import { ProductResponseDto } from './dto/product-response.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
 
+const PRODUCTS_LIST_CACHE_KEY = '/v1/products';
+
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
     private readonly categoriesService: CategoriesService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+
+  private productDetailCacheKey(id: string): string {
+    return `/v1/products/${id}`;
+  }
+
+  // CacheInterceptor keys GET /v1/products by full URL, so a filtered/paginated
+  // list (e.g. ?page=2) isn't covered by this key — @CacheTTL bounds that staleness.
+  private async invalidateListCache(): Promise<void> {
+    await this.cacheManager.del(PRODUCTS_LIST_CACHE_KEY);
+  }
 
   private toDto(product: Product): ProductResponseDto {
     return plainToInstance(ProductResponseDto, product, {
@@ -45,7 +60,9 @@ export class ProductsService {
     if (dto.categoryId) {
       product.category = await this.categoriesService.findOne(dto.categoryId);
     }
-    return this.toDto(await this.productRepository.save(product));
+    const saved = await this.productRepository.save(product);
+    await this.invalidateListCache();
+    return this.toDto(saved);
   }
 
   async findAll(query: ProductQueryDto): Promise<ProductResponseDto[]> {
@@ -90,7 +107,12 @@ export class ProductsService {
         ? await this.categoriesService.findOne(categoryId)
         : null;
     }
-    return this.toDto(await this.productRepository.save(product));
+    const saved = await this.productRepository.save(product);
+    await Promise.all([
+      this.cacheManager.del(this.productDetailCacheKey(id)),
+      this.invalidateListCache(),
+    ]);
+    return this.toDto(saved);
   }
 
   async remove(id: string, requester: JwtPayload): Promise<void> {
@@ -98,6 +120,10 @@ export class ProductsService {
     if (!product) throw new NotFoundException(`Product ${id} not found`);
     this.assertCanManage(product, requester);
     await this.productRepository.remove(product);
+    await Promise.all([
+      this.cacheManager.del(this.productDetailCacheKey(id)),
+      this.invalidateListCache(),
+    ]);
   }
 
   private assertCanManage(product: Product, requester: JwtPayload): void {

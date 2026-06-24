@@ -1,6 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { createKeyv } from '@keyv/redis';
 import { JwtAuthGuard, LoggingMiddleware, RolesGuard } from '@app/common';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
@@ -16,6 +18,16 @@ import { JwtModule } from '@nestjs/jwt/dist/jwt.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: () => ({
+        stores: [
+          createKeyv(
+            `redis://${process.env.REDIS_HOST ?? 'localhost'}:${process.env.REDIS_PORT ?? '6379'}`,
+          ),
+        ],
+      }),
+    }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST ?? 'localhost',
