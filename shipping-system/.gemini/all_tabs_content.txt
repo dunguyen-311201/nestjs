@@ -1,0 +1,1189 @@
+
+======================================================
+TAB: Analysis
+======================================================
+
+Practice - Shipping System
+Overview
+The Domestic Parcel Shipping System is engineered based on the Hub-and-Spoke Consolidation Model utilizing a NestJS microservices architecture and a NATS event backbone.
+In domestic logistics, directly transporting a small parcel from a Sender in Province A to a Recipient in Province B on a point-to-point basis is economically unviable and structurally unscalable. This system is specifically designed to solve the core operational bottleneck: coordinating a Many-to-One-to-Many physical flow.
+Every day, thousands of small parcels travel along identical inter-provincial corridors. Therefore, this system is specifically engineered to solve a core operational bottleneck: coordinating a Many-to-One-to-Many physical flow.
+The system optimizes network efficiency and minimizes per-unit logistics costs through a structured three-phase pipeline:
+Consolidation: Local pickup drivers gather individual parcels and bring them to a local Origin Hub. Here, parcels sharing the same destination corridor are aggregated and packed into a single larger physical container or pallet (referred to as a Bag orManifest).
+Line-Haul Transport: High-capacity long-haul trucks transport these sealed Manifests over long distances between major inter-provincial hubs (Origin Hub → Destination Hub).
+Deconsolidation & Last-Mile: At the destination hub, the Manifest is unsealed, and individual parcels are separated and assigned to local delivery drivers (vans or motorcycles) for final delivery to the end recipient.
+Physical Flow
+
+Aggregation Hierarchy
+To eliminate structural ambiguity between physical entities, the system enforces a strict data topology:
+Parcel → Bag → Manifest → Trip (LineHaulTrip)
+Parcel: the individual unit of shipment (a pallet is modeled as a large parcel).
+Bag: a physical container grouping parcels for the same destination corridor.
+Manifest: a sealed unit (one or more bags) loaded onto a line-haul truck, with a manifest document.
+Trip (LineHaulTrip): the scheduled journey of a vehicle carrying one or more manifests between hubs.
+Relational mapping: Parcel.bag_id → Bag.manifest_id → Manifest.trip_id.
+Business Rules
+Rules are grouped by area. Each has an enforcement point: a database constraint, service-layer logic, or a state-machine guard.
+Order & Parcel
+An order must have a verified sender, a recipient, valid addresses, and at least one parcel before transitioning to an Active state.
+Each parcel must have a recorded weight and dimensions; pallets are flagged as a distinct type to route away from standard conveyor sortation lines.
+A fixed price is assigned to each order at creation; changes are barred unless a physical dimension/weight discrepancy is flagged during initial hub ingestion.
+An order reaches a terminal Complete state only when all its constituent parcels are marked as Delivered or Returned to Sender. Additional terminal/ exception states (Partially_Delivered, Lost, Damaged, Misrouted, RST direction) are defined in the section “Exception Handling & Design-Review Revisions.”
+Consolidation & Sortation
+A parcel belongs to at most one bag at a time; a bag belongs to at most one LineHaulTrip at a time.
+A parcel must be scanned into a physical hub (HUB_RECEIVE) before it can change status to bagged or sorted.
+At sorting centers, parcels are dynamically routed to target delivery hubs based on the destination postal code/province matrix.
+A parcel cannot be loaded onto a line-haul vehicle unless it is associated with a sealed, valid manifest matching the vehicle's assigned destination.
+Transport & Legs
+A LineHaulTrip is bound to exactly one driver and one truck asset for its duration.
+First-mile and last-mile pickup/delivery legs are assigned exclusively to active, verified couriers.
+A parcel's state can only transition to Out for Delivery if its current location matches the designated destination hub of its route.
+Tracking & Scan Events
+Every state transition must produce an immutable, timestamped scan event payload.
+Scan events are strictly append-only; corrections require a new compensatory event record, never a database UPDATE.
+An order's master visibility status is computed from the least-advanced status among its constituent parcels’ latest scan events, and is stored as a materialized projection (read model) rather than aggregated live on every read to satisfy the latency target.
+Delivery & Exceptions
+Failed deliveries may be re-attempted up to a system-configured threshold (default: 3). Exceeding this limit triggers an automatic Return to Sender (RTS) sub-flow.
+Returned parcels travel backward through the reverse path of the network and require scan tracking at every hub.
+Cash-on-delivery (COD) collections must be captured, signed, and reconciled atomically upon successful last-mile scan.
+Rule Catalogue
+
+ID
+	Rule Description
+	Operational Area
+	Enforcement Point
+	
+BR-01
+	A parcel can belong to at most one Bag at any given timestamp.
+	Consolidation
+	DB Unique Constraint + FSM Guard
+	
+BR-02
+	A parcel must be scanned and inbounded (HUB_RECEIVE) at a hub before it can be consolidated or sorted.
+	Sortation
+	FSM State Guard
+	
+BR-03
+	Fixed pricing is applied at order creation and locked unless a weight/dimensional discrepancy is detected at hub inbounding.
+	Pricing
+	Service Logic
+	
+BR-04
+	Out-for-delivery allowed only after arrival at dest. Hub.
+Out_for_Delivery is permitted only after the parcel is inbounded at the final Destination Hub. If scanned at the wrong hub it transitions to Misrouted and fires a corrective event.
+	Delivery
+	FSM State Guard
+	
+BR-05
+	All scan events are immutable and append-only. Historical tracking logs cannot be updated or deleted.
+	Data Integrity
+	DB Partition (Insert Only)
+	
+BR-06
+	Failed delivery beyond limit forces an RTS transition.
+Exceeding the delivery-failure threshold (default 3) triggers Return to Sender. The parcel keeps its tracking ID but flips direction = Reverse to avoid infinite sortation loops.
+	Exceptions
+	Service Logic
+	
+BR-07
+	An Order completes only when all child parcels reach a terminal state.Terminal exception states Partially_Delivered, Lost,Damaged,Cancelled) prevent orders from being stuck active.
+	Order
+	Service Logic Aggregate
+	
+BR-08
+	Weight discrepancies at hub trigger price recalculation audits.
+Weight discrepancies at the hub trigger a downstream pricing audit (adjust COD or post-billing). The parcel is not placed On_Hold, to maintain throughput SLA.
+	Pricing / Ingestion
+	Service Logic + Audit Log
+	
+BR-09
+	During deconsolidation, the system reconciles the manifest's expected parcel count against the physically scanned count. A shortage (scanned < expected) flags the missing parcel(s) as Missing/Investigating and triggers a trace at the previous hub; the parcel's last-known event remains its last valid scan. An overage (an extra, unlinked parcel) routes the unexpected parcel to an Exceptions queue for manual identification rather than rejecting it. Both cases emit an immutable scan event so the discrepancy is captured in the audit trail.
+	Deconsolidation / Ingestion
+	Reconciliation Service + Audit Log
+
+	
+BR-10
+	Scan events that update an order projection are serialized per aggregate: jobs are grouped by order_id so updates to the same order never run concurrently (preventing write contention and deadlocks during the line-haul arrival burst), while different orders still process in parallel. Event-batching debounces the burst so a projection is recomputed once per window.
+	Concurrency / Tracking
+	NATS JetStream (per-order subject ordering) + ADR-001
+	
+
+Requirements
+Functional Requirements
+Order Management: Capture order payloads containing sender/recipient profiles, multi-parcel manifests, and standardized address formats.
+First-Mile Dispatch: Route and dispatch first-mile collection requests to local couriers based on proximity.
+Bulk Consolidation: Support the virtual grouping of parcels into bags and assign those bags to cross-province line-haul vehicle manifests.
+Sortation Routing: Calculate and display sorting lanes at the transfer center based on parcel destination maps.
+Deconsolidation Engine: Unseal bags at target delivery hubs, auto-updating child parcel arrays, and partition them into last-mile courier queues.
+Real-Time Tracking Ledger: Emit and persist timestamped events at every network node scan.
+Upfront Quoting Engine: Resolve fixed pricing using active rate card tables cross-referencing route distance, volumetric metrics, and premium attributes at creation.
+Visibility API: Calculate and serve unified tracking event streams for client-facing UIs.
+Exception Workflows: Orchestrate delivery retry logic, payment capture recording for COD, and automated reverse-routing loops for package returns.
+Non-Functional Requirements
+
+Attribute
+	Target Metric / Operational Note
+	
+Auditability
+	100% append-only scan event log; application-layer modifications to historical tracking entries are blocked at the DB level.
+	
+Throughput
+	The system must handle a peak sustained throughput of 2,500 scans/second across simultaneous hub shift changes without performance degradation.
+	
+Latency
+	End-consumer order status lookup queries must return response payloads in under 300 ms at P99.
+	
+Consistency
+	Strong transactional consistency (ACID) is mandatory for consolidation updates, bag sealing, and state transitions to eliminate inventory drift within a single service boundary. Across services, consistency is eventual (propagated via scan events), since distributed ACID is not achievable in the event-driven architecture.
+	
+Scalability
+	Relational operational data stores must support horizontal read scaling and be structurally partitioned by Time-window and Hub ID.
+	
+Security
+	Field-level encryption for recipient PII data; role-based access control (RBAC) separating Courier, Hub Operator, and Administrator privileges.
+	
+
+
+======================================================
+TAB: Estimation
+======================================================
+
+Shipping System Estimation
+Overview
+A domestic parcel Shipping System built on a hub-and-spoke network with NestJS microservices and a NATSevent backbone. This estimation covers one end-to-end vertical slice with full workflow coverage for every actor identified in the analysts: Sender, Recipient, Courier Hub Operator, Dispatcher, and System.
+Author
+Du Nguyen
+Timeline
+Estimated time: 16 days
+Actual time: 
+ Actor Coverage
+
+Actor
+	Operational Workflow
+	Covered Component
+	
+Sender
+	Create order, get rate quotation
+	Customer Order Form
+	
+Recipient
+	Receive parcel, view end-to-end tracking
+	Tracking Timeline / Shared Link
+	
+Courier
+	Pickup & last-mile, scanning, Proof of Delivery
+	Courier Service + Mobile UI
+	
+Hub Operator
+	Inbound sorting, consolidation, manifest sealing
+	Hub Service + Scan Station UI
+	
+Dispatcher
+	Route planning, vehicle & driver assignment
+	Dispatcher Service + Trip Board UI
+	
+System
+	Event-driven status & automated tracking
+	NATS Events, Projections, Outbox
+	
+Roadmap Summary
+
+Period
+	Milestone
+	
+25–26 Jun
+	Analysis + design docs complete (done)
+	
+Week 1
+	HLD finalized, ADRs written, project scaffolded (local Docker), core backend event chain working
+	
+Week 2
+	Exception states + state machine; operational services (Courier, Hub, Line-haul, Dispatcher); manifest reconciliation + PII
+	
+Week 3
+	Slice wired end to end; full workflow documented; critical-path tests; unit tests, demo (all actors via API), defer-list
+	
+
+Details Estimation
+
+#
+	Phase
+	Tasks
+	Est.(d)
+	Actual
+	Note
+	
+1
+	Analysis
+	Domain research & actor mapping
+	1
+	
+	
+	
+
+	
+	Finalize business rules + functional/non-functional requirements
+	
+	
+	
+	
+2
+	Design docs
+	Review ERD, cross-service communication schemas, physical data flows
+	1
+	
+	
+	
+
+	
+	Define problems, approaches, baseline plans
+	
+	
+	
+	
+3
+	HLD + ADRs
+	Service boundaries & per-service data ownership (incl. ZONE/ROUTE → Hub, DELIVERYPROOF → Courier)
+	2
+	
+	
+	
+
+	
+	NATS subjects/patterns + event contracts
+	
+	
+	
+	
+
+	
+	API Gateway REST endpoints outline
+	
+	
+	
+	
+
+	
+	Write ADRs: ADR-001 (NATS JetStream serialization), ADR-002 (ORM), ADR-003 (shared-DB-for-slice), ADR-004 (polymorphic ScanEvent)
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+4
+	Project setup
+	Initialize Monorepo & NestJS service scaffolds
+	1.5
+	
+	
+	
+
+	
+	Configure local docker-compose (NATS + Postgres + Redis)
+	
+	
+	
+	
+
+	
+	Build shared libs (DTOs, event schemas, global config)
+	
+	
+	
+	
+5 
+	Core backend
+	Order Service: entities, DTOs, order-creation logic
+	5
+	
+	
+	
+
+	
+	Parcel State Machine + guard conditions
+	
+	
+	
+	
+
+	
+	Terminal exception states (Partially_Delivered, Lost, Damaged, Misrouted) + RTS flags
+	
+	
+	
+	
+
+	
+	Pricing Service: rate-card matrix + Order-to-Pricing sync
+	
+	
+	
+	
+
+	
+	Tracking Service: append-only event store + consumers
+	
+	
+	
+	
+
+	
+	Status projection (read model, <300ms) + Transactional Outbox
+	
+	
+	
+	
+
+	
+	Per-aggregate serialization: NATS JetStream per-order subject + event-batching
+	
+	
+	
+	
+6
+	Operational services
+	Courier Service: pickup/delivery legs + scan events
+	2.5
+	
+	
+	
+
+	
+	Hub/Sortation: HUB_RECEIVE, bag consolidation, manifest sealing
+	
+	
+	
+	
+
+	
+	Manifest reconciliation (shortage/overage) + PII field encryption
+	
+	
+	
+	
+
+	
+	Line-haul: trip creation, depart/arrive hooks, deconsolidation
+	
+	
+	
+	
+
+	
+	Dispatcher Service: driver/truck-to-trip + courier-to-leg assignment
+	
+	
+	
+	
+7
+	Integration & E2E
+	Wire slice end to end (local docker-compose)
+	1.5
+	
+	
+	
+
+	
+	Document the full end-to-end workflow walkthrough
+	
+	
+	
+	
+
+	
+	Automate 1-2 happy-path integration tests; stub edge cases
+	
+	
+	
+	
+8
+	Testing, demo & docs
+	Unit tests for rule guards & state-machine transitions
+	1.5
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+
+	
+	Concrete demo script (Order -> Track simulation)
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+
+	
+	Phase-2 Defer-List + final README
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+
+	Total
+	Reported
+	16
+	
+	
+	
+
+
+======================================================
+TAB: ERD
+======================================================
+
+Shipping System - ERD
+
+Entities
+CUSTOMER
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of the customer (sender or recipient).
+	
+name_enc
+	string
+	Full name, stored with field-level encryption (PII).
+	
+phone_enc
+	string
+	Phone number, field-level encrypted (PII).
+	
+address_enc
+	string
+	Full street address, field-level encrypted (PII).
+	
+region_code
+	string
+	Postal/region code kept in plaintext so the sortation engine can route without decrypting PII.
+	
+
+ORDER
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of the shipment order.
+	
+sender_id
+	uuid FK
+	References the CUSTOMER who sends the order.
+	
+recipient_id
+	uuid FK
+	References the CUSTOMER who receives the order.
+	
+rate_card_id
+	uuid FK
+	The rate card used to price the order at creation.
+	
+price_cents
+	int
+	Fixed price in minor units (cents), locked at order creation.
+	
+status
+	enum
+	Order lifecycle: Active, Complete, Partially_Delivered, Lost, Damaged, Cancelled — terminal exception states prevent a stuck-active order.
+	
+
+PARCEL
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of an individual parcel (a pallet is a large parcel).
+	
+order_id
+	uuid FK
+	The order this parcel belongs to.
+	
+bag_id
+	uuid FK, nullable
+	The bag this parcel is in; null until bagged.
+	
+declared_weight_grams
+	int
+	Weight declared by the sender at order creation (basis for the initial price).
+	
+actual_weight_grams
+	int
+	Weight measured at hub inbound; null until scanned. Compared against declared weight for the BR-08 pricing audit.
+	
+type
+	enum
+	parcel or pallet; pallets route away from standard conveyor lines.
+	
+direction
+	enum
+	Forward or Reverse_RTS; the routing engine uses this with location to avoid RTS loops.
+	
+state
+	enum
+	Parcel lifecycle: Created, InHub, Misrouted, OutForDelivery, Delivered, Lost, Damaged.
+	
+
+BAG
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a bag (a physical sack of parcels for one corridor).
+	
+manifest_id
+	uuid FK, nullable
+	The manifest this bag is sealed into; null until sealed.
+	
+route_id
+	uuid FK
+	Corridor the bag is bound for.
+	
+status
+	enum
+	open (accepting parcels) or sealed (ready to load).
+	
+
+MANIFEST
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a manifest (a sealed unit of one or more bags loaded onto a truck).
+	
+trip_id
+	uuid FK, nullable
+	The line-haul trip this manifest is loaded on; null until loaded.
+	
+expected_count
+	int
+	Number of parcels the system expects inside the sealed manifest.
+	
+scanned_count
+	int
+	Number of parcels physically scanned at deconsolidation; compared to expected_count for shortage/overage (BR-09).
+	
+status
+	enum
+	sealed or reconciled (after the deconsolidation count check).
+	
+LINEHAULTRIP
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a line-haul journey between hubs.
+	
+origin_hub_id
+	uuid FK
+	Hub where the trip departs.
+	
+dest_hub_id
+	uuid FK
+	Hub where the trip arrives.
+	
+driver_id
+	uuid FK
+	Driver assigned to the trip by the dispatcher.
+	
+truck_id
+	uuid FK
+	Truck asset assigned to the trip.
+	
+
+HUB
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a physical hub (origin, sorting, or delivery).
+	
+zone_id
+	uuid FK
+	The zone this hub serves.
+	
+name
+	string
+	Human-readable hub name.
+	
+
+ZONE
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a geographic zone.
+	
+region_code
+	string
+	Plaintext routing key used by the sortation engine.
+	
+
+ROUTE
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a corridor between two zones.
+	
+origin_zone_id
+	uuid FK
+	Origin zone of the route.
+	
+dest_zone_id
+	uuid FK
+	Destination zone of the route.
+	
+
+RATECARD
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a pricing entry.
+	
+origin_zone_id
+	uuid FK
+	Origin zone the rate applies to.
+	
+dest_zone_id
+	uuid FK
+	Destination zone the rate applies to.
+	
+parcel_type
+	enum
+	Parcel type the rate applies to.
+	
+price_cents
+	int
+	Fixed price in cents for this route × type.
+	
+
+COURIER
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a first/last-mile courier.
+	
+zone_id
+	uuid FK
+	The zone the courier operates in.
+	
+role
+	enum
+	RBAC role separating Courier from Hub Operator, Dispatcher, Admin.
+	
+
+DRIVER
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a line-haul driver.
+	
+name_enc
+	string
+	Driver name, field-level encrypted (PII).
+	
+
+TRUCK
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a line-haul truck asset.
+	
+plate
+	string
+	License plate / registration of the truck.
+	
+
+SCANEVENT
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a scan event (append-only).
+	
+entity_id
+	uuid
+	Polymorphic reference to the scanned entity (parcel, bag, manifest, or trip).
+	
+entity_type
+	enum
+	Which entity entity_id points to: PARCEL, BAG, MANIFEST, TRIP. Lets one manifest scan emit one event instead of N parcel events.
+	
+hub_id
+	uuid FK, nullable
+	Hub where the scan happened; null for courier-side scans.
+	
+courier_id
+	uuid FK, nullable
+	Courier who recorded the scan; null for hub-side scans.
+	
+event_type
+	enum
+	The scan type (e.g. PICKUP_SCAN, HUB_RECEIVE, OUT_FOR_DELIVERY, DELIVERED).
+	
+created_at
+	timestamp
+	Immutable event timestamp; the store is strictly append-only.
+	
+
+DELIVERYPROOF
+Field
+	Type
+	Description
+	
+id
+	uuid PK
+	Unique identifier of a proof-of-delivery record.
+	
+scan_event_id
+	uuid FK
+	The DELIVERED scan event this proof is attached to.
+	
+parcel_id
+	uuid FK
+	The parcel that was delivered.
+	
+signature_url
+	string, nullable
+	Stored recipient signature image, if captured.
+	
+photo_url
+	string, nullable
+	Stored delivery photo, if captured.
+	
+cod_collected_cents
+	int, nullable
+	Cash-on-delivery amount collected, if the order is COD.
+	
+
+Relationships
+
+From
+	To 
+	Card
+	Meaning
+	
+CUSTOMER
+	ORDER
+	1 : N
+	a customer sends / receives many orders (sender & recipient)
+	
+ORDER
+	PARCEL
+	1 : N
+	an order contains one or more parcels
+	
+ORDER
+	RATECARD
+	N : 1
+	each order is priced by one rate card
+	
+PARCEL
+	BAG
+	N : 0..1
+	a parcel may be bagged into one bag
+	
+BAG
+	MANIFEST
+	N : 0..1
+	a bag may be sealed into one manifest
+	
+MANIFEST
+	LINEHAULTRIP
+	N : 0..1
+	a manifest may be loaded on one trip
+	
+ROUTE
+	BAG
+	1 : N
+	a route covers many bags
+	
+HUB
+	LINEHAULTRIP
+	1 : N
+	hub as origin / destination of trips
+	
+DRIVER / TRUCK
+	LINEHAULTRIP
+	1 : N
+	assigned to trips
+	
+SCANEVENT
+	(polymorphic)
+	—
+	entity_id + entity_type reference a PARCEL, BAG, MANIFEST or TRIP
+	
+SCANEVENT
+	DELIVERYPROOF
+	1 : 0..1
+	a DELIVERED scan captures one proof of delivery
+	
+PARCEL
+	DELIVERYPROOF
+	1 : N
+	proof of delivery is linked to the parcel
+	
+HUB / COURIER
+	SCANEVENT
+	1 : N
+	a scan is recorded at a hub or by a courier
+	
+ZONE
+	HUB / ROUTE / RATECARD / COURIER
+	1 : N
+	zone groups hubs, routes, rate cards, couriers
+	
+
+Diagram
+(Drawio, Mermaid)
+
+
+
+======================================================
+TAB: HLD
+======================================================
+
+Shipping System - High Level Design
+
+Introduction
+Purpose
+This High-Level Design defines the architecture of the Shipping System backend vertical slice: the services, how they own data, how they communicate, the event and API contracts, and the cross-cutting concerns. It is the implementation contract — scaffolding and coding follow directly from it.
+Scope
+In scope: backend vertical slice, all six actors exercised via REST API; the full physical flow order → pickup → hub → line-haul → delivery → tracking; exception handling (terminal states, misroute, RTS, reconciliation).
+Out of scope: frontend UIs, CI/CD, cloud deployment. The system runs locally via Docker Compose.
+References
+
+Architecture
+Architecture Overview
+The system is a set of NestJS microservices over a NATS JetStream event backbone, with a REST API gateway at the edge. PostgreSQL is the system of record (shared instance, schema-per-service for the slice); Redis is a read-through cache for hot projections. Communication is asynchronous by default (events); synchronous REST is used only where an immediate answer is required (pricing at order creation).
+Architectural style
+Event-driven microservices: services are decoupled, communicating through published events; each owns its data and reacts to others' events.
+Append-only event store as source of truth: every state transition emits an immutable scan event; read models (projections) are derived from the stream.
+CQRS-lean: writes go through the domain + outbox; reads serve materialized projections to meet the latency target.
+Logical components
+API Gateway — auth, routing, request validation, OpenAPI.
+Domain services — Order, Pricing, Tracking, Courier, Hub/Sortation, Line-haul, Dispatcher.
+NATS JetStream — event backbone + per-order subjects for serialized projection writes.
+PostgreSQL — durable storage, schema-per-service.
+Redis — read cache for ORDER.status and hot tracking lookups (cache only; not a broker).
+A component diagram and the end-to-end sequence are maintained as Mermaid sources alongside this document.
+Service Boundaries & Data Ownership
+Each entity is write-owned by exactly one service. Cross-service references are plain IDs, never foreign keys; a service learns about another's data only through events. The slice uses a shared PostgreSQL with schema-per-service, but logical ownership is strict.
+
+Service
+	Responsibility
+	Owns (write)
+	Notes
+	
+Order
+	Order intake, pricing orchestration, order lifecycle
+	ORDER, PARCEL
+	Receives order requests, calls Pricing synchronously, owns the parcel state machine and the ORDER.status write-back projection.
+	
+Pricing
+	Rate-card lookup, price calculation
+	RATECARD
+	Returns a fixed price for route x parcel type; price locked at order creation.
+	
+Tracking
+	Append-only scan-event store, tracking timeline
+	SCANEVENT
+	Consumes all scan events, stores them immutably, derives projections. Listens to parcel.delivered; does NOT own DELIVERYPROOF.
+	
+Courier
+	First/last-mile pickup & delivery, POD
+	DELIVERYPROOF
+	Manages pickup/delivery legs, emits scan events, write-owns proof-of-delivery, emits parcel.delivered with image links.
+	
+Hub / Sortation
+	Inbound, consolidation, manifest sealing, network topology
+	BAG, MANIFEST, ZONE, ROUTE
+	HUB_RECEIVE, bag consolidation, manifest sealing (with outbox), deconsolidation reconciliation; owns zones & routes.
+	
+Line-haul
+	Line-haul trip lifecycle
+	LINEHAULTRIP
+	Trip creation, depart/arrive hooks, deconsolidation trigger.
+	
+Dispatcher
+	Assignment & planning
+	DRIVER, TRUCK (assignment)
+	Assigns driver/truck to trips and couriers to legs.
+	
+
+Ownership rule highlights: ZONE and ROUTE belong to Hub/Sortation (network topology). DELIVERYPROOF is write-owned by Courier; Tracking only consumes parcel.delivered and records it in its append-only store.
+Communication Model
+Synchronous (REST)
+Used only when the caller needs an immediate result: Order → Pricing at order creation (price must be returned and locked).
+Client → API Gateway → service, request/response, validated DTOs.
+Asynchronous (NATS JetStream)
+The default. Every state transition publishes an event; interested services subscribe. No service blocks on another for the main flow.
+Per-aggregate serialization: order-projection events publish to orders.status.<order_id>; JetStream guarantees in-subject ordering, so one order's projection is written serially while different orders run in parallel across the consumer group (ADR-001).
+NATS subject map
+Convention: <domain>.<event>, lowercase, dot-separated. Per-order projection subject carries the order id.
+Subject
+	Producer
+	Consumers
+	Meaning
+	
+order.created
+	Order
+	Tracking, Pricing(audit)
+	A new order with parcels was created
+	
+parcel.picked_up
+	Courier
+	Tracking, Order
+	First-mile pickup scan recorded
+	
+parcel.hub_received
+	Hub
+	Tracking, Order
+	Parcel inbounded at a hub (HUB_RECEIVE)
+	
+bag.sealed
+	Hub
+	Tracking
+	A bag was sealed for a corridor
+	
+manifest.sealed
+	Hub
+	Tracking, Line-haul
+	A manifest was sealed (outbox)
+	
+trip.departed
+	Line-haul
+	Tracking
+	A line-haul trip departed origin hub
+	
+trip.arrived
+	Line-haul
+	Tracking, Hub
+	A trip arrived at destination hub
+	
+manifest.reconciled
+	Hub
+	Tracking, Order
+	Deconsolidation count check done (shortage/overage)
+	
+parcel.misrouted
+	Hub
+	Tracking, Order
+	Parcel scanned at an off-route hub
+	
+parcel.out_for_delivery
+	Courier
+	Tracking, Order
+	Last-mile dispatch
+	
+parcel.delivered
+	Courier
+	Tracking, Order
+	Delivered, carries POD image links
+	
+parcel.rts
+	Courier
+	Tracking, Order
+	Return-to-Sender triggered (direction=Reverse)
+	
+orders.status.<order_id>
+	Tracking projector
+	Order projection consumer
+	Per-order subject for serialized projection writes (JetStream ordering)
+	
+Event Contracts
+Each event has: a name, a version, a payload schema (fields + types), a producer, and consumers.
+Versioning: a breaking change creates a new version (e.g. parcel.delivered.v2); the old version is not edited.
+Idempotency (two layers): every event carries an event_id (uuid) and occurred_at (UTC). (1) Broker-level — the outbox worker sets the NATS header Nats-Msg-Id = event_id, so JetStream's deduplication window drops duplicate publishes before they reach any consumer. (2) Application-level — consumers still de-duplicate on event_id (for duplicates arriving outside the dedup window), so retries are always safe.
+Money is integer cents; weight is integer grams; all timestamps are UTC.
+Example: parcel.delivered (v1)
+{ "event_id": "uuid", "occurred_at": "2026-06-30T08:15:00Z", "parcel_id": "uuid", "order_id": "uuid", "courier_id": "uuid", "pod": {   "signature_url": "string|null",   "photo_url": "string|null",   "cod_collected_cents": "int|null" }}
+	
+Producer: Courier Service. Consumers: Tracking (append to ScanEvent), Order (advance parcel/order state).
+API Gateway & REST Endpoints
+The gateway handles authentication, RBAC, request routing, and validation; OpenAPI is generated from DTOs.
+Endpoints are grouped by actor. All write endpoints validate against business-rule guards before emitting events.
+
+Actor
+	Endpoint
+	Purpose
+	
+Sender
+	POST /orders
+	Create an order; returns order + locked price
+	
+Sender
+	GET /orders/{id}/quote
+	Preview price before creation
+	
+Recipient
+	GET /tracking/{tracking_id}
+	End-to-end tracking timeline from scan events
+	
+Courier
+	POST /couriers/legs/{id}/pickup
+	Record a pickup scan
+	
+Courier
+	POST /couriers/legs/{id}/deliver
+	Record delivery + upload POD
+	
+Hub Operator
+	POST /hubs/{id}/receive
+	HUB_RECEIVE scan
+	
+Hub Operator
+	POST /bags / POST /manifests/{id}/seal
+	Consolidate & seal
+	
+Hub Operator
+	POST /manifests/{id}/reconcile
+	Deconsolidation count check
+	
+Dispatcher
+	POST /trips / POST /trips/{id}/assign
+	Create trip, assign driver/truck
+	
+Dispatcher
+	POST /legs/{id}/assign
+	Assign courier to a leg
+	
+Data Architecture
+Append-only ScanEvent store
+All scans are immutable, insert-only (BR-05). The store is the source of truth; corrections are new compensating events, never updates.
+SCANEVENT is polymorphic (entity_id + entity_type) so a manifest scan emits one event instead of N parcel events (ADR-004).
+ORDER.status write-back projection
+ORDER.status is a materialized projection, not a directly-edited column. It is the least-advanced status of the order's parcels (BR-07).
+It is written back asynchronously by a projector consuming orders.status.<order_id>; JetStream ordering + event-batching prevent the line-haul write-contention (BR-10).
+Reads are served from the Redis cache of this projection to meet < 300 ms P99.
+Outbox pattern
+Two operations require transactional guarantee and use the outbox: Order Creation (Order Service) and Manifest Sealing (Hub Service).
+The domain change and the outgoing event are written in one DB transaction; a relay publishes the event to NATS, so the DB can never commit without the event eventually being sent.
+Partitioning
+The high-volume SCANEVENT table is partitioned by time-window and hub_id (designed now, implemented when volume requires).
+Cross-cutting Concerns
+Auth & RBAC
+Roles: Sender/Customer, Courier, Hub Operator, Dispatcher, Admin. The gateway enforces role-to-endpoint access; services re-check on sensitive operations.
+Security & PII
+Recipient PII (name, phone, address) is field-level encrypted at rest; region/postal code is stored in plaintext as routing metadata so sortation never decrypts PII.
+Observability
+A correlation/trace id follows a parcel across services and events; structured JSON logging (pino); health endpoints per service.
+Error handling
+Retries with backoff; a dead-letter subject for poison events; idempotent consumers (keyed by event_id); a reconciliation job that flags orphan scan events (ADR-004 mitigation).
+Config
+@nestjs/config with schema validation; secrets via environment; no secrets in code.
+Deployment (Local)
+docker-compose brings up: NATS JetStream, PostgreSQL, Redis, and the NestJS services.
+Each service has its own schema in the shared Postgres; migrations run on startup for the slice.
+No CI/CD and no cloud deployment — explicitly out of scope; everything runs on the developer machine.
+services:nats: # JetStream enabledpostgres: # shared instance, schema-per-serviceredis: # read cache onlyorder-svc | pricing-svc | tracking-svc |courier-svc | hub-svc | linehaul-svc | dispatcher-svcgateway: # REST + OpenAPI
+	
+
+Key Design Decisions (ADRs)
+
+ADR
+	Decision
+	Status
+	
+ADR-001
+	Per-aggregate serialization via NATS JetStream per-order subject; Redis is cache-only
+	Accepted
+	
+ADR-002
+	ORM selection (TypeORM vs Prisma)
+	To decide in Project Setup
+	
+ADR-003
+	Shared-DB-for-slice now; DB-per-service when services split
+	Accepted
+	
+ADR-004
+	Polymorphic ScanEvent (entity_id + entity_type), because FKs cannot span service DBs
+	Accepted (mandatory)
+	
+Monorepo & Shared Library Structure
+The monorepo holds the seven services, the gateway, and a shared library. The shared library is partitioned so that event shapes, validation, and crypto are defined once and reused — preventing each service from redefining them and drifting.
+
+Partition
+	Contents
+	Why shared
+	
+contracts/
+	TypeScript interfaces / JSON Schemas for every NATS event (e.g. OrderCreatedEventV1, ParcelDeliveredEventV1)
+	One source of truth for event shape; producer and consumers compile against the same type
+	
+dtos/
+	Shared validation classes and rules, incl. barcode formats (Parcel PA-XXXX, Manifest MN-XXXX) and common request DTOs
+	Consistent validation across services; a bad barcode is rejected the same way everywhere
+	
+crypto/
+	Field-level encrypt/decrypt helpers for PII (name_enc, phone_enc, address_enc)
+	Order and Courier services reuse one tested implementation; PII is never encrypted ad-hoc
+	
+Versioned event contracts live in contracts/ (e.g. a v2 interface is added alongside v1, never edited in place — matches the event-versioning rule in 2.4).
+The crypto/ helper centralizes the encryption scheme and key handling so the PII rule (2.7) is enforced identically in every service.
+Definition of Done
+Every ERD entity has exactly one owning service (no orphan tables).
+Every cross-service interaction is classified sync REST or async event.
+Every event has a named, versioned schema with producer and consumers.
+Key REST endpoints exist for all six actors.
+RBAC, PII encryption, observability, and error-handling are specified.
+ADR-001/003/004 accepted; ADR-002 to be decided at setup.
+No open structural question blocks scaffolding — Project Setup can start.

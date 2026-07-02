@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "gdrive": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-gdrive"
+      ],
+      "env": {
+        "GD_CREDENTIALS_PATH": "/home/dunguyen/Training/nestjs/shipping-system/credentials.json",
+        "GD_TOKEN_PATH": "/home/dunguyen/Training/nestjs/shipping-system/token.json"
+      }
+    }
+  }
+}

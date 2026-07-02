@@ -1,0 +1,140 @@
+Practice - Shipping System
+Overview
+The Domestic Parcel Shipping System is engineered based on the Hub-and-Spoke Consolidation Model utilizing a NestJS microservices architecture and a NATS event backbone.
+In domestic logistics, directly transporting a small parcel from a Sender in Province A to a Recipient in Province B on a point-to-point basis is economically unviable and structurally unscalable. This system is specifically designed to solve the core operational bottleneck: coordinating a Many-to-One-to-Many physical flow.
+Every day, thousands of small parcels travel along identical inter-provincial corridors. Therefore, this system is specifically engineered to solve a core operational bottleneck: coordinating a Many-to-One-to-Many physical flow.
+The system optimizes network efficiency and minimizes per-unit logistics costs through a structured three-phase pipeline:
+Consolidation: Local pickup drivers gather individual parcels and bring them to a local Origin Hub. Here, parcels sharing the same destination corridor are aggregated and packed into a single larger physical container or pallet (referred to as a Bag orManifest).
+Line-Haul Transport: High-capacity long-haul trucks transport these sealed Manifests over long distances between major inter-provincial hubs (Origin Hub → Destination Hub).
+Deconsolidation & Last-Mile: At the destination hub, the Manifest is unsealed, and individual parcels are separated and assigned to local delivery drivers (vans or motorcycles) for final delivery to the end recipient.
+Physical Flow
+
+Aggregation Hierarchy
+To eliminate structural ambiguity between physical entities, the system enforces a strict data topology:
+Parcel → Bag → Manifest → Trip (LineHaulTrip)
+Parcel: the individual unit of shipment (a pallet is modeled as a large parcel).
+Bag: a physical container grouping parcels for the same destination corridor.
+Manifest: a sealed unit (one or more bags) loaded onto a line-haul truck, with a manifest document.
+Trip (LineHaulTrip): the scheduled journey of a vehicle carrying one or more manifests between hubs.
+Relational mapping: Parcel.bag_id → Bag.manifest_id → Manifest.trip_id.
+Business Rules
+Rules are grouped by area. Each has an enforcement point: a database constraint, service-layer logic, or a state-machine guard.
+Order & Parcel
+An order must have a verified sender, a recipient, valid addresses, and at least one parcel before transitioning to an Active state.
+Each parcel must have a recorded weight and dimensions; pallets are flagged as a distinct type to route away from standard conveyor sortation lines.
+A fixed price is assigned to each order at creation; changes are barred unless a physical dimension/weight discrepancy is flagged during initial hub ingestion.
+An order reaches a terminal Complete state only when all its constituent parcels are marked as Delivered or Returned to Sender. Additional terminal/ exception states (Partially_Delivered, Lost, Damaged, Misrouted, RST direction) are defined in the section “Exception Handling & Design-Review Revisions.”
+Consolidation & Sortation
+A parcel belongs to at most one bag at a time; a bag belongs to at most one LineHaulTrip at a time.
+A parcel must be scanned into a physical hub (HUB_RECEIVE) before it can change status to bagged or sorted.
+At sorting centers, parcels are dynamically routed to target delivery hubs based on the destination postal code/province matrix.
+A parcel cannot be loaded onto a line-haul vehicle unless it is associated with a sealed, valid manifest matching the vehicle's assigned destination.
+Transport & Legs
+A LineHaulTrip is bound to exactly one driver and one truck asset for its duration.
+First-mile and last-mile pickup/delivery legs are assigned exclusively to active, verified couriers.
+A parcel's state can only transition to Out for Delivery if its current location matches the designated destination hub of its route.
+Tracking & Scan Events
+Every state transition must produce an immutable, timestamped scan event payload.
+Scan events are strictly append-only; corrections require a new compensatory event record, never a database UPDATE.
+An order's master visibility status is computed from the least-advanced status among its constituent parcels’ latest scan events, and is stored as a materialized projection (read model) rather than aggregated live on every read to satisfy the latency target.
+Delivery & Exceptions
+Failed deliveries may be re-attempted up to a system-configured threshold (default: 3). Exceeding this limit triggers an automatic Return to Sender (RTS) sub-flow.
+Returned parcels travel backward through the reverse path of the network and require scan tracking at every hub.
+Cash-on-delivery (COD) collections must be captured, signed, and reconciled atomically upon successful last-mile scan.
+Rule Catalogue
+
+ID
+	Rule Description
+	Operational Area
+	Enforcement Point
+	
+BR-01
+	A parcel can belong to at most one Bag at any given timestamp.
+	Consolidation
+	DB Unique Constraint + FSM Guard
+	
+BR-02
+	A parcel must be scanned and inbounded (HUB_RECEIVE) at a hub before it can be consolidated or sorted.
+	Sortation
+	FSM State Guard
+	
+BR-03
+	Fixed pricing is applied at order creation and locked unless a weight/dimensional discrepancy is detected at hub inbounding.
+	Pricing
+	Service Logic
+	
+BR-04
+	Out-for-delivery allowed only after arrival at dest. Hub.
+Out_for_Delivery is permitted only after the parcel is inbounded at the final Destination Hub. If scanned at the wrong hub it transitions to Misrouted and fires a corrective event.
+	Delivery
+	FSM State Guard
+	
+BR-05
+	All scan events are immutable and append-only. Historical tracking logs cannot be updated or deleted.
+	Data Integrity
+	DB Partition (Insert Only)
+	
+BR-06
+	Failed delivery beyond limit forces an RTS transition.
+Exceeding the delivery-failure threshold (default 3) triggers Return to Sender. The parcel keeps its tracking ID but flips direction = Reverse to avoid infinite sortation loops.
+	Exceptions
+	Service Logic
+	
+BR-07
+	An Order completes only when all child parcels reach a terminal state.Terminal exception states Partially_Delivered, Lost,Damaged,Cancelled) prevent orders from being stuck active.
+	Order
+	Service Logic Aggregate
+	
+BR-08
+	Weight discrepancies at hub trigger price recalculation audits.
+Weight discrepancies at the hub trigger a downstream pricing audit (adjust COD or post-billing). The parcel is not placed On_Hold, to maintain throughput SLA.
+	Pricing / Ingestion
+	Service Logic + Audit Log
+	
+BR-09
+	During deconsolidation, the system reconciles the manifest's expected parcel count against the physically scanned count. A shortage (scanned < expected) flags the missing parcel(s) as Missing/Investigating and triggers a trace at the previous hub; the parcel's last-known event remains its last valid scan. An overage (an extra, unlinked parcel) routes the unexpected parcel to an Exceptions queue for manual identification rather than rejecting it. Both cases emit an immutable scan event so the discrepancy is captured in the audit trail.
+	Deconsolidation / Ingestion
+	Reconciliation Service + Audit Log
+
+	
+BR-10
+	Scan events that update an order projection are serialized per aggregate: jobs are grouped by order_id so updates to the same order never run concurrently (preventing write contention and deadlocks during the line-haul arrival burst), while different orders still process in parallel. Event-batching debounces the burst so a projection is recomputed once per window.
+	Concurrency / Tracking
+	NATS JetStream (per-order subject ordering) + ADR-001
+	
+
+Requirements
+Functional Requirements
+Order Management: Capture order payloads containing sender/recipient profiles, multi-parcel manifests, and standardized address formats.
+First-Mile Dispatch: Route and dispatch first-mile collection requests to local couriers based on proximity.
+Bulk Consolidation: Support the virtual grouping of parcels into bags and assign those bags to cross-province line-haul vehicle manifests.
+Sortation Routing: Calculate and display sorting lanes at the transfer center based on parcel destination maps.
+Deconsolidation Engine: Unseal bags at target delivery hubs, auto-updating child parcel arrays, and partition them into last-mile courier queues.
+Real-Time Tracking Ledger: Emit and persist timestamped events at every network node scan.
+Upfront Quoting Engine: Resolve fixed pricing using active rate card tables cross-referencing route distance, volumetric metrics, and premium attributes at creation.
+Visibility API: Calculate and serve unified tracking event streams for client-facing UIs.
+Exception Workflows: Orchestrate delivery retry logic, payment capture recording for COD, and automated reverse-routing loops for package returns.
+Non-Functional Requirements
+
+Attribute
+	Target Metric / Operational Note
+	
+Auditability
+	100% append-only scan event log; application-layer modifications to historical tracking entries are blocked at the DB level.
+	
+Throughput
+	The system must handle a peak sustained throughput of 2,500 scans/second across simultaneous hub shift changes without performance degradation.
+	
+Latency
+	End-consumer order status lookup queries must return response payloads in under 300 ms at P99.
+	
+Consistency
+	Strong transactional consistency (ACID) is mandatory for consolidation updates, bag sealing, and state transitions to eliminate inventory drift within a single service boundary. Across services, consistency is eventual (propagated via scan events), since distributed ACID is not achievable in the event-driven architecture.
+	
+Scalability
+	Relational operational data stores must support horizontal read scaling and be structurally partitioned by Time-window and Hub ID.
+	
+Security
+	Field-level encryption for recipient PII data; role-based access control (RBAC) separating Courier, Hub Operator, and Administrator privileges.
+	
+
