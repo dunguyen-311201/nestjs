@@ -1,0 +1,93 @@
+# LLD — Hub / Sortation Service
+
+## Versioning
+
+| Version | Date | Author | Changes |
+| :--- | :--- | :--- | :--- |
+| v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
+
+Owns: `ZONE`, `ROUTE`, `HUB`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including the `Idempotency-Key` header on `POST /hubs/{id}/receive` (a retried scan must not append a duplicate `SCANEVENT` or re-trigger misrouted correction). Bag/manifest consolidation is physical-only and not modeled (see `CLAUDE.md § SCOPE`).
+
+## Key Design Decisions
+
+- **Misrouted detection is inline, not a separate step**: the zone-mismatch check and the corrective re-route both happen inside the same `/receive` request handler — there's no intermediate "pending review" state for a misrouted scan (BR-02).
+- **`event_type` is server-computed**: the client only reports *that* a scan happened; whether it's `HUB_RECEIVE`, `ARRIVED_AT_HUB`, or `MISROUTED` is decided by this service based on `PARCEL.route_id` vs. the scanning hub's zone, not passed by the caller.
+- **No manifest/bag state to reconcile**: unlike a full hub-and-spoke system, this service's inbound scan is a single flat event per parcel — deliberately, per the scope cut (ADR-004 family of decisions).
+
+## Use Cases
+
+| UC | Use Case | Actor | Trigger | Main Outcome | Related BR |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| UC-07 | Receive Parcel at Hub | Hub Operator | Parcel arrives at any hub (origin, transit, or destination) | `HUB_RECEIVE` / `ARRIVED_AT_HUB` scan event; weight captured | BR-02, BR-06 |
+| UC-12 | Detect Misrouted Parcel | System | Hub scan zone ≠ expected route zone | `parcel.misrouted` published; corrective re-route computed | BR-02 |
+
+## Sequence Diagrams
+
+### 3b. Hub Inbound + Weight Reconciliation
+
+```mermaid
+sequenceDiagram
+    participant Hub as Hub Service
+    participant NATS
+    participant Tracking as Tracking Service
+    participant Order as Order Service
+
+    Hub->>Hub: POST /hubs/{id}/receive (origin hub)
+    Hub->>Hub: capture actual_weight_grams
+    Hub--)NATS: publish parcel.hub_received
+    NATS--)Tracking: append HUB_RECEIVE scan event
+    NATS--)Order: PARCEL.actual_weight_grams updated, compare to declared (BR-06)
+    Order->>Order: if COD adjust cod amount downstream, if prepaid defer invoice
+```
+
+*(First-mile pickup, the step before this one, is owned by [courier-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/courier-service.md).)*
+
+### 4b. Misrouted Detection & Corrective Re-route (BR-02)
+
+```mermaid
+sequenceDiagram
+    participant Linehaul as Line-haul Service
+    participant Hub as Hub Service
+    participant NATS
+    participant Tracking as Tracking Service
+    participant Order as Order Service
+
+    Linehaul--)Hub: (trip arrives, see linehaul-service.md diagram 4a)
+    Hub->>Hub: POST /hubs/{id}/receive (scan at arrival hub)
+    Hub->>Hub: compare scanning hub zone vs PARCEL.route_id zone
+
+    alt correct hub
+        Hub--)NATS: publish parcel.arrived_at_hub
+        NATS--)Tracking: append ARRIVED_AT_HUB scan event
+    else wrong hub (Misrouted, BR-02)
+        Hub--)NATS: publish parcel.misrouted
+        NATS--)Tracking: append MISROUTED scan event
+        NATS--)Order: ORDER.status reflects Misrouted (transient)
+        Hub->>Hub: recompute corridor from actual zone to destination
+        Hub->>Hub: update PARCEL.route_id
+        Hub--)NATS: re-publish corrective parcel.hub_received
+        NATS--)Tracking: append corrective scan event
+    end
+```
+
+## API Contracts
+
+### `POST /hubs/{id}/receive`
+
+| Field | Type | Validation |
+| :--- | :--- | :--- |
+| `parcel_id` | uuid | required |
+| `actual_weight_grams` | int, nullable | > 0 if present; triggers BR-06 reconciliation if it differs from `declared_weight_grams` |
+| `linehaul_trip_id` | uuid, nullable | present only for transit/destination scans, not the very first origin scan |
+
+**Response `201`**: `{ scan_event_id, event_type }` where `event_type` is server-computed — `HUB_RECEIVE`, `ARRIVED_AT_HUB`, or `MISROUTED` per the BR-02 zone-mismatch check (client never sets this directly). **Errors**: `404` hub/parcel not found · `422 BR-08` prepaid parent order not yet `Confirmed` — parcel routed to a holding area, not rejected outright.
+
+**Side effect (Misrouted, BR-02)**: on zone mismatch, this service also recomputes the corridor from the actual scanning hub's zone to the order's original destination, updates `PARCEL.route_id`, and re-emits a corrective `parcel.hub_received` — see Diagram 4b above.
+
+## Database Schema Detail
+
+| Entity | Indexes | Constraints |
+| :--- | :--- | :--- |
+| `ZONE` | UNIQUE `region_code` | PK `id` |
+| `ROUTE` | UNIQUE `(origin_zone_id, dest_zone_id)` | PK `id` |
+| `HUB` | `idx_hub_zone_id` | PK `id` |

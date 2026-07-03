@@ -1,4 +1,43 @@
-# Shipping System — High-Level Design Reference
+# Shipping System - High Level Design
+
+## Table of Contents
+1. [Introduction](#introduction)
+   - [Purpose](#purpose)
+   - [Scope](#scope)
+   - [References](#references)
+2. [Architecture](#architecture)
+   - [Architecture Overview](#architecture-overview)
+   - [Architectural Style](#architectural-style)
+   - [Logical Components](#logical-components)
+3. [Services & Data Ownership](#services--data-ownership)
+4. [Communication Model](#communication-model)
+   - [Synchronous (REST)](#synchronous-rest)
+   - [Asynchronous (NATS JetStream)](#asynchronous-nats-jetstream)
+   - [NATS Subject Map](#nats-subject-map)
+5. [Event & API Contracts](#event--api-contracts)
+   - [Event Contracts](#event-contracts)
+   - [REST Endpoints](#rest-endpoints)
+6. [Design Solutions for Specific Cases](#design-solutions-for-specific-cases)
+   - [Misrouted handling and corrective re-route (BR-02)](#misrouted-handling-and-corrective-re-route-br-02)
+   - [RTS after 3 failed attempts (BR-04)](#rts-after-3-failed-attempts-br-04)
+   - [ORDER.status projection mechanics (BR-05, BR-07, ADR-001)](#orderstatus-projection-mechanics-br-05-br-07-adr-001)
+   - [Weight mismatch reconciliation and passive lost-parcel detection (BR-06 + ERD design note)](#weight-mismatch-reconciliation-and-passive-lost-parcel-detection-br-06--erd-design-note)
+   - [Idempotency and outbox mechanics (Order Creation only)](#idempotency-and-outbox-mechanics-order-creation-only)
+   - [Prepaid Payment Verification via Stripe (BR-08)](#prepaid-payment-verification-via-stripe-br-08)
+   - [COD Cash Settlement and Reconciliation (BR-09)](#cod-cash-settlement-and-reconciliation-br-09)
+   - [Notification Delivery (BR-10)](#notification-delivery-br-10)
+7. [Data Isolation Strategy](#data-isolation-strategy)
+   - [Schema-per-Service](#schema-per-service)
+   - [Logical Foreign Keys](#logical-foreign-keys)
+8. [Message Broker & Fault Tolerance](#message-broker--fault-tolerance)
+   - [Stream & Consumer Configuration](#stream--consumer-configuration)
+   - [Retry & Dead Letter Queue (DLQ)](#retry--dead-letter-queue-dlq)
+9. [Cross-cutting Concerns](#cross-cutting-concerns)
+10. [Architectural Evaluation & Strengths](#architectural-evaluation--strengths)
+11. [Key Design Decisions (ADRs)](#key-design-decisions-adrs)
+12. [Monorepo & Shared Library Structure](#monorepo--shared-library-structure)
+
+---
 
 ## Introduction
 
@@ -12,6 +51,8 @@ This High-Level Design defines the architecture of the Shipping System backend v
 ### References
 - [docs/01-ERD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/01-ERD.md)
 - [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md)
+- [docs/06-specification.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/06-specification.md) — scope, functional/non-functional requirements
+- [docs/lld/](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) — API DTOs/validation/error codes, DB indexes/constraints, **plus each service's own Use Cases and Sequence Diagrams**, split one file per service
 
 ---
 
@@ -30,7 +71,7 @@ The system is a set of NestJS microservices over a NATS JetStream event backbone
 - **Domain services** — Order, Pricing, Tracking, Courier, Hub/Sortation, Line-haul, Dispatcher.
 - **NATS JetStream** — event backbone + per-order subjects for serialized projection writes.
 - **PostgreSQL** — durable storage, schema-per-service.
-- **Redis** — read cache for `ORDER.status` and hot tracking lookups.
+- **Redis** — read cache for `ORDER.status` and hot tracking lookups. **Write-through**: the `ORDER.status` projection consumer writes to Redis in the same step it persists to Postgres (no separate invalidation pass); reads fall back to Postgres on a cache miss.
 
 ---
 
@@ -40,16 +81,22 @@ Each entity is write-owned by exactly one service. Cross-service references are 
 
 | Service | Responsibility | Owns (write) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Order** | Order intake, pricing orchestration, order lifecycle | `CUSTOMER`, `ORDER`, `PARCEL` | Receives order requests, calls Pricing synchronously, owns the parcel state machine and the `ORDER.status` write-back projection. |
+| **Order** | Order intake, pricing orchestration, payment flow, order lifecycle | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` | Receives order requests, calls Pricing synchronously, owns the parcel state machine, prepaid checkout sessions, Stripe webhook integration, and the `ORDER.status` write-back projection. |
 | **Pricing** | Rate-card lookup, price calculation | `RATECARD` | Returns a fixed price for route × parcel type; price locked at order creation. |
 | **Tracking** | Append-only scan-event store, tracking timeline | `SCANEVENT` | Consumes all scan events, stores them immutably, derives projections. Listens to `parcel.delivered`; does NOT own `DELIVERYPROOF`. |
-| **Courier** | First/last-mile pickup & delivery, POD | `COURIER`, `DELIVERYPROOF` | Manages pickup/delivery legs, write-owns proof-of-delivery. Never writes `SCANEVENT` directly (Tracking is sole writer) — on each REST call it writes only its own tables, then synchronously publishes the corresponding NATS event in the same request; Tracking consumes it and appends the `SCANEVENT` row. No cross-service call, no outbox. |
-| **Hub / Sortation** | Inbound scan, network topology | `ZONE`, `ROUTE` | `HUB_RECEIVE` scan, parcel inbound/outbound; owns zones & routes. (Bag/manifest consolidation is physical-only, not modeled.) |
-| **Line-haul** | Line-haul trip lifecycle | `LINEHAULTRIP` | Trip creation, depart/arrive hooks, deconsolidation trigger. |
+| **Courier** | First/last-mile pickup & delivery, POD, COD reconciliation | `COURIER`, `DELIVERYPROOF`, `COD_SETTLEMENT`, `DELIVERY_ATTEMPT` | Manages pickup/delivery legs, write-owns proof-of-delivery, delivery attempt counts, and courier cash settlements. Never writes `SCANEVENT` directly (Tracking is sole writer) — on each REST call it writes only its own tables, then synchronously publishes the corresponding NATS event in the same request; Tracking consumes it and appends the `SCANEVENT` row. No cross-service call, no outbox. |
+| **Hub / Sortation** | Inbound scan, network topology | `ZONE`, `ROUTE`, `HUB` | `HUB_RECEIVE` scan, parcel inbound/outbound; owns zones, routes, and hub records. (Bag/manifest consolidation is physical-only, not modeled.) |
+| **Line-haul** | Line-haul trip lifecycle | `LINEHAULTRIP` | Trip creation, depart/arrive hooks; on arrival, hands off to Hub/Sortation which emits `parcel.arrived_at_hub` per parcel via `linehaul_trip_id`. |
 | **Dispatcher** | Assignment & planning | `DRIVER`, `TRUCK` (assignment) | Assigns driver/truck to trips and couriers to legs. |
+| **Notification** | Best-effort customer email notifications | *(none — stateless)* | Subscribes to existing lifecycle events (`order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected`); sends email via a provider SDK. Owns no data, no outbox, no retries — a send failure is logged and dropped, never blocks or retries the triggering transaction (BR-10). |
 
 > [!NOTE]
-> Ownership rule highlights: `ZONE` and `ROUTE` belong to Hub/Sortation (network topology). `DELIVERYPROOF` is write-owned by Courier; Tracking only consumes `parcel.delivered` and records it in its append-only store.
+> Ownership rule highlights: `ZONE` and `ROUTE` belong to Hub/Sortation (network topology). `DELIVERYPROOF` and `COD_SETTLEMENT` are write-owned by Courier; `PAYMENT` and `STRIPE_TRANSACTION` are write-owned by Order. Tracking only consumes events and records them in its append-only store.
+
+> [!WARNING]
+> **Accepted MVP risk — no outbox outside Order Creation**: Courier and Hub/Sortation publish their NATS events synchronously in the same request as their own DB write, with no outbox (see "Idempotency and outbox mechanics" below — it covers Order Creation only). If the NATS publish fails after the DB commit, that scan event is permanently missing from `SCANEVENT`, silently breaking the "100% append-only audit log" target. Accepted for this 16-day slice; production hardening would extend the outbox pattern to these two services.
+>
+> The same gap exists on Order Service's `POST /orders/{id}/checkout` webhook handler: it updates `ORDER.status` and writes `STRIPE_TRANSACTION` directly, then publishes `payment.succeeded` with no outbox. The blast radius is smaller — `ORDER.status` itself is already correct even if the publish is lost, so there's no audit-log gap like the scan-event case — but downstream consumers (Tracking, Notification) would silently miss the transition. Also accepted for this slice, for the same reason: extending the outbox pattern to a third service isn't worth the added complexity at this scope.
 
 ---
 
@@ -64,11 +111,12 @@ Each entity is write-owned by exactly one service. Cross-service references are 
 - Per-aggregate serialization: order-projection events publish to `orders.status.<order_id>`; JetStream guarantees in-subject ordering, so one order's projection is written serially while different orders run in parallel across the consumer group (ADR-001).
 
 ### NATS Subject Map
-Convention: `<domain>.<event>`, lowercase, dot-separated. Per-order projection subject carries the order id.
+Convention: `<domain>.<event>`, lowercase, dot-separated. Per-order projection subject carries the order id. The one deliberate exception is `orders.status.<order_id>` (plural `orders`): it is a per-aggregate projection-write channel, not a domain event, so it is namespaced separately from the `<domain>.<event>` event stream on purpose.
 
 | Subject | Producer | Consumers | Meaning |
 | :--- | :--- | :--- | :--- |
-| `order.created` | Order | Tracking, Pricing (audit) | A new order with parcels was created |
+| `order.created` | Order | Tracking, Pricing (audit), Notification | A new order with parcels was created |
+| `payment.succeeded` | Order | Order, Tracking, Notification | Emitted upon Stripe webhook validation; updates `ORDER.status = Confirmed` |
 | `parcel.picked_up` | Courier | Tracking, Order | First-mile pickup scan recorded |
 | `parcel.hub_received` | Hub | Tracking, Order | Parcel inbounded at a hub (`HUB_RECEIVE`) |
 | `parcel.loaded_for_linehaul` | Hub | Tracking | Parcel loaded onto a line-haul trip; payload includes `linehaul_trip_id` |
@@ -77,10 +125,15 @@ Convention: `<domain>.<event>`, lowercase, dot-separated. Per-order projection s
 | `trip.arrived` | Line-haul | Tracking, Hub | A trip arrived at destination hub |
 | `parcel.misrouted` | Hub | Tracking, Order | Parcel scanned at an off-route hub |
 | `parcel.out_for_delivery` | Courier | Tracking, Order | Last-mile dispatch |
-| `parcel.delivered` | Courier | Tracking, Order | Delivered, carries POD image links |
-| `parcel.rts` | Courier | Tracking, Order | Return-to-Sender triggered; payload sets `PARCEL.direction = Reverse_RTS` and resets the failed-delivery-attempt counter to zero for the reverse leg |
-| `parcel.lost_suspected` | Tracking (job) | Order | SLA threshold breached with no next scan; passive lost-parcel detection |
+| `parcel.delivered` | Courier | Tracking, Order, Notification | Delivered, carries POD image links |
+| `parcel.rts` | Courier | Tracking, Order, Notification | Return-to-Sender triggered; payload sets `PARCEL.direction = Reverse_RTS` and resets the failed-delivery-attempt counter to zero for the reverse leg |
+| `parcel.lost_suspected` | Tracking (job) | Order, Notification | SLA threshold breached with no next scan; passive lost-parcel detection |
 | `orders.status.<order_id>` | Tracking projector | Order projection consumer | Per-order subject for serialized projection writes (JetStream ordering) |
+
+> [!NOTE]
+> **Event Triggers (Sensor vs API)**:
+> - `parcel.loaded_for_linehaul` & `parcel.arrived_at_hub`: Automatically triggered by Hub Operators scanning barcodes using sorting devices via the existing `POST /hubs/{id}/receive` endpoint. The Hub Sortation service parses the scan location metadata (e.g., scanning onto a line-haul container vs scanning inbound at a hub) to select the correct event.
+> - `trip.departed` & `trip.arrived`: Triggered automatically via GPS geofencing when a line-haul truck departs the origin hub's radius or enters the destination hub's radius. For manual fallback or systems lacking GPS integration, Dispatchers trigger these events using the `/trips/{id}/depart` and `/trips/{id}/arrive` API endpoints.
 
 ---
 
@@ -116,11 +169,16 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 | :--- | :--- | :--- |
 | **Sender** | `POST /orders` | Create an order; returns order + locked price |
 | **Sender** | `GET /orders/{id}/quote` | Preview price before creation |
-| **Recipient** | `GET /tracking/{tracking_id}` | End-to-end tracking timeline from scan events |
+| **Sender** | `POST /orders/{id}/checkout` | Create a Stripe Checkout/PaymentIntent session |
+| **Stripe System** | `POST /payments/webhook` | Receive async payment succeeded/failed webhooks |
+| **Recipient** | `GET /tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
 | **Courier** | `POST /couriers/legs/{id}/pickup` | Record a pickup scan |
 | **Courier** | `POST /couriers/legs/{id}/deliver` | Record delivery + upload POD |
 | **Hub Operator** | `POST /hubs/{id}/receive` | `HUB_RECEIVE` scan |
-| **Dispatcher** | `POST /trips / POST /trips/{id}/assign` | Create trip, assign driver/truck |
+| **Hub Operator** | `POST /couriers/settlements` | Hub finance operator registers courier cash deposit and triggers COD reconciliation |
+| **Dispatcher** | `POST /trips`, `POST /trips/{id}/assign` | Create trip, assign driver/truck |
+| **Dispatcher** | `POST /trips/{id}/depart` | Manually mark trip as departed (fallback) |
+| **Dispatcher** | `POST /trips/{id}/arrive` | Manually mark trip as arrived (fallback) |
 | **Dispatcher** | `POST /legs/{id}/assign` | Assign courier to a leg |
 
 ---
@@ -158,6 +216,22 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 3. **Layer 1 — broker dedup**: the JetStream stream's configured dedup window uses `Nats-Msg-Id` to silently drop a duplicate publish of the same `event_id` within the window.
 4. **Layer 2 — consumer dedup**: each consumer additionally checks `event_id` against its own processed-events record before applying the event, and no-ops if already seen.
 
+### Prepaid Payment Verification via Stripe (BR-08)
+1. **Stripe Session**: The Order service generates a Stripe checkout session via `POST /orders/{id}/checkout`, writing a pending `PAYMENT` row linked to the `ORDER`.
+2. **Webhook Intake**: Once the customer completes payment, Stripe asynchronously posts to `/payments/webhook`. The Order webhook validator writes a `STRIPE_TRANSACTION` log and publishes the `payment.succeeded` event on NATS.
+3. **Dispatch Guard**: In accordance with BR-08, the Courier service blocks first-mile pickup assignment (`POST /legs/{id}/assign`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer). Any hub inbound scan device (`POST /hubs/{id}/receive`) will similarly reject a parcel if its parent order is prepaid and unpaid, routing it to a holding area.
+
+### COD Cash Settlement and Reconciliation (BR-09)
+1. **Cash Collection**: When a courier completes a COD delivery, Courier records signature/photo and `cod_collected_cents` via `POST /couriers/legs/{id}/deliver`.
+2. **Deposit Registration**: At the end of the shift, the courier returns to the hub and hands over collected cash. The Hub finance operator registers the deposit using `POST /couriers/settlements` in the Courier service, creating a `COD_SETTLEMENT` record in the `shipping_courier_db` schema.
+3. **Automatic Reconciliation**: The Courier service automatically aggregates the sum of `cod_collected_cents` across all COD parcels delivered by that specific courier during the shift and compares it against the cash deposit amount.
+4. **Reconciliation Audit**: If the amounts match, `COD_SETTLEMENT.reconciled_at` is set to the current timestamp and status is marked as `Settled`. If there is a discrepancy, the row is marked as `Discrepancy` and a warning is logged for administrative review (BR-09).
+
+### Notification Delivery (BR-10)
+1. **Stateless consumer**: The Notification consumer owns no table and has no REST surface — it only subscribes to the events listed in the NATS Subject Map (`order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected`) and calls an email provider SDK (e.g. SES/SendGrid) synchronously within the consumer handler.
+2. **Best-effort, not outbox-backed**: unlike Order Creation, there is no transactional guarantee here on purpose — a notification is a side effect, not a source of truth. If the send call fails or the provider is down, the consumer logs the failure and acks the message anyway; it never retries indefinitely or blocks the event stream.
+3. **No customer-facing failure mode**: because delivery of the underlying business event (order confirmed, parcel delivered, etc.) already succeeded before Notification ever sees it, a lost email never leaves the system in an inconsistent state — worst case, the customer checks `GET /tracking/{tracking_id}` instead of reading an email.
+
 ---
 
 ## Data Isolation Strategy
@@ -167,10 +241,10 @@ One physical PostgreSQL engine, split into 5 isolated schemas along bounded-cont
 
 | Schema | Owning service(s) | Tables |
 | :--- | :--- | :--- |
-| `shipping_order_db` | Order | `CUSTOMER`, `ORDER`, `PARCEL` |
+| `shipping_order_db` | Order | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` |
 | `shipping_pricing_db` | Pricing | `RATECARD` |
 | `shipping_tracking_db` | Tracking | `SCANEVENT` |
-| `shipping_courier_db` | Courier | `COURIER`, `DELIVERYPROOF` |
+| `shipping_courier_db` | Courier | `COURIER`, `DELIVERYPROOF`, `COD_SETTLEMENT` |
 | `shipping_network_db` | Hub/Sortation, Line-haul, Dispatcher (shared DB for slice, ADR-003) | `ZONE`, `HUB`, `ROUTE`, `LINEHAULTRIP`, `DRIVER`, `TRUCK` |
 
 ### Logical Foreign Keys
@@ -185,7 +259,7 @@ All cross-service references (e.g. `SCANEVENT.parcel_id` → `PARCEL.id`) are lo
 
 ### Stream & Consumer Configuration
 - **Stream**: all subjects under the `parcel.*` and `trip.*` prefixes, plus `order.*` and `orders.status.>` are grouped into one stream, `SHIPPING_PIPELINE`.
-- **Retention policy**: `Limits` — retained indefinitely since the append-only scan history must remain queryable.
+- **Retention policy**: `Limits` — retained indefinitely since the append-only scan history must remain queryable. Time/hub-based partitioning of `SCANEVENT` is explicitly deferred for this local MVP slice (no cloud/production deployment target per Scope); revisit if this ever runs continuously.
 - **Ack policy**: every consumer that writes state uses `AckExplicit`. A message counts as consumed only once the consuming service's database transaction has committed.
 
 ### Retry & Dead Letter Queue (DLQ)
@@ -204,6 +278,19 @@ When a consumer fails due to a system-level error:
 - **Error handling**: Retries with backoff; a dead-letter subject; idempotent consumers; a reconciliation job.
 - **Config**: `@nestjs/config` with schema validation; secrets via environment; no secrets in code.
 - **Deployment (Local)**: docker-compose brings up: NATS JetStream, PostgreSQL, Redis, and the NestJS services. migrations run on startup for the slice.
+
+---
+
+## Architectural Evaluation & Strengths
+
+This design exhibits several key architectural strengths that align with enterprise-grade microservice design patterns:
+
+- **Strict Scope Discipline**: The elimination of physical `Bag` and `Manifest` abstractions is applied consistently across the entire design (ERD, HLD, business rules, and ADR-004). The design documents the specific pros, cons, and consequences of this simplification, demonstrating high scope discipline suitable for a clean vertical slice implementation.
+- **Robust Event-Driven Projections**: Using `ScanEvent` as an append-only transaction log (audit trail) serves as the system's source of truth. Implementing NATS JetStream serialized ordering per-order (ADR-001) combined with event-batching debounce on the projection consumer (BR-07) effectively solves the standard concurrent-overwrite problem during high-frequency scan bursts.
+- **Strict Bounded Contexts (No Cross-Database Foreign Keys)**: Database entities are strictly partitioned by write-ownership. Hard foreign key constraints are only enforced within the bounds of a single logical service (e.g., `HUB` and `ZONE`), while cross-service relations use logical UUID mapping. This eliminates database-level coupling, making future schema migration/splitting straightforward.
+- **Detailed Exception Handling and Edge-Case Mapping**: Rather than abstract lists, the HLD provides detailed, step-by-step communication sequences for complex logistical exceptions. This includes misrouted corrective routing (BR-02), multi-attempt failover loops to Return-to-Sender (BR-04), weight mismatch reconciliation (BR-06), and passive loss tracking via daemon threshold jobs.
+- **Dual-Layer Idempotency**: Resolves the "dual write" dilemma using the transactional outbox pattern during order creation, coupled with two-tier message deduplication (NATS deduplication header at broker level and consumer-side validation records).
+- **Traceable Decision Records**: Employs a structured ADR format (Context, Decision, and Consequences), ensuring all design choices (such as the rejection of polymorphic ScanEvents in ADR-004) are fully documented and traceable.
 
 ---
 

@@ -24,3 +24,6 @@ build/
 docker-with-turborepo/
 
 *.pdf
+
+
+/shipping/*

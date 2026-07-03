@@ -1,7 +1,7 @@
 # ADR-004: Non-Polymorphic ScanEvent (Parcel-Level Tracking)
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 In large-scale logistics networks, scan events can be polymorphic, referencing either a `parcel_id`, a `bag_id`, or a `manifest_id` (representing nested groups of parcels loaded onto trucks). Implementing polymorphic scan models requires complex database relations and recursive queries to resolve the location and history of individual parcels.

@@ -6,7 +6,7 @@ Backend vertical slice, NestJS microservices, NATS JetStream event backbone.
 
 ## SCOPE — Scoped Slice (read this first)
 
-This is a deliberately reduced scope to fit a 16-day timeline. Do NOT reintroduce cut features.
+This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08), COD Settlement (BR-09), and Notification (BR-10) were added later and absorbed into the same 16.0d by trimming HLD/ADR write-up and Integration/Testing polish — see `docs/03-phases.md` for the exact trade-offs. Do NOT reintroduce cut features.
 
 **In scope:** Order → Parcel → parcel-level tracking (append-only ScanEvent) → payment (price locked at creation) → hub + line-haul transport → delivery / RTS / terminal states → PII encryption.
 
@@ -27,6 +27,7 @@ This is a deliberately reduced scope to fit a 16-day timeline. Do NOT reintroduc
 - **Event store:** ScanEvent is append-only and the source of truth. Parcel state and location are COMPUTED from the event sequence, never stored as editable columns.
 - **ORDER.status:** materialized write-back projection = least-advanced status of the order's parcels (BR-05). Written async via the JetStream per-order subject.
 - **Outbox pattern:** used for Order Creation (Order Service) only. (Manifest sealing was cut with manifests.)
+- **Notifications:** a stateless Notification consumer (owns no table, no outbox) subscribes to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` and sends best-effort email. A send failure is logged and dropped — it must never block, retry, or roll back the triggering transaction (BR-10).
 - **Idempotency (two layers):** (1) outbox worker sets NATS header `Nats-Msg-Id = event_id` → JetStream dedup window drops duplicates at the broker; (2) consumers also de-dup on event_id.
 
 ## Conventions
@@ -55,6 +56,10 @@ VS Code installed via snap creates a sandboxed terminal with a different `$HOME`
 
 - `docs/01-ERD.md` — 13 entities, relationships, design notes (scoped slice)
 - `docs/02-HLD.md` — services, NATS subject map, REST endpoints
-- `docs/03-phases.md` — 16-day phase plan
+- `docs/03-phases.md` — estimation: timeline, actor coverage, roadmap, 16-day phase plan
+- `docs/04-business-rules.md` — the single authoritative Rule Catalogue (BR-01–BR-10); other docs link here instead of duplicating it
+- `docs/05-analysis.md` — original pre-scope-cut analysis, kept for historical context only (do not build against it)
+- `docs/06-specification.md` — scoped-slice specification; also the canonical home for Non-Functional Requirements
+- `docs/lld/` — one self-contained file per service: Versioning, Key Design Decisions, Use Cases, Sequence Diagrams, API DTOs/validation/error codes, DB indexes/constraints. `00-conventions.md` first (shared rules), then per-service files. No separate top-level use-case/sequence-diagram doc — each service's are embedded in its own LLD file to avoid a second copy drifting out of sync.
 
 All docs are synchronized to the scoped slice. Any remaining mention of bags/manifests is an explicit "out of scope / not modeled" note, not a feature to build.
