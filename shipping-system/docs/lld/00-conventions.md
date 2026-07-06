@@ -22,7 +22,7 @@ Each file below is self-contained: Versioning, Key Design Decisions, Use Cases, 
 
 | Service | File | Owns (from HLD) |
 | :--- | :--- | :--- |
-| Order | [order-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/order-service.md) | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` |
+| Order | [order-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/order-service.md) | `CUSTOMER`, `SHIPMENT_ORDER`, `PARCEL`, `PAYMENT`, `PAYMENT_TRANSACTION` |
 | Pricing | [pricing-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/pricing-service.md) | `RATECARD` |
 | Tracking | [tracking-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/tracking-service.md) | `TRACKING_EVENT` |
 | Courier | [courier-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/courier-service.md) | `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT` |

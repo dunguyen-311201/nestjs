@@ -31,7 +31,7 @@ The system abstracts all physical routing and consolidation complexities from th
 3. **First-Mile & Origin Hub**: Courier picks up the parcel; origin hub receives and re-weighs it, reconciling any weight discrepancy downstream rather than holding the parcel (BR-06).
 4. **Line-Haul & Routing Guard**: The parcel travels hub-to-hub. A wrong-hub scan is caught immediately, flips the parcel to `Misrouted`, and triggers a corrective re-route instead of silently continuing (BR-02).
 5. **Last-Mile Delivery**: Courier attempts delivery. Success captures a Proof of Delivery. Failure retries up to 3 times, after which the parcel automatically enters Return-to-Sender, keeping its tracking ID (BR-04).
-6. **Completion & Notification**: Once every parcel in the order reaches a terminal state, `ORDER.status` becomes `Complete` (BR-05) and a best-effort email notification fires (BR-09).
+6. **Completion & Notification**: Once every parcel in the order reaches a terminal state, `SHIPMENT_ORDER.status` becomes `Complete` (BR-05) and a best-effort email notification fires (BR-09).
 
 ### Visual Diagram (Mermaid)
 

@@ -24,7 +24,7 @@ Owns: `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT`. Conventions in [00-con
 ### UC-06 + UC-13 — Delivery Attempt & RTS After 3 Failures
 
 - **Preconditions**: Parcel is `OutForDelivery`; a courier leg exists.
-- **Postconditions (success)**: `DELIVERED` scan event + `PROOF_OF_DELIVERY` row; `ORDER.status` eventually `Complete`.
+- **Postconditions (success)**: `DELIVERED` scan event + `PROOF_OF_DELIVERY` row; `SHIPMENT_ORDER.status` eventually `Complete`.
 - **Main flow**: Courier calls `POST /couriers/legs/{id}/deliver` with POD → `parcel.delivered` published → Tracking appends scan, Order advances state, Notification fires.
 - **Alternate flow (failed attempt)**: Courier calls the same endpoint with a failure reason → `DELIVERY_FAILED` scan appended → this service counts attempts for the parcel.
 - **Exception flow (3rd failure)**: On the 3rd `DELIVERY_FAILED`, this service emits `parcel.rts` instead of re-dispatching → `PARCEL.direction = Reverse_RTS`, attempt counter resets to zero for the reverse leg, tracking ID unchanged (BR-04) → parcel re-enters the flow at UC-05 (pickup-equivalent) headed back to the original sender's zone.
@@ -63,7 +63,7 @@ sequenceDiagram
     Courier--)NATS: publish parcel.delivered
     NATS--)Tracking: append DELIVERED scan event
     NATS--)Order: advance PARCEL.state = Delivered
-    Order->>Order: recompute ORDER.status (see order-service.md diagram 8)
+    Order->>Order: recompute SHIPMENT_ORDER.status (see order-service.md diagram 8)
     NATS--)Notification: consume parcel.delivered
     Notification->>Notification: send email (best-effort, log+drop on failure)
 ```

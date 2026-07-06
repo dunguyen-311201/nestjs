@@ -21,11 +21,11 @@ This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08) a
 
 ## Architecture decisions (do not contradict)
 
-- **Concurrency:** per-aggregate serialization via NATS JetStream per-order subject `orders.status.<order_id>`. JetStream in-subject ordering serializes writes to one order; different orders run in parallel. NO BullMQ.
+- **Concurrency:** per-aggregate serialization via NATS JetStream per-order subject `shipment_orders.status.<shipment_order_id>`. JetStream in-subject ordering serializes writes to one order; different orders run in parallel. NO BullMQ.
 - **Redis:** read cache only (hot projections for < 300ms P99). NOT a broker or job queue.
 - **Cross-service references:** plain IDs, NOT foreign keys. FKs never span service databases. Within the shared-DB slice, FKs may exist only within one service's schema.
 - **Event store:** TrackingEvent is append-only and the source of truth. Parcel state and location are COMPUTED from the event sequence, never stored as editable columns.
-- **ORDER.status:** materialized write-back projection = least-advanced status of the order's parcels (BR-05). Written async via the JetStream per-order subject.
+- **SHIPMENT_ORDER.status:** materialized write-back projection = least-advanced status of the order's parcels (BR-05). Written async via the JetStream per-shipment-order subject.
 - **Outbox pattern:** used for Order Creation (Order Service) only. (Manifest sealing was cut with manifests.)
 - **Notifications:** a stateless Notification consumer (owns no table, no outbox) subscribes to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` and sends best-effort email. A send failure is logged and dropped — it must never block, retry, or roll back the triggering transaction (BR-09).
 - **Idempotency (two layers):** (1) outbox worker sets NATS header `Nats-Msg-Id = event_id` → JetStream dedup window drops duplicates at the broker; (2) consumers also de-dup on event_id.

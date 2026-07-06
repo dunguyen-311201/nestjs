@@ -52,9 +52,9 @@ This service is also the **producer** side of **Diagram 8 — Order Status Proje
 
 ### `GET /tracking/{tracking_id}`
 
-`{tracking_id}` = `ORDER.id`. **Response `200`**: `{ order_id, status, parcels: [{ parcel_id, state, timeline: [{ event_type, created_at, hub_id?, courier_id?, linehaul_trip_id? }] }] }`. **Errors**: `404` unknown order id.
+`{tracking_id}` = `SHIPMENT_ORDER.id`. **Response `200`**: `{ shipment_order_id, status, parcels: [{ parcel_id, state, timeline: [{ event_type, created_at, hub_id?, courier_id?, linehaul_trip_id? }] }] }`. **Errors**: `404` unknown order id.
 
-Reads are served from the `ORDER.status` Redis cache (write-through, populated by the Order Service's projection consumer) for the `status` field; the per-parcel `timeline` array always reads from Postgres directly (not cached — high cardinality, low reuse per request).
+Reads are served from the `SHIPMENT_ORDER.status` Redis cache (write-through, populated by the Order Service's projection consumer) for the `status` field; the per-parcel `timeline` array always reads from Postgres directly (not cached — high cardinality, low reuse per request).
 
 ## Database Schema Detail
 

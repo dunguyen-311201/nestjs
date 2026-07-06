@@ -10,9 +10,9 @@ Based on the logistics and shipping requirements, we modeled the database with *
 ### Visual Diagram (Mermaid)
 ```mermaid
 erDiagram
-    CUSTOMER ||--o{ ORDER : "sends/receives"
-    ORDER ||--|{ PARCEL : "contains"
-    ORDER ||--|| PAYMENT : "has"
+    CUSTOMER ||--o{ SHIPMENT_ORDER : "sends/receives"
+    SHIPMENT_ORDER ||--|{ PARCEL : "contains"
+    SHIPMENT_ORDER ||--|| PAYMENT : "has"
     PAYMENT ||--o| STRIPE_TRANSACTION : "processed_by"
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
     PARCEL ||--o{ TRACKING_EVENT : "tracks"
@@ -101,7 +101,7 @@ CREATE TABLE shipping_order_db.CUSTOMER (
     region_code VARCHAR(50) NOT NULL
 );
 
-CREATE TABLE shipping_order_db.ORDER (
+CREATE TABLE shipping_order_db.SHIPMENT_ORDER (
     id UUID PRIMARY KEY,
     sender_id UUID NOT NULL REFERENCES shipping_order_db.CUSTOMER(id),
     recipient_id UUID NOT NULL REFERENCES shipping_order_db.CUSTOMER(id),
@@ -113,7 +113,7 @@ CREATE TABLE shipping_order_db.ORDER (
 
 CREATE TABLE shipping_order_db.PARCEL (
     id UUID PRIMARY KEY,
-    order_id UUID NOT NULL REFERENCES shipping_order_db.ORDER(id),
+    shipment_order_id UUID NOT NULL REFERENCES shipping_order_db.SHIPMENT_ORDER(id),
     route_id UUID,
     declared_weight_grams INT NOT NULL CHECK (declared_weight_grams > 0),
     actual_weight_grams INT CHECK (actual_weight_grams > 0),
@@ -125,7 +125,7 @@ CREATE TABLE shipping_order_db.PARCEL (
 
 CREATE TABLE shipping_order_db.PAYMENT (
     id UUID PRIMARY KEY,
-    order_id UUID NOT NULL REFERENCES shipping_order_db.ORDER(id) UNIQUE,
+    shipment_order_id UUID NOT NULL REFERENCES shipping_order_db.SHIPMENT_ORDER(id) UNIQUE,
     type VARCHAR(50) NOT NULL CHECK (type IN ('PREPAID_STRIPE')),
     amount_cents INT NOT NULL,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Unpaid', 'Paid', 'Awaiting_Settlement'))
@@ -305,7 +305,7 @@ SELECT
     COUNT(o.id) AS order_count,
     SUM(o.price_cents) / 100.0 AS total_revenue_usd,
     AVG(o.price_cents) / 100.0 AS avg_order_price_usd
-FROM shipping_order_db.ORDER o
+FROM shipping_order_db.SHIPMENT_ORDER o
 JOIN shipping_pricing_db.RATECARD rc ON o.rate_card_id = rc.id
 JOIN shipping_network_db.ZONE z_origin ON rc.origin_zone_id = z_origin.id
 JOIN shipping_network_db.ZONE z_dest ON rc.dest_zone_id = z_dest.id

@@ -81,7 +81,7 @@ Each entity is write-owned by exactly one service. Cross-service references are 
 
 | Service | Responsibility | Owns (write) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Order** | Order intake, pricing orchestration, payment flow, order lifecycle | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` | Receives order requests, calls Pricing synchronously, owns the parcel state machine, prepaid checkout sessions, Stripe webhook integration, and the `ORDER.status` write-back projection. |
+| **Order** | Order intake, pricing orchestration, payment flow, order lifecycle | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `PAYMENT_TRANSACTION` | Receives order requests, calls Pricing synchronously, owns the parcel state machine, prepaid checkout sessions, Stripe webhook integration, and the `ORDER.status` write-back projection. |
 | **Pricing** | Rate-card lookup, price calculation | `RATECARD` | Returns a fixed price for route × parcel type; price locked at order creation. |
 | **Tracking** | Append-only scan-event store, tracking timeline | `TRACKING_EVENT` | Consumes all scan events, stores them immutably, derives projections. Listens to `parcel.delivered`; does NOT own `PROOF_OF_DELIVERY`. |
 | **Courier** | First/last-mile pickup & delivery, POD | `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT` | Manages pickup/delivery legs, write-owns proof-of-delivery, and delivery attempt counts. Never writes `TRACKING_EVENT` directly (Tracking is sole writer) — on each REST call it writes only its own tables, then synchronously publishes the corresponding NATS event in the same request; Tracking consumes it and appends the `TRACKING_EVENT` row. No cross-service call, no outbox. |
@@ -91,12 +91,12 @@ Each entity is write-owned by exactly one service. Cross-service references are 
 | **Notification** | Best-effort customer email notifications | *(none — stateless)* | Subscribes to existing lifecycle events (`order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected`); sends email via a provider SDK. Owns no data, no outbox, no retries — a send failure is logged and dropped, never blocks or retries the triggering transaction (BR-09). |
 
 > [!NOTE]
-> Ownership rule highlights: `ZONE` and `ROUTE` belong to Hub/Sortation (network topology). `PROOF_OF_DELIVERY` is write-owned by Courier; `PAYMENT` and `STRIPE_TRANSACTION` are write-owned by Order. Tracking only consumes events and records them in its append-only store.
+> Ownership rule highlights: `ZONE` and `ROUTE` belong to Hub/Sortation (network topology). `PROOF_OF_DELIVERY` is write-owned by Courier; `PAYMENT` and `PAYMENT_TRANSACTION` are write-owned by Order. Tracking only consumes events and records them in its append-only store.
 
 > [!WARNING]
 > **Accepted MVP risk — no outbox outside Order Creation**: Courier and Hub/Sortation publish their NATS events synchronously in the same request as their own DB write, with no outbox (see "Idempotency and outbox mechanics" below — it covers Order Creation only). If the NATS publish fails after the DB commit, that scan event is permanently missing from `TRACKING_EVENT`, silently breaking the "100% append-only audit log" target. Accepted for this 16-day slice; production hardening would extend the outbox pattern to these two services.
 >
-> The same gap exists on Order Service's `POST /orders/{id}/checkout` webhook handler: it updates `ORDER.status` and writes `STRIPE_TRANSACTION` directly, then publishes `payment.succeeded` with no outbox. The blast radius is smaller — `ORDER.status` itself is already correct even if the publish is lost, so there's no audit-log gap like the scan-event case — but downstream consumers (Tracking, Notification) would silently miss the transition. Also accepted for this slice, for the same reason: extending the outbox pattern to a third service isn't worth the added complexity at this scope.
+> The same gap exists on Order Service's `POST /orders/{id}/checkout` webhook handler: it updates `ORDER.status` and writes `PAYMENT_TRANSACTION` directly, then publishes `payment.succeeded` with no outbox. The blast radius is smaller — `ORDER.status` itself is already correct even if the publish is lost, so there's no audit-log gap like the scan-event case — but downstream consumers (Tracking, Notification) would silently miss the transition. Also accepted for this slice, for the same reason: extending the outbox pattern to a third service isn't worth the added complexity at this scope.
 
 ---
 
@@ -214,7 +214,7 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 
 ### Prepaid Payment Verification via Stripe (BR-08)
 1. **Stripe Session**: The Order service generates a Stripe checkout session via `POST /orders/{id}/checkout`, writing a pending `PAYMENT` row linked to the `ORDER`.
-2. **Webhook Intake**: Once the customer completes payment, Stripe asynchronously posts to `/payments/webhook`. The Order webhook validator writes a `STRIPE_TRANSACTION` log and publishes the `payment.succeeded` event on NATS.
+2. **Webhook Intake**: Once the customer completes payment, Stripe asynchronously posts to `/payments/webhook`. The Order webhook validator writes a `PAYMENT_TRANSACTION` log and publishes the `payment.succeeded` event on NATS.
 3. **Dispatch Guard**: In accordance with BR-08, the Courier service blocks first-mile pickup assignment (`POST /legs/{id}/assign`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer). Any hub inbound scan device (`POST /hubs/{id}/receive`) will similarly reject a parcel if its parent order is prepaid and unpaid, routing it to a holding area.
 
 ### Notification Delivery (BR-09)
@@ -231,7 +231,7 @@ One physical PostgreSQL engine, split into 5 isolated schemas along bounded-cont
 
 | Schema | Owning service(s) | Tables |
 | :--- | :--- | :--- |
-| `shipping_order_db` | Order | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` |
+| `shipping_order_db` | Order | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `PAYMENT_TRANSACTION` |
 | `shipping_pricing_db` | Pricing | `RATECARD` |
 | `shipping_tracking_db` | Tracking | `TRACKING_EVENT` |
 | `shipping_courier_db` | Courier | `COURIER`, `PROOF_OF_DELIVERY` |

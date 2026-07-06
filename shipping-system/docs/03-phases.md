@@ -68,7 +68,7 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 - Tracking Service: append-only event store + consumers
 - Status projection (read model, <300ms) + Transactional Outbox
 - Per-aggregate serialization: NATS JetStream per-order subject + event-batching
-- Payment: Stripe Checkout session + webhook handler + `STRIPE_TRANSACTION` log + prepaid dispatch guard (BR-08)
+- Payment: Stripe Checkout session + webhook handler + `PAYMENT_TRANSACTION` log + prepaid dispatch guard (BR-08)
 
 ### Phase 6 — Operational Services (2.5d)
 - Courier Service: pickup/delivery legs + scan events

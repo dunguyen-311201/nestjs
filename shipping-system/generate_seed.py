@@ -280,7 +280,7 @@ with open("seed.sql", "w") as f:
     f.write("-- Database Seed Data\n")
     f.write("BEGIN;\n\n")
     
-    f.write("TRUNCATE shipping_tracking_db.TRACKING_EVENT, shipping_courier_db.PROOF_OF_DELIVERY, shipping_courier_db.DELIVERY_ATTEMPT, shipping_courier_db.COURIER, shipping_order_db.STRIPE_TRANSACTION, shipping_order_db.PAYMENT, shipping_order_db.PARCEL, shipping_order_db.ORDER, shipping_order_db.CUSTOMER, shipping_pricing_db.RATECARD, shipping_network_db.LINEHAULTRIP, shipping_network_db.TRUCK, shipping_network_db.DRIVER, shipping_network_db.ROUTE, shipping_network_db.HUB, shipping_network_db.ZONE CASCADE;\n\n")
+    f.write("TRUNCATE shipping_tracking_db.TRACKING_EVENT, shipping_courier_db.PROOF_OF_DELIVERY, shipping_courier_db.DELIVERY_ATTEMPT, shipping_courier_db.COURIER, shipping_order_db.STRIPE_TRANSACTION, shipping_order_db.PAYMENT, shipping_order_db.PARCEL, shipping_order_db.SHIPMENT_ORDER, shipping_order_db.CUSTOMER, shipping_pricing_db.RATECARD, shipping_network_db.LINEHAULTRIP, shipping_network_db.TRUCK, shipping_network_db.DRIVER, shipping_network_db.ROUTE, shipping_network_db.HUB, shipping_network_db.ZONE CASCADE;\n\n")
     
     # 1. Insert Zones
     f.write("-- Zones\n")
@@ -335,7 +335,7 @@ with open("seed.sql", "w") as f:
     # 9. Insert Orders (Chủ động chia nhỏ để tránh lệnh INSERT quá dài)
     f.write("-- Orders\n")
     for row in orders:
-        f.write(f"INSERT INTO shipping_order_db.ORDER (id, sender_id, recipient_id, rate_card_id, price_cents, expected_delivery_at, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', {row[4]}, '{row[5].isoformat()}', '{row[6]}');\n")
+        f.write(f"INSERT INTO shipping_order_db.SHIPMENT_ORDER (id, sender_id, recipient_id, rate_card_id, price_cents, expected_delivery_at, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', {row[4]}, '{row[5].isoformat()}', '{row[6]}');\n")
     f.write("\n")
     
     # 10. Insert Parcels
@@ -343,13 +343,13 @@ with open("seed.sql", "w") as f:
     for row in parcels:
         actual_weight_str = str(row[4]) if row[4] is not None else "NULL"
         sla_str = f"'{row[8].isoformat()}'" if row[8] is not None else "NULL"
-        f.write(f"INSERT INTO shipping_order_db.PARCEL (id, order_id, route_id, declared_weight_grams, actual_weight_grams, type, direction, state, sla_expected_delivery) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {row[3]}, {actual_weight_str}, '{row[5]}', '{row[6]}', '{row[7]}', {sla_str});\n")
+        f.write(f"INSERT INTO shipping_order_db.PARCEL (id, shipment_order_id, route_id, declared_weight_grams, actual_weight_grams, type, direction, state, sla_expected_delivery) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {row[3]}, {actual_weight_str}, '{row[5]}', '{row[6]}', '{row[7]}', {sla_str});\n")
     f.write("\n")
     
     # 11. Insert Payments
     f.write("-- Payments\n")
     for row in payments:
-        f.write(f"INSERT INTO shipping_order_db.PAYMENT (id, order_id, type, amount_cents, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {row[3]}, '{row[4]}');\n")
+        f.write(f"INSERT INTO shipping_order_db.PAYMENT (id, shipment_order_id, type, amount_cents, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {row[3]}, '{row[4]}');\n")
     f.write("\n")
     
     # 12. Insert Stripe Transactions

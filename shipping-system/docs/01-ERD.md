@@ -1,6 +1,6 @@
 # Entity-Relationship Diagram (ERD)
 
-This document describes the PostgreSQL data model, aligned with the simplified NestJS microservice architecture, including payments, Stripe transaction tracking, and delivery attempts.
+This document describes the PostgreSQL data model, aligned with the simplified NestJS microservice architecture, including payments, payment transaction tracking, and delivery attempts.
 
 ---
 
@@ -8,10 +8,10 @@ This document describes the PostgreSQL data model, aligned with the simplified N
 
 ```mermaid
 erDiagram
-    CUSTOMER ||--o{ ORDER : "sends/receives"
-    ORDER ||--|{ PARCEL : "contains"
-    ORDER ||--|| PAYMENT : "has"
-    PAYMENT ||--o| STRIPE_TRANSACTION : "processed_by"
+    CUSTOMER ||--o{ SHIPMENT_ORDER : "sends/receives"
+    SHIPMENT_ORDER ||--|{ PARCEL : "contains"
+    SHIPMENT_ORDER ||--|| PAYMENT : "has"
+    PAYMENT ||--o| PAYMENT_TRANSACTION : "processed_by"
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
     PARCEL ||--o{ TRACKING_EVENT : "tracks"
     ROUTE ||--o{ PARCEL : "directs"
@@ -42,7 +42,7 @@ erDiagram
 | `address_enc` | string | Full street address, field-level encrypted (PII). |
 | `region_code` | string | Plaintext postal/region code kept in plaintext for sorting/routing without decrypting PII. |
 
-### ORDER
+### SHIPMENT_ORDER
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the shipment order. |
@@ -57,7 +57,7 @@ erDiagram
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of an individual parcel (a pallet is a large parcel). |
-| `order_id` | uuid FK | The order this parcel belongs to. |
+| `shipment_order_id` | uuid FK | The order this parcel belongs to. |
 | `route_id` | uuid FK, nullable | The corridor/route this parcel travels; set once routing is known. |
 | `declared_weight_grams` | int | Weight declared by the sender at order creation. |
 | `actual_weight_grams` | int, nullable | Weight measured at hub inbound; null until scanned. |
@@ -72,26 +72,28 @@ erDiagram
 | `id` | uuid PK | Unique identifier of the attempt. |
 | `parcel_id` | uuid FK | References the PARCEL being delivered. |
 | `attempt_number` | int | Delivery attempt number (1, 2, or 3). Max of 3 failed attempts triggers automatic RTS (BR-04). |
-| `failure_reason` | string | Reason for delivery failure (e.g. customer absent, rejected). |
+| `outcome` | enum | `Failed` or `Succeeded`. |
+| `failure_reason` | string, nullable | Reason for delivery failure (e.g. customer absent, rejected); null when `outcome = Succeeded`. |
 | `created_at` | timestamp | Timestamp when the attempt was made. |
 
 ### PAYMENT
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the payment record. |
-| `order_id` | uuid FK | References the ORDER this payment is for. |
+| `shipment_order_id` | uuid FK | References the SHIPMENT_ORDER this payment is for. |
 | `type` | enum | `PREPAID_STRIPE`, `POSTPAID`. |
 | `amount_cents` | int | Value of the payment in cents. |
 | `status` | enum | `Unpaid`, `Paid`, `Awaiting_Settlement`. |
 
-### STRIPE_TRANSACTION
+### PAYMENT_TRANSACTION
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the transaction. |
 | `payment_id` | uuid FK | References the PAYMENT. |
-| `stripe_intent_id` | string | Stripe PaymentIntent ID. |
-| `stripe_charge_id` | string | Stripe Charge ID. |
-| `status` | string | Stripe charge status (`succeeded`, `failed`, `pending`). |
+| `provider` | string | Payment provider (e.g. `STRIPE`, `PAYPAL`). |
+| `external_transaction_id` | string | Provider's transaction/intent ID (e.g. Stripe PaymentIntent ID). |
+| `external_reference_id` | string, nullable | Provider's secondary reference (e.g. Stripe Charge ID). |
+| `status` | string | Provider transaction status (`succeeded`, `failed`, `pending`). |
 | `created_at` | timestamp | Timestamp of the transaction. |
 
 ### LINEHAULTRIP
@@ -131,6 +133,8 @@ erDiagram
 | `dest_zone_id` | uuid FK | Destination zone the rate applies to. |
 | `parcel_type` | enum | Parcel type (`parcel` or `pallet`). |
 | `price_cents` | int | Fixed price in cents for this route × type. |
+| `effective_from` | timestamp | Start of this rate card version's validity window. |
+| `effective_to` | timestamp, nullable | End of this rate card version's validity window; null while still current. |
 
 ### COURIER
 | Field | Type | Description |
@@ -177,10 +181,10 @@ erDiagram
 
 | From | To | Cardinality | Meaning |
 | :--- | :--- | :--- | :--- |
-| CUSTOMER | ORDER | 1 : N | A customer sends/receives many orders |
-| ORDER | PARCEL | 1 : N | An order contains one or more parcels |
-| ORDER | PAYMENT | 1 : 1 | An order has one payment record |
-| PAYMENT | STRIPE_TRANSACTION | 1 : 0..1 | Processed by Stripe transaction |
+| CUSTOMER | SHIPMENT_ORDER | 1 : N | A customer sends/receives many orders |
+| SHIPMENT_ORDER | PARCEL | 1 : N | An order contains one or more parcels |
+| SHIPMENT_ORDER | PAYMENT | 1 : 1 | An order has one payment record |
+| PAYMENT | PAYMENT_TRANSACTION | 1 : 0..1 | Processed by a provider transaction |
 | PARCEL | DELIVERY_ATTEMPT | 1 : N | A parcel has many delivery attempts |
 | PARCEL | TRACKING_EVENT | 1 : N | Each parcel has many scan events (tracking timeline) |
 | ROUTE | PARCEL | 1 : N | A parcel travels along one corridor/route |
