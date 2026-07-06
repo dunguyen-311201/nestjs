@@ -6,15 +6,15 @@ Backend vertical slice, NestJS microservices, NATS JetStream event backbone.
 
 ## SCOPE — Scoped Slice (read this first)
 
-This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08), COD Settlement (BR-09), and Notification (BR-10) were added later and absorbed into the same 16.0d by trimming HLD/ADR write-up and Integration/Testing polish — see `docs/03-phases.md` for the exact trade-offs. Do NOT reintroduce cut features.
+This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08) and Notification (BR-09) were added later and absorbed into the same 16.0d by trimming HLD/ADR write-up and Integration/Testing polish — see `docs/03-phases.md` for the exact trade-offs. COD Settlement was completely removed. Do NOT reintroduce cut features.
 
-**In scope:** Order → Parcel → parcel-level tracking (append-only ScanEvent) → payment (price locked at creation) → hub + line-haul transport → delivery / RTS / terminal states → PII encryption.
+**In scope:** Order → Parcel → parcel-level tracking (append-only TrackingEvent) → payment (price locked at creation) → hub + line-haul transport → delivery / RTS / terminal states → PII encryption.
 
 **CUT (physical-only, NOT modeled in the database):**
 - **Bags and Manifests** — these are physical actions by hub staff (parcels put in sacks, loaded on trucks). The system does NOT model them as entities/tables.
 - Consolidation / deconsolidation logic
 - Manifest shortage/overage reconciliation
-- Polymorphic ScanEvent (ScanEvent references parcel_id only)
+- Polymorphic TrackingEvent (TrackingEvent references parcel_id only)
 - Multi-level scanning
 
 **Consequence to remember:** a lost parcel is detected passively (never scanned at the next hub), not by an active manifest count.
@@ -24,10 +24,10 @@ This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08), 
 - **Concurrency:** per-aggregate serialization via NATS JetStream per-order subject `orders.status.<order_id>`. JetStream in-subject ordering serializes writes to one order; different orders run in parallel. NO BullMQ.
 - **Redis:** read cache only (hot projections for < 300ms P99). NOT a broker or job queue.
 - **Cross-service references:** plain IDs, NOT foreign keys. FKs never span service databases. Within the shared-DB slice, FKs may exist only within one service's schema.
-- **Event store:** ScanEvent is append-only and the source of truth. Parcel state and location are COMPUTED from the event sequence, never stored as editable columns.
+- **Event store:** TrackingEvent is append-only and the source of truth. Parcel state and location are COMPUTED from the event sequence, never stored as editable columns.
 - **ORDER.status:** materialized write-back projection = least-advanced status of the order's parcels (BR-05). Written async via the JetStream per-order subject.
 - **Outbox pattern:** used for Order Creation (Order Service) only. (Manifest sealing was cut with manifests.)
-- **Notifications:** a stateless Notification consumer (owns no table, no outbox) subscribes to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` and sends best-effort email. A send failure is logged and dropped — it must never block, retry, or roll back the triggering transaction (BR-10).
+- **Notifications:** a stateless Notification consumer (owns no table, no outbox) subscribes to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` and sends best-effort email. A send failure is logged and dropped — it must never block, retry, or roll back the triggering transaction (BR-09).
 - **Idempotency (two layers):** (1) outbox worker sets NATS header `Nats-Msg-Id = event_id` → JetStream dedup window drops duplicates at the broker; (2) consumers also de-dup on event_id.
 - **TDD Enforcement:** All microservices and business guards must be implemented using a strict Test-Driven Development (TDD) cycle (Red-Green-Refactor). Write tests first to cover the use case/rule requirements, verify they fail, then implement the minimal code required to pass, and refactor.
 
@@ -56,7 +56,7 @@ VS Code installed via snap creates a sandboxed terminal with a different `$HOME`
 
 ## Docs
 
-- `docs/01-ERD.md` — 13 entities, relationships, design notes (scoped slice)
+- `docs/01-ERD.md` — 16 entities, relationships, design notes (scoped slice)
 - `docs/02-HLD.md` — services, NATS subject map, REST endpoints
 - `docs/03-phases.md` — estimation: timeline, actor coverage, roadmap, 16-day phase plan
 - `docs/04-business-rules.md` — the single authoritative Rule Catalogue (BR-01–BR-10); other docs link here instead of duplicating it
