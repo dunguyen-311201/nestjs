@@ -24,26 +24,23 @@ To eliminate structural ambiguity between physical entities, the system enforces
 
 ## End-to-End User Experience Flow
 
-The system abstracts all physical routing and consolidation complexities from the user. This is the same flow as the "Parcel Lifecycle" in [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md), presented here as a diagram with the exception branches (Misrouted, RTS, COD discrepancy) shown alongside the happy path rather than listed separately.
+The system abstracts all physical routing and consolidation complexities from the user. This is the same flow as the "Parcel Lifecycle" in [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md), presented here as a diagram with the exception branches (Misrouted, RTS) shown alongside the happy path rather than listed separately.
 
 1. **Order Creation**: Sender creates the order; price and ETA are locked (BR-01).
-2. **Payment Gate**: If prepaid, checkout via Stripe and wait for `payment.succeeded` before the order is `Confirmed` (BR-08); COD orders skip straight to `Confirmed`. No pickup or hub inbound is accepted before this gate clears.
+2. **Payment Gate**: Stripe checkout is completed, and we wait for `payment.succeeded` before the order is `Confirmed` (BR-08). No pickup or hub inbound is accepted before this gate clears.
 3. **First-Mile & Origin Hub**: Courier picks up the parcel; origin hub receives and re-weighs it, reconciling any weight discrepancy downstream rather than holding the parcel (BR-06).
 4. **Line-Haul & Routing Guard**: The parcel travels hub-to-hub. A wrong-hub scan is caught immediately, flips the parcel to `Misrouted`, and triggers a corrective re-route instead of silently continuing (BR-02).
-5. **Last-Mile Delivery**: Courier attempts delivery. Success captures a Proof of Delivery (and COD cash, if applicable). Failure retries up to 3 times, after which the parcel automatically enters Return-to-Sender, keeping its tracking ID (BR-04).
-6. **Completion & Notification**: Once every parcel in the order reaches a terminal state, `ORDER.status` becomes `Complete` (BR-05) and a best-effort email notification fires (BR-10).
-7. **COD Settlement** *(COD orders only)*: The courier deposits collected cash at end of shift; the system reconciles it against the shift total and flags any mismatch as `Discrepancy` instead of auto-settling (BR-09).
+5. **Last-Mile Delivery**: Courier attempts delivery. Success captures a Proof of Delivery. Failure retries up to 3 times, after which the parcel automatically enters Return-to-Sender, keeping its tracking ID (BR-04).
+6. **Completion & Notification**: Once every parcel in the order reaches a terminal state, `ORDER.status` becomes `Complete` (BR-05) and a best-effort email notification fires (BR-09).
 
 ### Visual Diagram (Mermaid)
 
 ```mermaid
 flowchart TD
     A["Sender creates order"] --> B["Price + ETA locked (BR-01)"]
-    B --> C{"Payment method?"}
-    C -->|Prepaid| D["Stripe Checkout"]
+    B --> D["Stripe Checkout"]
     D --> E["payment.succeeded (BR-08)"]
-    C -->|COD| F["Order Confirmed"]
-    E --> F
+    E --> F["Order Confirmed"]
     F --> G["Courier first-mile pickup"]
     G --> H["Origin hub receive + re-weigh (BR-06)"]
     H --> I["Line-haul: depart origin hub"]
@@ -56,13 +53,9 @@ flowchart TD
     N -->|No, attempt less than 3| M
     N -->|No, 3rd fail| P["RTS: direction=Reverse (BR-04)"]
     P --> G
-    N -->|Yes| O["POD captured + COD cash collected"]
+    N -->|Yes| O["POD captured"]
     O --> Q["Order Complete (BR-05)"]
-    Q --> R["Notification sent (BR-10)"]
-    O -->|if COD| S["Courier deposits cash end-of-shift"]
-    S --> T{"Matches shift total?"}
-    T -->|Yes| U["Settled (BR-09)"]
-    T -->|No| V["Discrepancy: manual review (BR-09)"]
+    Q --> R["Notification sent (BR-09)"]
 ```
 
 
@@ -70,7 +63,7 @@ flowchart TD
 
 Rules are grouped by operational area (Order & Parcel, Tracking & Scan Events, Delivery & Exceptions) with an enforcement point each — a database constraint, service-layer logic, or a state-machine guard.
 
-> See [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md) for the full, authoritative BR-01–BR-10 catalogue and the parcel lifecycle / exception branches derived from it — kept in one place to avoid drift with the summary above.
+> See [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md) for the full, authoritative BR-01–BR-09 catalogue and the parcel lifecycle / exception branches derived from it — kept in one place to avoid drift with the summary above.
 
 ## Functional Requirements
 
@@ -78,9 +71,9 @@ Rules are grouped by operational area (Order & Parcel, Tracking & Scan Events, D
 - Stripe Online Checkout: Process prepaid orders using Stripe Checkout sessions and handle webhook callbacks (BR-08).
 - First/Last-Mile Dispatch: Route pickup and delivery tasks to local couriers.
 - Real-Time Tracking Ledger: Emit and persist timestamped events at every network node scan.
-- Mailer Notifications: Best-effort email dispatch via a stateless NATS consumer (no dedicated data store, no retry) on key lifecycle events (BR-10).
+- Mailer Notifications: Best-effort email dispatch via a stateless NATS consumer (no dedicated data store, no retry) on key lifecycle events (BR-09).
 - Exception Workflows: Handle delivery retry limits, RTS loops, and misrouted parcel re-routing.
-- COD Settlement: Capture signatures and reconcile cash collected by couriers at end-of-shift (BR-09).
+
 
 ## Non-Functional Requirements
 

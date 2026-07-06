@@ -24,8 +24,8 @@ Each file below is self-contained: Versioning, Key Design Decisions, Use Cases, 
 | :--- | :--- | :--- |
 | Order | [order-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/order-service.md) | `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION` |
 | Pricing | [pricing-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/pricing-service.md) | `RATECARD` |
-| Tracking | [tracking-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/tracking-service.md) | `SCANEVENT` |
-| Courier | [courier-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/courier-service.md) | `COURIER`, `DELIVERYPROOF`, `COD_SETTLEMENT`, `DELIVERY_ATTEMPT` |
+| Tracking | [tracking-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/tracking-service.md) | `TRACKING_EVENT` |
+| Courier | [courier-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/courier-service.md) | `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT` |
 | Hub / Sortation | [hub-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/hub-service.md) | `ZONE`, `ROUTE`, `HUB` |
 | Line-haul | [linehaul-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md) | `LINEHAULTRIP` |
 | Dispatcher | [dispatcher-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/dispatcher-service.md) | `DRIVER`, `TRUCK` (assignment) |

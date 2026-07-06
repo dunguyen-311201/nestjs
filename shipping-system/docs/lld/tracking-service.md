@@ -6,13 +6,13 @@
 | :--- | :--- | :--- | :--- |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
-Owns: `SCANEVENT`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply. Tracking is the **sole writer** of `SCANEVENT` — every other service publishes a NATS event and Tracking appends the row; no other service ever writes this table directly. Its only REST endpoint is a read, so `Idempotency-Key` doesn't apply.
+Owns: `TRACKING_EVENT`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply. Tracking is the **sole writer** of `TRACKING_EVENT` — every other service publishes a NATS event and Tracking appends the row; no other service ever writes this table directly. Its only REST endpoint is a read, so `Idempotency-Key` doesn't apply.
 
 ## Key Design Decisions
 
 - **Sole writer, append-only**: enforced at the DB role level (no `UPDATE`/`DELETE` grant), not just by convention — see BR-03.
 - **Cache boundary**: `ORDER.status` is served from Redis (write-through by Order's projection consumer); the per-parcel scan timeline always reads Postgres directly — deliberately not cached, since it's high-cardinality and low-reuse per request.
-- **Passive detection lives here, not in Order**: the lost-parcel SLA sweep runs inside Tracking because it already owns `SCANEVENT` and needs no cross-service query to find candidates.
+- **Passive detection lives here, not in Order**: the lost-parcel SLA sweep runs inside Tracking because it already owns `TRACKING_EVENT` and needs no cross-service query to find candidates.
 
 ## Use Cases
 
@@ -60,7 +60,7 @@ Reads are served from the `ORDER.status` Redis cache (write-through, populated b
 
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
-| `SCANEVENT` | `idx_scanevent_parcel_id_created_at` (composite, `created_at DESC` — powers the tracking timeline query) · `idx_scanevent_linehaul_trip_id` (powers batch misrouted re-route lookups, see [docs/02-HLD.md § Misrouted handling](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)) | PK `id` · append-only: the DB role used by this service has no `UPDATE`/`DELETE` grant on this table (BR-03) |
+| `TRACKING_EVENT` | `idx_trackingevent_parcel_id_created_at` (composite, `created_at DESC` — powers the tracking timeline query) · `idx_trackingevent_linehaul_trip_id` (powers batch misrouted re-route lookups, see [docs/02-HLD.md § Misrouted handling](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)) | PK `id` · append-only: the DB role used by this service has no `UPDATE`/`DELETE` grant on this table (BR-03) |
 
 ## Background Job
 

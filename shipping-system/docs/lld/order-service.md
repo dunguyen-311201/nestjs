@@ -10,7 +10,7 @@ Owns: `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION`. Convention
 
 ## Key Design Decisions
 
-- **Payment gate (BR-08)**: `ORDER.status` only reaches `Confirmed` after `payment.succeeded` (prepaid) or immediately on creation (COD). Courier and Hub Service both re-check this gate independently before accepting pickup/inbound.
+- **Payment gate (BR-08)**: `ORDER.status` only reaches `Confirmed` after `payment.succeeded` (Stripe online checkout). Courier and Hub Service both re-check this gate independently before accepting pickup/inbound.
 - **Price/ETA immutability**: locked at creation (BR-01); there is no `PATCH /orders/{id}` — any post-creation adjustment (e.g. weight discrepancy) is a downstream reconciliation, not an edit to this record.
 - **Outbox on create only**: `POST /orders` is the only endpoint in this service backed by the transactional outbox (see [docs/02-HLD.md § Idempotency and outbox mechanics](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). The webhook handler updates `ORDER.status` directly before publishing `payment.succeeded` — this is a documented accepted risk (see [docs/02-HLD.md § Accepted MVP risk](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)): lower blast radius than the Courier/Hub case (no missing audit entry, since `ORDER.status` itself is already correct on a lost publish), but downstream consumers (Tracking, Notification) would miss the transition.
 
@@ -25,13 +25,12 @@ Owns: `CUSTOMER`, `ORDER`, `PARCEL`, `PAYMENT`, `STRIPE_TRANSACTION`. Convention
 ### UC-02 + UC-03 — Create Order & Complete Prepaid Payment
 
 - **Preconditions**: Sender has valid addresses for both sender and recipient; at least one parcel with weight/dimensions.
-- **Postconditions (success)**: `ORDER` + `PARCEL` rows exist; price locked; if prepaid, `ORDER.status = Confirmed` only after `payment.succeeded`.
+- **Postconditions (success)**: `ORDER` + `PARCEL` rows exist; price locked; `ORDER.status = Confirmed` only after `payment.succeeded`.
 - **Main flow**:
   1. Sender calls `GET /orders/{id}/quote` (optional) to preview price.
   2. Sender calls `POST /orders` → this service calls Pricing synchronously → price + ETA locked → `order.created` published (outbox-backed).
-  3. If prepaid: Sender calls `POST /orders/{id}/checkout` → Stripe Checkout session returned.
+  3. Sender calls `POST /orders/{id}/checkout` → Stripe Checkout session returned.
   4. Stripe posts to `POST /payments/webhook` on completion → `payment.succeeded` published → `ORDER.status = Confirmed`.
-- **Alternate flow (COD)**: skip steps 3–4; order is `Confirmed` immediately after creation.
 - **Exception flow**: payment abandoned/failed → `ORDER.status` stays below `Confirmed` indefinitely; BR-08 blocks all downstream dispatch/inbound actions. No automatic cancellation is defined for this slice (see Known Open Item below).
 
 ## Sequence Diagrams
@@ -115,7 +114,7 @@ sequenceDiagram
 | `sender` | object `{ name, phone, address, region_code }` | all required, non-empty strings |
 | `recipient` | object `{ name, phone, address, region_code }` | all required, non-empty strings |
 | `parcels[]` | array of `{ declared_weight_grams, type }` | min 1 item; `declared_weight_grams` int > 0; `type` ∈ `parcel, pallet` |
-| `payment_type` | enum | `PREPAID_STRIPE`, `COD`, `POSTPAID` |
+| `payment_type` | enum | `PREPAID_STRIPE` |
 
 **Response `201`**: `{ order_id, price_cents, expected_delivery_at, status }`
 **Errors**: `400` missing/invalid fields · `404` unresolvable route (no `RATECARD` for the zone pair, via sync call to Pricing) · any later `PATCH /orders/{id}` is `405 Method Not Allowed` by design — price is locked (BR-01), not editable.
@@ -128,7 +127,7 @@ Query: `origin_zone_id`, `dest_zone_id`, `parcel_type`. **Response `200`**: `{ p
 
 ### `POST /orders/{id}/checkout`
 
-No body. **Response `200`**: `{ checkout_url, stripe_session_id }`. **Errors**: `404` order not found · `409` order already `Confirmed` or is a COD order (checkout not applicable) · `422 BR-08` order already has a `PAYMENT` row in a non-`Unpaid` state.
+No body. **Response `200`**: `{ checkout_url, stripe_session_id }`. **Errors**: `404` order not found · `409` order already `Confirmed` · `422 BR-08` order already has a `PAYMENT` row in a non-`Unpaid` state.
 
 ### `POST /payments/webhook`
 

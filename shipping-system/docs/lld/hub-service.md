@@ -37,7 +37,7 @@ sequenceDiagram
     Hub--)NATS: publish parcel.hub_received
     NATS--)Tracking: append HUB_RECEIVE scan event
     NATS--)Order: PARCEL.actual_weight_grams updated, compare to declared (BR-06)
-    Order->>Order: if COD adjust cod amount downstream, if prepaid defer invoice
+    Order->>Order: defer invoice/adjustment for prepaid weight discrepancy
 ```
 
 *(First-mile pickup, the step before this one, is owned by [courier-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/courier-service.md).)*

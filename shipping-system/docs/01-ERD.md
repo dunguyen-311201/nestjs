@@ -1,6 +1,6 @@
 # Entity-Relationship Diagram (ERD)
 
-This document describes the PostgreSQL data model, aligned with the simplified NestJS microservice architecture, including payments, Stripe transaction tracking, COD settlements, and delivery attempts.
+This document describes the PostgreSQL data model, aligned with the simplified NestJS microservice architecture, including payments, Stripe transaction tracking, and delivery attempts.
 
 ---
 
@@ -13,8 +13,7 @@ erDiagram
     ORDER ||--|| PAYMENT : "has"
     PAYMENT ||--o| STRIPE_TRANSACTION : "processed_by"
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
-    PARCEL ||--o{ SCANEVENT : "tracks"
-    COURIER ||--o{ COD_SETTLEMENT : "settles"
+    PARCEL ||--o{ TRACKING_EVENT : "tracks"
     ROUTE ||--o{ PARCEL : "directs"
     HUB ||--o{ LINEHAULTRIP : "originates/terminates"
     DRIVER ||--o{ LINEHAULTRIP : "drives"
@@ -23,11 +22,11 @@ erDiagram
     ZONE ||--o{ ROUTE : "defines"
     ZONE ||--o{ RATECARD : "prices"
     ZONE ||--o{ COURIER : "deploys"
-    SCANEVENT ||--o| DELIVERYPROOF : "attaches"
-    PARCEL ||--o{ DELIVERYPROOF : "proves"
-    HUB ||--o{ SCANEVENT : "records"
-    COURIER ||--o{ SCANEVENT : "records"
-    LINEHAULTRIP ||--o{ SCANEVENT : "associates"
+    TRACKING_EVENT ||--o| PROOF_OF_DELIVERY : "attaches"
+    PARCEL ||--o{ PROOF_OF_DELIVERY : "proves"
+    HUB ||--o{ TRACKING_EVENT : "records"
+    COURIER ||--o{ TRACKING_EVENT : "records"
+    LINEHAULTRIP ||--o{ TRACKING_EVENT : "associates"
 ```
 
 ---
@@ -81,7 +80,7 @@ erDiagram
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the payment record. |
 | `order_id` | uuid FK | References the ORDER this payment is for. |
-| `type` | enum | `PREPAID_STRIPE`, `COD`, `POSTPAID`. |
+| `type` | enum | `PREPAID_STRIPE`, `POSTPAID`. |
 | `amount_cents` | int | Value of the payment in cents. |
 | `status` | enum | `Unpaid`, `Paid`, `Awaiting_Settlement`. |
 
@@ -94,15 +93,6 @@ erDiagram
 | `stripe_charge_id` | string | Stripe Charge ID. |
 | `status` | string | Stripe charge status (`succeeded`, `failed`, `pending`). |
 | `created_at` | timestamp | Timestamp of the transaction. |
-
-### COD_SETTLEMENT
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | uuid PK | Unique identifier. |
-| `courier_id` | uuid FK | References the COURIER who collected the cash. |
-| `total_collected_cents` | int | Total cash amount collected and verified. |
-| `status` | enum | `Pending`, `Settled`. |
-| `reconciled_at` | timestamp, nullable | Timestamp of financial settlement reconciliation. |
 
 ### LINEHAULTRIP
 | Field | Type | Description |
@@ -161,10 +151,10 @@ erDiagram
 | `id` | uuid PK | Unique identifier of a line-haul truck asset. |
 | `plate` | string | License plate / registration of the truck. |
 
-### SCANEVENT
+### TRACKING_EVENT
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `id` | uuid PK | Unique identifier of a scan event (append-only). |
+| `id` | uuid PK | Unique identifier of a tracking event (append-only). |
 | `parcel_id` | uuid FK | The parcel that was scanned. |
 | `hub_id` | uuid FK, nullable | Hub where the scan happened; null for courier-side scans. |
 | `courier_id` | uuid FK, nullable | Courier who recorded the scan; null for hub-side scans. |
@@ -172,7 +162,7 @@ erDiagram
 | `event_type` | enum | Scan type (e.g. `PICKUP`, `HUB_RECEIVE`, `DEPARTED_LINEHAUL`, `ARRIVED_AT_HUB`, `OUT_FOR_DELIVERY`, `DELIVERY_FAILED`, `DELIVERED`, `MISROUTED`, `RTS`). |
 | `created_at` | timestamp | Immutable event timestamp (UTC); the store is strictly append-only. |
 
-### DELIVERYPROOF
+### PROOF_OF_DELIVERY
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of a proof-of-delivery record. |
@@ -180,7 +170,6 @@ erDiagram
 | `parcel_id` | uuid FK | The parcel that was delivered. |
 | `signature_url` | string, nullable | Stored recipient signature image URL. |
 | `photo_url` | string, nullable | Stored delivery photo URL. |
-| `cod_collected_cents` | int, nullable | Cash-on-delivery amount collected, if order is COD. |
 
 ---
 
@@ -193,12 +182,11 @@ erDiagram
 | ORDER | PAYMENT | 1 : 1 | An order has one payment record |
 | PAYMENT | STRIPE_TRANSACTION | 1 : 0..1 | Processed by Stripe transaction |
 | PARCEL | DELIVERY_ATTEMPT | 1 : N | A parcel has many delivery attempts |
-| PARCEL | SCANEVENT | 1 : N | Each parcel has many scan events (tracking timeline) |
-| COURIER | COD_SETTLEMENT | 1 : N | A courier has many cash settlements |
+| PARCEL | TRACKING_EVENT | 1 : N | Each parcel has many scan events (tracking timeline) |
 | ROUTE | PARCEL | 1 : N | A parcel travels along one corridor/route |
 | HUB | LINEHAULTRIP | 1 : N | Hub as origin / destination of trips |
 | DRIVER / TRUCK | LINEHAULTRIP | 1 : N | Assigned to trips |
-| HUB / COURIER | SCANEVENT | 1 : N | A scan is recorded at a hub or by a courier |
-| SCANEVENT | DELIVERYPROOF | 1 : 0..1 | A `DELIVERED` scan captures one proof of delivery |
-| PARCEL | DELIVERYPROOF | 1 : N | Proof of delivery is linked to the parcel |
+| HUB / COURIER | TRACKING_EVENT | 1 : N | A scan is recorded at a hub or by a courier |
+| TRACKING_EVENT | PROOF_OF_DELIVERY | 1 : 0..1 | A `DELIVERED` scan captures one proof of delivery |
+| PARCEL | PROOF_OF_DELIVERY | 1 : N | Proof of delivery is linked to the parcel |
 | ZONE | HUB / ROUTE / RATECARD / COURIER | 1 : N | Zone groups hubs, routes, rate cards, and couriers |

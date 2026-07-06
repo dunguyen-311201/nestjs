@@ -10,10 +10,10 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 ## Actor Coverage
 | Actor | Operational Workflow | Covered Component |
 | :--- | :--- | :--- |
-| **Sender** | Create order, get rate quotation, complete payment (Stripe checkout or COD) | Customer Order Form + Checkout |
+| **Sender** | Create order, get rate quotation, complete payment (Stripe checkout) | Customer Order Form + Checkout |
 | **Recipient** | Receive parcel, view end-to-end tracking | Tracking Timeline / Shared Link |
-| **Courier** | Pickup & last-mile, scanning, Proof of Delivery, COD collection | Courier Service + Mobile UI |
-| **Hub Operator** | Inbound scan, network topology (zone/route), COD cash deposit registration | Hub Service + Scan Station UI |
+| **Courier** | Pickup & last-mile, scanning, Proof of Delivery | Courier Service + Mobile UI |
+| **Hub Operator** | Inbound scan, network topology (zone/route) | Hub Service + Scan Station UI |
 | **Dispatcher** | Route planning, vehicle & driver assignment | Dispatcher Service + Trip Board UI |
 | **System** | Event-driven status & automated tracking, best-effort notifications | NATS Events, Projections, Outbox, Notification Consumer |
 
@@ -22,7 +22,7 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 | :--- | :--- |
 | **25–26 Jun** | Analysis + design docs complete (done) |
 | **Week 1** | HLD finalized, ADRs written, project scaffolded (local Docker), core backend event chain working |
-| **Week 2** | Exception states + state machine; operational services (Courier, Hub, Line-haul, Dispatcher); Payment (Stripe) + COD settlement + PII |
+| **Week 2** | Exception states + state machine; operational services (Courier, Hub, Line-haul, Dispatcher); Payment (Stripe) + PII |
 | **Week 3** | Slice wired end to end; full workflow documented; critical-path tests; unit tests, demo (all actors via API), defer-list |
 
 ## Details Estimation
@@ -70,14 +70,13 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 - Per-aggregate serialization: NATS JetStream per-order subject + event-batching
 - Payment: Stripe Checkout session + webhook handler + `STRIPE_TRANSACTION` log + prepaid dispatch guard (BR-08)
 
-### Phase 6 — Operational Services (3.0d)
+### Phase 6 — Operational Services (2.5d)
 - Courier Service: pickup/delivery legs + scan events
 - Hub/Sortation: HUB_RECEIVE, parcel inbound/outbound scan at hub
 - PII field-level encryption (shared crypto helper)
 - Line-haul: trip creation, depart/arrive hooks, deconsolidation
 - Dispatcher Service: driver/truck-to-trip + courier-to-leg assignment
-- Notification consumer: stateless email dispatcher on order/payment/delivery/RTS/lost events (BR-10)
-- COD Settlement: deposit registration endpoint + automatic reconciliation against courier shift total (BR-09)
+- Notification consumer: stateless email dispatcher on order/payment/delivery/RTS/lost events (BR-09)
 
 ### Phase 7 — Integration & E2E (1.0d)
 - Wire the full vertical slice in local docker-compose
