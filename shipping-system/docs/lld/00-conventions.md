@@ -30,3 +30,23 @@ Each file below is self-contained: Versioning, Key Design Decisions, Use Cases, 
 | Line-haul | [linehaul-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md) | `LINEHAULTRIP` |
 | Dispatcher | [dispatcher-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/dispatcher-service.md) | `DRIVER`, `TRUCK` (assignment) |
 | Notification | [notification-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/notification-service.md) | *(none — stateless)* |
+
+---
+
+## Test-Driven Development (TDD) Rules
+
+To guarantee high code quality and strict adherence to the business rule catalogue (BR-01 to BR-10), all implementation work must follow a strict **Test-Driven Development (TDD)** approach:
+
+1.  **Write Tests First (Red)**:
+    *   For any new feature, use case, API endpoint, or state transition guard, you must define and write the test cases (unit or integration tests) *before* writing any implementation code.
+    *   Verify that the test suite fails initially due to the missing implementation.
+2.  **Implement to Pass (Green)**:
+    *   Write only the minimal necessary code required to make the failing test cases pass.
+    *   Avoid writing speculative code or implementing features not covered by the current test suite.
+3.  **Refactor with Confidence**:
+    *   Once the tests are passing, refactor the code (improve naming, clean up structures, optimize query performance) while ensuring the tests remain green.
+4.  **TDD Coverage Focus**:
+    *   **Business Rules Guards**: Every business rule in [docs/04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md) must have explicit tests checking both the happy path (success) and the validation guard failure (returning a `422 Unprocessable Entity` error with the `{ "rule": "BR-XX", "message": "..." }` payload).
+    *   **Rest Idempotency**: Tests must verify that resubmitting a POST request with an identical `Idempotency-Key` header returns the cached response without running the business logic twice.
+    *   **State Machine Boundaries**: Tests must cover all allowed state transitions for a `Parcel` and verify that unauthorized transitions (e.g. moving to `Out_for_Delivery` before a destination hub inbound scan) fail as expected.
+

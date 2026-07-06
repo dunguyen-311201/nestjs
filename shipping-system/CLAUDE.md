@@ -29,6 +29,8 @@ This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08), 
 - **Outbox pattern:** used for Order Creation (Order Service) only. (Manifest sealing was cut with manifests.)
 - **Notifications:** a stateless Notification consumer (owns no table, no outbox) subscribes to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` and sends best-effort email. A send failure is logged and dropped — it must never block, retry, or roll back the triggering transaction (BR-10).
 - **Idempotency (two layers):** (1) outbox worker sets NATS header `Nats-Msg-Id = event_id` → JetStream dedup window drops duplicates at the broker; (2) consumers also de-dup on event_id.
+- **TDD Enforcement:** All microservices and business guards must be implemented using a strict Test-Driven Development (TDD) cycle (Red-Green-Refactor). Write tests first to cover the use case/rule requirements, verify they fail, then implement the minimal code required to pass, and refactor.
+
 
 ## Conventions
 

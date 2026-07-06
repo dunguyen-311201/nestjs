@@ -277,7 +277,12 @@ When a consumer fails due to a system-level error:
 - **Observability**: A correlation/trace id follows a parcel across services and events; health endpoints per service.
 - **Error handling**: Retries with backoff; a dead-letter subject; idempotent consumers; a reconciliation job.
 - **Config**: `@nestjs/config` with schema validation; secrets via environment; no secrets in code.
-- **Deployment (Local)**: docker-compose brings up: NATS JetStream, PostgreSQL, Redis, and the NestJS services. migrations run on startup for the slice.
+- **Deployment & Local DevOps**: The entire system runs locally via Docker and Docker Compose for zero-installation bootstrapping:
+  - **Docker Compose Orchestration**: A single command `docker-compose up` provisions all microservices and database instances in isolated, interconnected containers.
+  - **Environment Parity**: Infrastructure components (PostgreSQL, NATS JetStream, Redis) run on optimized Alpine-based official images to match production footprints while keeping host resource utilization low.
+  - **Local Volumes**: Database and broker streams are persisted via Docker volumes (e.g., `./.docker/nats/data` for JetStream and `./.docker/postgres/data` for PG) to survive container rebuilds.
+  - **Startup Migrations**: Database schemas are automatically generated and migrated on startup, ensuring developers are always running against the correct DB schema without manual steps.
+
 
 ---
 
@@ -302,6 +307,7 @@ This design exhibits several key architectural strengths that align with enterpr
 | **ADR-002** | ORM selection (TypeORM vs Prisma) | To decide in Project Setup |
 | **ADR-003** | Shared-DB-for-slice now; DB-per-service when services split | Accepted |
 | **ADR-004** | Polymorphic ScanEvent (entity_id + entity_type) | Rejected (simplified to direct `parcel_id` FK) |
+| **ADR-005** | Message Broker Selection (NATS JetStream vs. Kafka / RabbitMQ) | Accepted |
 
 ---
 
