@@ -44,6 +44,8 @@ End of day, copy the "Done" bullets straight into your report.
 - Added `scripts/verify-local.sh`: local-only "CI" (no GH Actions, per instruction — this is a practice project) that brings up the docker-compose stack, reseeds (idempotent, seed.sql TRUNCATEs first), and runs `queries.sql` end to end, failing loudly on the first SQL error. Ran it successfully.
 - Added `.claude/agents/consistency-auditor.md`: project-scoped subagent to audit BR/UC/ADR ID drift across docs and ERD/init-db.sql/live-DB/queries.sql drift — modeled directly on the real drift bugs found earlier today (BR-09/BR-10, scan_event_id/tracking_event_id, missing RATECARD versioning columns). Read-only, doesn't edit. Note: new project agents only load on a fresh session — wasn't picked up mid-session, needs a session restart to appear in the agent list.
 
+- Committed `d5643ae` (`chore: add local docker verify script and consistency-auditor agent`): `scripts/verify-local.sh`, `.claude/agents/consistency-auditor.md`, `TASKS.md` — replaces the earlier `77a05d7`, which was undone by a `git reset HEAD~1` before the message got cleaned up.
+
 ### Decisions / open questions
 - `docker-compose.yml` is new/untracked — not yet added to git, pending your call.
 
