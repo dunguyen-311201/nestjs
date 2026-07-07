@@ -47,8 +47,39 @@ This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08) a
 
 ## Open decisions (confirm before relying on)
 
-- **ADR-002 ORM:** TypeORM vs Prisma — NOT yet decided. Ask before scaffolding entities.
 - RateCard versioning (append-only?) — deferred; rely on locked price_cents for now.
+
+## Decided
+
+- **ADR-002 ORM:** TypeORM (Accepted). Use `@nestjs/typeorm` + `@InjectRepository`; each service's `DataSource` is scoped to its own Postgres schema via TypeORM's `schema` option (not a separate `database`) — see ADR-003.
+
+## Git Remotes — dual push, different content per remote
+
+Two remotes, same local branch name (`feat/shipping-system`) means **different content** on each:
+
+| Remote | URL | Content | Local branch that feeds it |
+| :--- | :--- | :--- | :--- |
+| `github` | `dunguyen-agilityio/nodejs-training` | **Full** — code + `docs/` + `.claude/` | `feat/shipping-system` (tracks `github/feat/shipping-system`) |
+| `origin` | GitLab, `du.nguyen/nodejs-training` | **Code only** — no `docs/`, `.claude/`, or `.gemini/` | `supporter-review` (local-only branch, never tracks a remote by the same name) |
+
+Why: GitLab is the supporter-review remote — reviewers there should see code only, not internal docs or AI agent config. GitHub is the personal full mirror/backup.
+
+**Push commands:**
+- Full → GitHub: `git push github feat/shipping-system` (normal push, branch tracks this already).
+- Code-only → GitLab: `git push origin supporter-review:feat/shipping-system --force` (force is required every time — `supporter-review`'s content diverges from GitLab's `feat/shipping-system` by design, this is expected, not a mistake).
+
+**Keeping `supporter-review` in sync** (do this before the force-push above, whenever `feat/shipping-system` has new commits):
+```
+git checkout supporter-review
+git merge feat/shipping-system --no-commit
+git rm -r --quiet shipping-system/docs shipping-system/.claude shipping-system/.gemini 2>/dev/null
+git commit -m "chore: sync + strip docs/.claude/.gemini for GitLab"
+git push origin supporter-review:feat/shipping-system --force
+git checkout feat/shipping-system
+```
+Not automated — do this by hand (or when asked) each time before pushing to GitLab.
+
+**Footgun already fixed once, don't reintroduce it:** local `feat/shipping-system` must track `github`, not `origin` — its upstream was originally `origin` (from before the dual-remote split) and got corrected via `git branch --set-upstream-to=github/feat/shipping-system feat/shipping-system`. If a plain `git push`/`git pull` on this branch ever shows `origin` as the upstream again, re-fix it — pushing full content to GitLab's code-only branch name would silently undo the split.
 
 ## Environment note
 
