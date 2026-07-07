@@ -65,3 +65,11 @@ VS Code installed via snap creates a sandboxed terminal with a different `$HOME`
 - `docs/lld/` — one self-contained file per service: Versioning, Key Design Decisions, Use Cases, Sequence Diagrams, API DTOs/validation/error codes, DB indexes/constraints. `00-conventions.md` first (shared rules), then per-service files. No separate top-level use-case/sequence-diagram doc — each service's are embedded in its own LLD file to avoid a second copy drifting out of sync.
 
 All docs are synchronized to the scoped slice. Any remaining mention of bags/manifests is an explicit "out of scope / not modeled" note, not a feature to build.
+
+## Daily Task Log
+
+`TASKS.md` (project root) tracks what gets done each day so it can be copied straight into an end-of-day report.
+
+- After completing any non-trivial task in a session (a fix, a review, a file created/edited, a decision made), update today's entry in `TASKS.md` **automatically, without being asked** — append a bullet under **Done** (or **Decisions / open questions** / **Next** as appropriate).
+- If there's no section for today yet, add a new `## YYYY-MM-DD` block at the top of the file (newest first), using the template comment already in `TASKS.md`.
+- Keep bullets terse — one line per completed item, referencing files/BR/UC IDs where relevant. This is a log for recall, not a design doc.
