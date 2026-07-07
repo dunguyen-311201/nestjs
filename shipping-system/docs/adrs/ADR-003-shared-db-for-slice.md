@@ -1,21 +1,23 @@
-# ADR-003: Shared PostgreSQL Instance with Isolated Databases
+# ADR-003: Shared PostgreSQL Instance with Schema-per-Service Isolation
 
 ## Status
-Proposed
+Accepted
 
 ## Context
-A strict microservices architecture requires each service to have its own independent database engine to ensure high availability and prevent cross-service database coupling. However, running 5 separate PostgreSQL database container instances on a local machine for development consumes substantial RAM and CPU resources.
+A strict microservices architecture requires each service to have its own independent database to ensure high availability and prevent cross-service database coupling. However, running 5 separate PostgreSQL database instances (or container instances) on a local machine for development consumes substantial RAM and CPU resources. We need a solution that preserves logical database boundaries while optimizing local system resource usage during the MVP phase.
 
 ## Decision
-For local development, we will run a **single PostgreSQL container instance** in Docker, but configure it with **isolated logical databases** (`db_order`, `db_tracking`, etc.):
+We will use a **single PostgreSQL database instance** in Docker, but configure it with **isolated schemas** (`shipping_order_db`, `shipping_tracking_db`, `shipping_courier_db`, `shipping_pricing_db`, `shipping_network_db`) representing each service's bounded context:
 
-1.  We will use an initialization script (`init-db.sql`) to automatically spawn separate logical databases inside the container upon launch.
-2.  Each microservice will connect *only* to its designated logical database, using separate connection strings.
-3.  No cross-database queries or joins will be allowed. If `order-service` needs data from `tracking-service`, it must use NATS events or HTTP API composition.
+1.  **Logical Isolation**: Each microservice is strictly restricted to reading and writing only its designated schema (configured via TypeORM's `schema` property).
+2.  **No Cross-Schema Joins/FKs**: Cross-schema foreign keys and SQL `JOIN` queries are strictly forbidden. Data sharing must occur asynchronously via NATS JetStream events or synchronously via HTTP API calls.
+3.  **Physical DB-per-Service Roadmap**: Because the isolation is enforced at the schema level and contains no hard database-level foreign keys, these schemas can be easily migrated to physically separate database instances when moving to production or when scaling needs arise.
 
 ## Consequences
 *   **Pros**:
-    *   Saves local developer system resources (RAM/CPU) by running only one database process.
-    *   Preserves the logical boundary of microservices—the databases remain physically separable when moving to production.
+    *   Saves local developer system resources (RAM/CPU) by running only one database instance.
+    *   Preserves microservice boundaries—the schemas remain physically separable with zero schema alterations.
+    *   Simplifies local setup, backup, and seeding (via a single `init-db.sql` and `seed.sql` script).
 *   **Cons**:
-    *   If the single database container crashes, all local microservices lose database connectivity simultaneously.
+    *   A database container crash will affect all local microservices simultaneously.
+    *   Requires developer discipline to avoid writing cross-schema queries in code.
