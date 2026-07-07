@@ -17,42 +17,44 @@ who's working on what right now.
 
 ## Monorepo scaffold
 
-- [ ] `nest-cli.json`: `"monorepo": true`, `projects` map for 8 apps (see below) + 3 libs
-- [ ] Root `tsconfig.json`: `@app/contracts`, `@app/dtos`, `@app/crypto` path aliases
-- [ ] Root `package.json`: scripts, Jest config inlined (`testRegex`, `roots: ["<rootDir>/apps/", "<rootDir>/libs/"]`, **`moduleNameMapper`** for the `@app/*` aliases — not just `tsconfig.json` paths)
-- [ ] Install: `@nestjs/typeorm`, `typeorm`, `pg`, `@nestjs/config`, `nats` (raw client). **Not** `@nestjs/microservices` yet — deferred to Phase 5 (JetStream transport approach undecided)
+- [x] `nest-cli.json`: `"monorepo": true`, `projects` map for 8 apps (see below) + 3 libs
+- [x] Root `tsconfig.json`: `@app/contracts`, `@app/dtos`, `@app/crypto` path aliases
+- [x] Root `package.json`: scripts, Jest config inlined (`testRegex`, `roots: ["<rootDir>/apps/", "<rootDir>/libs/"]`, **`moduleNameMapper`** for the `@app/*` aliases — not just `tsconfig.json` paths)
+- [x] Install: `@nestjs/typeorm`, `typeorm`, `pg`, `@nestjs/config`, `nats` (raw client). **Not** `@nestjs/microservices` yet — deferred to Phase 5 (JetStream transport approach undecided)
 
 ## Shared libs (`libs/`)
 
-- [ ] `libs/crypto` — TDD: write `crypto.spec.ts` first (round-trip; distinct ciphertext per call via random IV; tampered ciphertext throws), confirm red, then implement AES-256-GCM `encrypt`/`decrypt` keyed by `process.env.PII_ENCRYPTION_KEY` until green
-- [ ] `libs/contracts` — one `.ts` interface per NATS event from `docs/02-HLD.md` subject map, `V1` suffix
-- [ ] `libs/dtos` — barcode format validator (`PA-XXXX`) + `Idempotency-Key` header decorator/DTO (`docs/lld/00-conventions.md`)
+- [x] `libs/crypto` — TDD: write `crypto.spec.ts` first (round-trip; distinct ciphertext per call via random IV; tampered ciphertext throws), confirm red, then implement AES-256-GCM `encrypt`/`decrypt` keyed by `process.env.PII_ENCRYPTION_KEY` until green
+- [x] `libs/contracts` — one `.ts` interface per NATS event from `docs/02-HLD.md` subject map, `V1` suffix
+- [x] `libs/dtos` — barcode format validator (`PA-XXXX`) + `Idempotency-Key` header decorator/DTO (`docs/lld/00-conventions.md`)
 
 ## Apps (8 — not 9; Pricing is in-process, not a separate app)
 
 Bootstrap model verified per-service against each LLD's actual "API Contracts" section — not assumed uniform.
 
-- [ ] `api-gateway` — :3000, HTTP only, no DB, routes to services via static `*_SERVICE_URL` env vars (no Consul)
-- [ ] `order` — :3001, Hybrid-ready (HTTP now; NATS deferred), schema `shipping_order_db`, embeds Pricing module in-process (own connection to `shipping_pricing_db`) per Pricing's LLD "in-process-boundary" rule
-- [ ] `tracking` — :3003, schema `shipping_tracking_db` — has a real `GET /tracking/{tracking_id}`, keep HTTP
-- [ ] `courier` — :3004, schema `shipping_courier_db`
-- [ ] `hub` — :3005, schema `shipping_network_db`
-- [ ] `linehaul` — :3006, schema `shipping_network_db`
-- [ ] `dispatcher` — :3007, schema `shipping_network_db`
-- [ ] `notification` — no HTTP port, bare `NestFactory.create()` context (no `listen()`, no `createMicroservice()` yet), no DB — confirmed zero REST endpoints in its LLD
+- [x] `api-gateway` — :3000, HTTP only, no DB, routes to services via static `*_SERVICE_URL` env vars (no Consul)
+- [x] `order` — :3001, Hybrid-ready (HTTP now; NATS deferred), schema `shipping_order_db`, embeds Pricing module in-process (own connection to `shipping_pricing_db`) per Pricing's LLD "in-process-boundary" rule
+- [x] `tracking` — :3003, schema `shipping_tracking_db` — has a real `GET /tracking/{tracking_id}`, keep HTTP
+- [x] `courier` — :3004, schema `shipping_courier_db`
+- [x] `hub` — :3005, schema `shipping_network_db`
+- [x] `linehaul` — :3006, schema `shipping_network_db`
+- [x] `dispatcher` — :3007, schema `shipping_network_db`
+- [x] `notification` — no HTTP port, bare `NestFactory.create()` context (no `listen()`, no `createMicroservice()` yet), no DB — confirmed zero REST endpoints in its LLD
 
 For every DB-backed app:
-- [ ] TypeORM `DataSource` uses `schema: 'shipping_x_db'` (not a separate `database`), **`synchronize: false`**
-- [ ] `GET /health` runs a real `SELECT 1` through that `DataSource`
+- [x] TypeORM `DataSource` uses `schema: 'shipping_x_db'` (not a separate `database`), **`synchronize: false`**
+- [x] `GET /health` runs a real `SELECT 1` through that `DataSource`
 
 ## Verification
 
-- [ ] `pnpm install` succeeds
-- [ ] `pnpm build` — 0 TypeScript errors across all 8 apps
-- [ ] `pnpm lint` — 0 errors
-- [ ] `libs/crypto` Jest suite: red before implementation, green after
-- [ ] `docker compose up -d` (or `./scripts/verify-local.sh`), then start each DB-backed app and `curl` `/health` → real `SELECT 1` success against `shipping_postgres`, including the three apps sharing `shipping_network_db` and `order`'s embedded Pricing connection
-- [ ] `notification` bootstrap: raw `nats` client connects/disconnects cleanly against `shipping_nats`
+- [x] `pnpm install` succeeds
+- [x] `pnpm build` — 0 TypeScript errors across all 8 apps (`nest build --all`)
+- [x] `pnpm lint` — 0 errors
+- [x] `libs/crypto` Jest suite: red before implementation, green after (9/9 tests pass across `libs/crypto` + `libs/dtos`)
+- [x] `docker compose up -d` (via `./scripts/verify-local.sh`), then started each DB-backed app and `curl`'d `/health` → real `SELECT 1` success against `shipping_postgres` for all 6 (including `order`'s two connections: `shipping_order_db` + embedded Pricing's `shipping_pricing_db`), plus `api-gateway` (no DB)
+- [x] `notification` bootstrap: raw `nats` client connected/disconnected cleanly against `shipping_nats`, clean exit code 0
+
+**Phase 4 remainder: done.** Next up is Phase 5 (Core Backend) per `docs/03-phases.md`.
 
 ## Explicitly out of scope here (Phase 5)
 
