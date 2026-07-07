@@ -33,6 +33,10 @@ End of day, copy the "Done" bullets straight into your report.
 -
 
 - Added a "Daily Task Log" rule to `CLAUDE.md`: auto-update `TASKS.md` after completing any non-trivial task, without being asked.
+- Committed `cbcfb3c` (`chore: sync local Postgres env and add daily task log`): `docker-compose.yml`, `queries.sql`, `TASKS.md`, `CLAUDE.md`.
+- Reviewed Claude Code project setup; found no shared `.claude/settings.json` and no `.gitignore` entry for `.claude/settings.local.json`.
+- Ran `fewer-permission-prompts` skill: scanned 27 recent transcripts, added `.claude/settings.json` with `Bash(pnpm test *)`, `Bash(pnpm build *)`, `Bash(pnpm lint *)`, `mcp__claude_ai_Google_Drive__read_file_content`.
+- Added `.claude/settings.local.json` to `.gitignore` so it doesn't rely on the machine's global gitignore.
 
 ### Decisions / open questions
 - `docker-compose.yml` is new/untracked — not yet added to git, pending your call.

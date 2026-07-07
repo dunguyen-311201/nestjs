@@ -147,6 +147,9 @@ vite.config.ts.timestamp-*
 token.json
 credentials.json
 
+# Claude Code - personal permission overrides, not shared team config
+.claude/settings.local.json
+
 
 
 # Docs
