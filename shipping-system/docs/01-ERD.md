@@ -170,7 +170,7 @@ erDiagram
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of a proof-of-delivery record. |
-| `scan_event_id` | uuid FK | The `DELIVERED` scan event this proof is attached to. |
+| `tracking_event_id` | uuid FK | The `DELIVERED` scan event this proof is attached to. |
 | `parcel_id` | uuid FK | The parcel that was delivered. |
 | `signature_url` | string, nullable | Stored recipient signature image URL. |
 | `photo_url` | string, nullable | Stored delivery photo URL. |
@@ -192,5 +192,7 @@ erDiagram
 | DRIVER / TRUCK | LINEHAULTRIP | 1 : N | Assigned to trips |
 | HUB / COURIER | TRACKING_EVENT | 1 : N | A scan is recorded at a hub or by a courier |
 | TRACKING_EVENT | PROOF_OF_DELIVERY | 1 : 0..1 | A `DELIVERED` scan captures one proof of delivery |
-| PARCEL | PROOF_OF_DELIVERY | 1 : N | Proof of delivery is linked to the parcel |
+| PARCEL | PROOF_OF_DELIVERY | 1 : 0..1 | Proof of delivery is linked to the parcel |
 | ZONE | HUB / ROUTE / RATECARD / COURIER | 1 : N | Zone groups hubs, routes, rate cards, and couriers |
+
+> **Note (deferred, out of scope):** `1 : 0..1` holds under BR-04 as written — RTS only fires after 3 *failed* delivery attempts, never after a successful `Delivered`. A "recipient receives, then returns the parcel" flow (post-delivery return) is not modeled in this scoped slice: `Delivered`/`Complete` are terminal states today, and reopening them would require new FSM guards and a BR-04 revision. Not scoped into the 16-day slice; revisit if/when this flow is prioritized.

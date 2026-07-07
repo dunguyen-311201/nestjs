@@ -80,7 +80,7 @@ sequenceDiagram
 | `actual_weight_grams` | int, nullable | > 0 if present; triggers BR-06 reconciliation if it differs from `declared_weight_grams` |
 | `linehaul_trip_id` | uuid, nullable | present only for transit/destination scans, not the very first origin scan |
 
-**Response `201`**: `{ scan_event_id, event_type }` where `event_type` is server-computed — `HUB_RECEIVE`, `ARRIVED_AT_HUB`, or `MISROUTED` per the BR-02 zone-mismatch check (client never sets this directly). **Errors**: `404` hub/parcel not found · `422 BR-08` prepaid parent order not yet `Confirmed` — parcel routed to a holding area, not rejected outright.
+**Response `201`**: `{ tracking_event_id, event_type }` where `event_type` is server-computed — `HUB_RECEIVE`, `ARRIVED_AT_HUB`, or `MISROUTED` per the BR-02 zone-mismatch check (client never sets this directly). **Errors**: `404` hub/parcel not found · `422 BR-08` prepaid parent order not yet `Confirmed` — parcel routed to a holding area, not rejected outright.
 
 **Side effect (Misrouted, BR-02)**: on zone mismatch, this service also recomputes the corridor from the actual scanning hub's zone to the order's original destination, updates `PARCEL.route_id`, and re-emits a corrective `parcel.hub_received` — see Diagram 4b above.
 

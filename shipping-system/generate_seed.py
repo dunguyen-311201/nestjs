@@ -280,7 +280,7 @@ with open("seed.sql", "w") as f:
     f.write("-- Database Seed Data\n")
     f.write("BEGIN;\n\n")
     
-    f.write("TRUNCATE shipping_tracking_db.TRACKING_EVENT, shipping_courier_db.PROOF_OF_DELIVERY, shipping_courier_db.DELIVERY_ATTEMPT, shipping_courier_db.COURIER, shipping_order_db.STRIPE_TRANSACTION, shipping_order_db.PAYMENT, shipping_order_db.PARCEL, shipping_order_db.SHIPMENT_ORDER, shipping_order_db.CUSTOMER, shipping_pricing_db.RATECARD, shipping_network_db.LINEHAULTRIP, shipping_network_db.TRUCK, shipping_network_db.DRIVER, shipping_network_db.ROUTE, shipping_network_db.HUB, shipping_network_db.ZONE CASCADE;\n\n")
+    f.write("TRUNCATE shipping_tracking_db.TRACKING_EVENT, shipping_courier_db.PROOF_OF_DELIVERY, shipping_courier_db.DELIVERY_ATTEMPT, shipping_courier_db.COURIER, shipping_order_db.PAYMENT_TRANSACTION, shipping_order_db.PAYMENT, shipping_order_db.PARCEL, shipping_order_db.SHIPMENT_ORDER, shipping_order_db.CUSTOMER, shipping_pricing_db.RATECARD, shipping_network_db.LINEHAULTRIP, shipping_network_db.TRUCK, shipping_network_db.DRIVER, shipping_network_db.ROUTE, shipping_network_db.HUB, shipping_network_db.ZONE CASCADE;\n\n")
     
     # 1. Insert Zones
     f.write("-- Zones\n")
@@ -352,10 +352,10 @@ with open("seed.sql", "w") as f:
         f.write(f"INSERT INTO shipping_order_db.PAYMENT (id, shipment_order_id, type, amount_cents, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {row[3]}, '{row[4]}');\n")
     f.write("\n")
     
-    # 12. Insert Stripe Transactions
-    f.write("-- Stripe Transactions\n")
+    # 12. Insert Payment Transactions
+    f.write("-- Payment Transactions\n")
     for row in stripe_txs:
-        f.write(f"INSERT INTO shipping_order_db.STRIPE_TRANSACTION (id, payment_id, stripe_intent_id, stripe_charge_id, status, created_at) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}', '{row[5].isoformat()}');\n")
+        f.write(f"INSERT INTO shipping_order_db.PAYMENT_TRANSACTION (id, payment_id, provider, external_transaction_id, external_reference_id, status, created_at) VALUES ('{row[0]}', '{row[1]}', 'STRIPE', '{row[2]}', '{row[3]}', '{row[4]}', '{row[5].isoformat()}');\n")
     f.write("\n")
     
     # 13. Insert Scan Events
@@ -370,13 +370,13 @@ with open("seed.sql", "w") as f:
     # 14. Insert Delivery Proofs
     f.write("-- Delivery Proofs\n")
     for row in delivery_proofs:
-        f.write(f"INSERT INTO shipping_courier_db.PROOF_OF_DELIVERY (id, scan_event_id, parcel_id, signature_url, photo_url) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}');\n")
+        f.write(f"INSERT INTO shipping_courier_db.PROOF_OF_DELIVERY (id, tracking_event_id, parcel_id, signature_url, photo_url) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}');\n")
     f.write("\n")
     
     # 15. Insert Delivery Attempts
     f.write("-- Delivery Attempts\n")
     for row in delivery_attempts:
-        f.write(f"INSERT INTO shipping_courier_db.DELIVERY_ATTEMPT (id, parcel_id, attempt_number, failure_reason, created_at) VALUES ('{row[0]}', '{row[1]}', {row[2]}, '{row[3]}', '{row[4].isoformat()}');\n")
+        f.write(f"INSERT INTO shipping_courier_db.DELIVERY_ATTEMPT (id, parcel_id, attempt_number, outcome, failure_reason, created_at) VALUES ('{row[0]}', '{row[1]}', {row[2]}, 'Failed', '{row[3]}', '{row[4].isoformat()}');\n")
     
     f.write("\nCOMMIT;\n")
 

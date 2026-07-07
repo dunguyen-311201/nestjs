@@ -104,7 +104,7 @@ sequenceDiagram
 | `parcel_id` | uuid | required, must belong to an order in `Confirmed`+ status (BR-08 guard) |
 | `courier_id` | uuid | required, must be an active courier |
 
-**Response `201`**: `{ scan_event_id, created_at }`. **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed`.
+**Response `201`**: `{ tracking_event_id, created_at }`. **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed`.
 
 ### `POST /couriers/legs/{id}/deliver`
 
@@ -115,7 +115,7 @@ sequenceDiagram
 | `photo_url` | string, nullable | optional |
 | `failure_reason` | string, nullable | required if `outcome=FAILED` |
 
-**Response `201`**: `{ scan_event_id, parcel_state }`. **Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead.
+**Response `201`**: `{ tracking_event_id, parcel_state }`. **Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead.
 
 **Side effect on failure**: writes a `DELIVERY_ATTEMPT` row (`attempt_number` 1–3); on the 3rd, emits `parcel.rts` instead of allowing a 4th `OUT_FOR_DELIVERY` (BR-04).
 
@@ -124,5 +124,5 @@ sequenceDiagram
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
 | `COURIER` | `idx_courier_zone_id` | PK `id` |
-| `PROOF_OF_DELIVERY` | `idx_proofofdelivery_parcel_id` | PK `id` · UNIQUE `scan_event_id` (one proof per `DELIVERED` event) |
+| `PROOF_OF_DELIVERY` | `idx_proof_of_delivery_tracking_event_id`, `idx_proof_of_delivery_parcel_id` | PK `id` · UNIQUE `tracking_event_id` (one proof per `DELIVERED` event) |
 | `DELIVERY_ATTEMPT` | `idx_delivery_attempt_parcel_id` | PK `id` · UNIQUE `(parcel_id, attempt_number)` · CHECK `attempt_number BETWEEN 1 AND 3` |

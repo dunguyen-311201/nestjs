@@ -36,3 +36,7 @@ Rules are grouped by operational area. Each rule has an explicit enforcement poi
 - **Misrouted** → wrong-hub scan → blocked + corrective re-route (BR-02).
 - **Lost/Damaged** → terminal state → order `Partially_Delivered` (BR-05).
 
+## Deferred (out of scope for this slice)
+
+- **Post-delivery return** ("recipient receives, then later returns the parcel") is not modeled. BR-04's RTS path only triggers on 3 *failed* delivery attempts, never after a successful `Delivered`; `Delivered`/`Complete` remain terminal states. Supporting a return-after-delivery flow would require reopening these terminal states (or modeling the return as a new shipment order) plus a BR-04 revision — deferred until prioritized.
+
