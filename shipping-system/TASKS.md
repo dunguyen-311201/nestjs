@@ -46,8 +46,21 @@ End of day, copy the "Done" bullets straight into your report.
 
 - Committed `d5643ae` (`chore: add local docker verify script and consistency-auditor agent`): `scripts/verify-local.sh`, `.claude/agents/consistency-auditor.md`, `TASKS.md` — replaces the earlier `77a05d7`, which was undone by a `git reset HEAD~1` before the message got cleaned up.
 
+- Planned Phase 4 (remainder) implementation with `EnterPlanMode`: NestJS monorepo scaffold + shared libs. Resolved ADR-002 (TypeORM, Accepted) and ADR-003 (schema-per-service, Accepted, retitled + migration roadmap added — you edited this directly mid-session) before planning. Corrected the plan twice from review feedback: per-service bootstrap model verified against each LLD (Tracking keeps HTTP, Notification is the only pure/bare app), Pricing is in-process inside `order` (not its own app, per its LLD's "in-process-boundary" rule), NATS uses the raw `nats` client for now (not `@nestjs/microservices` `Transport.NATS`, deferred to Phase 5 pending the JetStream transport decision).
+- Created `IMPLEMENTATION_CHECKLIST.md` mirroring the approved plan.
+- Split the implementation into 6 sequential MRs/branches off `feat/shipping-system`, each committed:
+  - `fix/adr-orm-schema-decisions` (`a9128b6`) — ADR-002 + ADR-003
+  - `chore/nestjs-monorepo-skeleton` (`38a34bd`) — nest-cli.json, tsconfig, package.json, eslint/prettier
+  - `feat/libs-crypto` (`0140709`) — AES-256-GCM PII helper, TDD red→green
+  - `feat/libs-contracts-dtos` (`113f56c`) — 13 NATS event interfaces + subjects map, barcode validator (TDD), Idempotency-Key decorator
+  - `feat/scaffold-apps` (`ce6d072`) — all 8 apps, schema-scoped TypeORM, `/health`
+  - `chore/phase4-verification` (`bac8f7a`) — approved pnpm build script, full live verification
+- Verified live end-to-end: `pnpm build`/`lint`/`test` clean; all 6 DB-backed apps' `/health` hit a real `SELECT 1` on `shipping_postgres` (including `order`'s two connections); `api-gateway` responds with no DB; `notification`'s raw NATS client connects/disconnects cleanly. **Phase 4 (remainder) complete.**
+
 ### Decisions / open questions
 - `docker-compose.yml` is new/untracked — not yet added to git, pending your call.
+- None of the 6 Phase-4 MR branches have been merged into `feat/shipping-system` or pushed yet — sitting locally as sequential branches (each based on the previous).
 
 ### Next
--
+- Merge/push the 6 MR branches (or open MRs on GitLab) once you've reviewed them.
+- Phase 5 (Core Backend, `docs/03-phases.md`): Order Service entities/DTOs/order-creation logic, Parcel state machine, Pricing module (in-process), Tracking event store, `@nestjs/microservices`/JetStream consumer wiring.
