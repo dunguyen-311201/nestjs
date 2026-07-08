@@ -1,5 +1,9 @@
 # Phase 4 Implementation Checklist — Monorepo Scaffold + Shared Libs
 
+> **Archived.** Phase 4 shipped and every item below is checked off. Kept as
+> a historical record of what was verified; not an active planning doc. See
+> `docs/PROGRESS.md` for current phase status.
+
 Detailed checklist for the currently-approved implementation plan (see
 `docs/03-phases.md` Phase 4: "Initialize Monorepo & NestJS service scaffolds" +
 "Build shared libs"). Scope is infra/plumbing only — no business logic, no

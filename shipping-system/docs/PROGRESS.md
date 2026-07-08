@@ -19,7 +19,7 @@
   3 shared libs (`contracts`, `dtos`, `crypto`) scaffolded under NestJS
   Standard Monorepo mode (`nest-cli.json` `projects` map, single root
   `package.json` — kept deliberately, see `docs/03-phases.md` Phase 4 and
-  `IMPLEMENTATION_CHECKLIST.md`). `pnpm build` / `pnpm lint` / `pnpm test`
+  `docs/reference/phase-4-implementation-checklist.md`). `pnpm build` / `pnpm lint` / `pnpm test`
   all green (9 tests: `libs/crypto` PII round-trip, `libs/dtos` barcode
   validator). No business logic yet — that's Phase 5.
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
@@ -54,5 +54,5 @@
 ### 2026-07-07 — Phase 4 complete
 - All 8 apps + 3 libs scaffolded, schema-scoped TypeORM connections wired,
   `/health` endpoints added. See `TASKS.md` 2026-07-07 entry and
-  `IMPLEMENTATION_CHECKLIST.md` for the full breakdown (6 sequential
-  MRs/branches, TDD for `libs/crypto` and `libs/dtos`).
+  `docs/reference/phase-4-implementation-checklist.md` for the full
+  breakdown (6 sequential MRs/branches, TDD for `libs/crypto` and `libs/dtos`).
