@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.4 | 2026-07-08 | Du Nguyen | Clarified the `I` prefix on DI ports (`IOrderRepository`, `IEventPublisher`): it marks an injectable/swappable port specifically, distinct from `libs/contracts`'s unprefixed data-shape interfaces (`BaseEventV1`) — a deliberate choice, not an oversight. |
 | v1.3 | 2026-07-08 | Du Nguyen | Added "Dependency Injection — Ports & Adapters" convention ahead of Phase 5 implementation: repository/event-publisher ports as abstract classes, TypeORM/NATS details confined to adapters, business-rule guards stay exceptions (no Result pattern). |
 | v1.2 | 2026-07-03 | Du Nguyen | Removed the top-level `07-use-cases.md`/`08-sequence-diagrams.md` aggregate docs; each service file is now fully self-contained with its own Use Cases and Sequence Diagrams sections. Shared cross-service diagrams (pickup+hub inbound, line-haul+misrouted, trip creation+assignment) were split into per-service halves, each linking to its sibling rather than duplicating the diagram source. |
 | v1.1 | 2026-07-03 | Du Nguyen | Added Idempotency-Key convention; per-service files now carry their own Versioning + Key Design Decisions sections |
@@ -43,6 +44,13 @@ This keeps services testable with plain mocks and keeps TypeORM/`nats`-client
 details out of business logic — it does not introduce a Result/monad pattern
 or any other abstraction beyond the interface boundary itself.
 
+- **Naming — `I` prefix on DI ports only.** `abstract class I<Name>` (e.g.
+  `IOrderRepository`, `IEventPublisher`) marks an injectable port — a
+  swappable/mockable service boundary bound via `providers`. This is a
+  narrower rule than `libs/contracts`'s data-shape interfaces
+  (`BaseEventV1`, `OrderCreatedEventV1`), which describe wire payloads, not
+  injectable contracts, and stay unprefixed — that distinction is what the
+  `I` marks, not a blanket "interfaces get `I`" rule.
 - **Port** = `abstract class I<Name>` in `ports/`, one method per capability
   the service actually needs (no speculative methods).
 - **Adapter** = concrete class in `adapters/` (external system, e.g. NATS) or

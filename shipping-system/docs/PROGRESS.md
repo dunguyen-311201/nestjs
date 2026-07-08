@@ -1,7 +1,7 @@
 # Progress Log
 
 > Updated after every task/session. The **Resume point** is the first thing to
-> read at the start of a session (`/status` reads this automatically). Newest
+> read at the start of a session (`/recap` reads this automatically). Newest
 > log entries on top. This is a session-handoff pointer, not a duplicate of
 > `TASKS.md` (daily log) — `TASKS.md` wins for detailed history, this file
 > wins for "what's next."
@@ -10,8 +10,8 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), not yet started. See
   `docs/03-phases.md`.
-- **Next task:** Order Service — entities, DTOs, order-creation logic
-  (first item of Phase 5).
+- **Next task:** `5.1` Order Service — entities, DTOs, order-creation logic.
+  Run `/begin-task 5.1` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
 - **State:** Phase 4 (Project Setup) complete and committed (`ce6d072`
@@ -30,10 +30,13 @@
 ## Log
 
 ### 2026-07-08 — Session tooling
-- Added `/start-task`, `/finish-task`, `/status` slash commands
+- Added `/begin-task`, `/wrap-task`, `/recap` slash commands
   (`.claude/commands/`) to enforce the `CLAUDE.md` Workflow section
   (read→state scope→build→lint→test→commit) and the TDD rule in
   `docs/lld/00-conventions.md` without relying on remembering it each session.
+  Added numbered sub-tasks (`5.1`, `5.2`, ...) to every phase in
+  `docs/03-phases.md` so the commands address one concrete task instead of an
+  entire multi-day phase.
 - Added this file (`docs/PROGRESS.md`) as the session resume-point,
   complementing `TASKS.md`'s daily log.
 - Added `docs/reference/` for raw/original design artifacts, kept separate

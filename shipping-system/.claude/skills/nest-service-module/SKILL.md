@@ -26,6 +26,13 @@ Add `ports/event-publisher.port.ts` + a NATS adapter **only if the app doesn't
 already have one** — most apps need exactly one `IEventPublisher`, reused by
 every module in that app, not one per module.
 
+## Naming — `I` prefix on DI ports only
+`abstract class I<Name>` marks an injectable/swappable port bound via
+`providers`. `libs/contracts`'s data-shape interfaces (`BaseEventV1`,
+`OrderCreatedEventV1`) describe wire payloads, not injectable contracts, and
+stay unprefixed — the `I` marks that distinction, it isn't a blanket
+"interfaces get `I`" rule.
+
 ## Rules (must hold — see docs/lld/00-conventions.md)
 1. **TDD**: write `<name>.service.spec.ts` first, confirm it fails (red), then
    implement the minimum to pass (green), then refactor.
@@ -113,4 +120,4 @@ export class <Name>Module {}
 
 ## After scaffolding
 - Run `pnpm build && pnpm lint && pnpm test`.
-- Update `docs/PROGRESS.md` and `TASKS.md` (or run `/finish-task`).
+- Update `docs/PROGRESS.md` and `TASKS.md` (or run `/wrap-task`).

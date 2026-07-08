@@ -9,19 +9,19 @@ End of day, copy the "Done" bullets straight into your report.
 - Reviewed current project structure (apps/libs/docs layout, build/lint/test all green) at user's request.
 - Explored sibling practice repo `../nhat.duong/facebook-creator-platform` (separate git repo, unrelated to this project) to extract structure/AI-agent-config ideas; reads of its `CLAUDE.md`/`.claude/settings.json`/`.mcp.json`/`docs/CODING-STANDARDS.md` were blocked by a safety hook (likely foreign-instruction guard) — worked from `docs/DECISIONS.md`, `docs/PROGRESS.md`, `.claude/commands/*`, `.claude/skills/*` instead.
 - Asked and confirmed with user: keep the current NestJS Standard Monorepo mode (single `package.json` + `nest-cli.json` projects map) rather than converting to a true per-app pnpm workspace — avoids contradicting the already-accepted Phase 4 ADR/checklist.
-- Added `.claude/commands/start-task.md`, `finish-task.md`, `status.md` — slash commands enforcing the `CLAUDE.md` Workflow section and the TDD rule in `docs/lld/00-conventions.md`, adapted to this project's phase-based (`docs/03-phases.md`) task structure.
+- Added `.claude/commands/begin-task.md`, `wrap-task.md`, `recap.md` — slash commands enforcing the `CLAUDE.md` Workflow section and the TDD rule in `docs/lld/00-conventions.md`. Added numbered sub-tasks (`5.1`, `5.2`, ...) to every phase in `docs/03-phases.md` so the commands address one concrete task, not a whole multi-day phase.
 - Added `docs/PROGRESS.md` with a "Resume point" section (current phase, next task, branch, state) plus a dated log — session-handoff pointer complementing `TASKS.md`.
 - Added `docs/reference/` (with `README.md`) for raw/original design artifacts, kept separate from the synthesized numbered docs.
 - Added "Dependency Injection — Ports & Adapters" convention to `docs/lld/00-conventions.md` (v1.3): repository/event-publisher ports as abstract classes, TypeORM/NATS confined to adapters, BR guard failures stay exceptions (no Result pattern, no new dependency).
 - Added `.claude/skills/nest-service-module/SKILL.md` to scaffold new Phase 5+ feature modules against that convention (port/adapter/entity/dto/service/module templates using `@app/contracts`/`@app/dtos`).
+- Added `.husky/pre-commit` (`pnpm lint && pnpm test`) + `husky@9.1.7` dev dependency at user's request (flagged per `CLAUDE.md`'s new-dependency gate). Did NOT run `git config core.hooksPath` myself (hard rule) — user needs to run `pnpm install` once to activate it locally.
+- Clarified DI port naming in `docs/lld/00-conventions.md` (v1.4): `I` prefix (`IOrderRepository`, `IEventPublisher`) marks injectable ports specifically, distinct from `libs/contracts`'s unprefixed data-shape interfaces — kept at user's explicit preference.
 
 ### Decisions / open questions
 - Deliberately did NOT convert to a true pnpm workspace (per-app `package.json`) — user chose to keep Standard Monorepo mode; revisit only if a documented trigger (independent per-app versioning/deploy need) shows up, and write an ADR first if so.
 
-- Added `.husky/pre-commit` (`pnpm lint && pnpm test`) at user's explicit request. Added `husky@9.1.7` as a dev dependency (flagged per `CLAUDE.md`'s new-dependency gate — approved by the explicit ask). `package.json` `prepare` script uses `git config core.hooksPath $(git rev-parse --show-prefix).husky` (not plain `husky`) because the git root is `nestjs/`, one level above this project — same nested-repo situation as the reference project. Did NOT run `git config` myself (hard "never touch git config" rule); told user to run `pnpm install` or the command directly to activate the hook locally.
-
 ### Next
-- Phase 5 — Core Backend: start with Order Service entities/DTOs/order-creation logic (see `docs/PROGRESS.md` Resume point). Use `/start-task 5` or `/start-task "Order Service entities"` to kick it off.
+- Phase 5 — Core Backend: start with task **5.1** Order Service entities/DTOs/order-creation logic (see `docs/PROGRESS.md` Resume point). Use `/begin-task 5.1` to kick it off.
 
 <!-- Template for a new day:
 ## YYYY-MM-DD
