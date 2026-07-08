@@ -134,6 +134,9 @@ LIMIT 5;
 -- Only counts outcome = 'Failed' attempts — counting every DELIVERY_ATTEMPT row
 -- regardless of outcome would fold a Succeeded attempt into a column literally
 -- named failed_attempt_count.
+-- No LIMIT: this is an exception-monitoring query like Query 2/3, not a top-N
+-- report — capping it would hide unresolved RTS parcels from ops (a prior
+-- version had LIMIT 5 here, silently dropping most of the real RTS backlog).
 --
 -- KNOWN LIMITATION (flagging, not fixing here): DELIVERY_ATTEMPT has
 -- UNIQUE(parcel_id, attempt_number) with attempt_number CHECK 1-3.
@@ -157,8 +160,7 @@ SELECT
     ) AS failed_attempt_count
 FROM shipping_order_db.PARCEL p
 WHERE p.direction = 'Reverse_RTS'
-ORDER BY failed_attempt_count DESC
-LIMIT 5;
+ORDER BY failed_attempt_count DESC;
 
 
 -- ----------------------------------------------------------------------------
@@ -217,7 +219,16 @@ LIMIT 5;
 -- QUERY 7: BR-08 Payment-Gate Violation Check (Order/Courier boundary)
 -- BR-08 says no pickup or hub-inbound scan may be accepted before
 -- SHIPMENT_ORDER.status = Confirmed. This audits for violations: any PICKUP or
--- HUB_RECEIVE scan recorded for an order that was NOT yet Confirmed at scan time.
+-- HUB_RECEIVE scan recorded before the order's payment was actually confirmed.
+--
+-- Compares against PAYMENT_TRANSACTION.created_at (the moment the webhook
+-- confirmed payment and flipped ORDER.status to Confirmed — see
+-- docs/lld/order-service.md "Side effect" on POST /payments/webhook), not
+-- SHIPMENT_ORDER.status. Status is mutable and reflects only the CURRENT
+-- state: a prior version of this query checked `o.status IN ('Draft',
+-- 'Created')`, so a real violation silently vanished from the audit the
+-- moment the order later progressed past those statuses — exactly the
+-- historical case this query exists to catch.
 -- A healthy system should always return zero rows.
 -- ----------------------------------------------------------------------------
 \echo '--- QUERY 7: BR-08 violations (scans before payment confirmed) ---'
@@ -227,12 +238,19 @@ SELECT
     te.event_type,
     te.created_at AS scan_at,
     o.id AS order_id,
-    o.status AS order_status_now
+    o.status AS order_status_now,
+    pt.confirmed_at AS payment_confirmed_at
 FROM shipping_tracking_db.TRACKING_EVENT te
 JOIN shipping_order_db.PARCEL p ON te.parcel_id = p.id
 JOIN shipping_order_db.SHIPMENT_ORDER o ON p.shipment_order_id = o.id
+JOIN shipping_order_db.PAYMENT pay ON pay.shipment_order_id = o.id
+LEFT JOIN LATERAL (
+    SELECT MIN(created_at) AS confirmed_at
+    FROM shipping_order_db.PAYMENT_TRANSACTION
+    WHERE payment_id = pay.id
+) pt ON true
 WHERE te.event_type IN ('PICKUP', 'HUB_RECEIVE')
-  AND o.status IN ('Draft', 'Created')
+  AND (pt.confirmed_at IS NULL OR te.created_at < pt.confirmed_at)
 ORDER BY te.created_at DESC;
 
 
