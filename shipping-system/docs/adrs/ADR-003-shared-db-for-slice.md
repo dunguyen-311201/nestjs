@@ -17,7 +17,7 @@ We will use a **single PostgreSQL database instance** in Docker, but configure i
 *   **Pros**:
     *   Saves local developer system resources (RAM/CPU) by running only one database instance.
     *   Preserves microservice boundaries—the schemas remain physically separable with zero schema alterations.
-    *   Simplifies local setup, backup, and seeding (via a single `init-db.sql` and `seed.sql` script).
+    *   Simplifies local setup, backup, and seeding (via a single `db/init-db.sql` and `db/seed.sql` script).
 *   **Cons**:
     *   A database container crash will affect all local microservices simultaneously.
     *   Requires developer discipline to avoid writing cross-schema queries in code.

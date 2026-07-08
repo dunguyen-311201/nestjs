@@ -36,7 +36,7 @@ erDiagram
 ## 2. Relational Schema DDL
 To support clean service isolation (Database-per-Service) while allowing local development on a single PostgreSQL instance, we mapped the E/R model to **5 logical schemas** in a single database. Hard foreign keys exist only *within* service boundaries, while cross-service references are modeled as **logical foreign keys** (simple UUID fields checked at the application level).
 
-The SQL script was written to [init-db.sql](file:///home/dunguyen/Training/nestjs/shipping-system/init-db.sql) and executed successfully.
+The SQL script was written to [db/init-db.sql](file:///home/dunguyen/Training/nestjs/shipping-system/db/init-db.sql) and executed successfully.
 
 ```sql
 -- Create Schemas for Microservices Bounded Contexts
@@ -191,7 +191,7 @@ The updated Python script [generate_seed.py](file:///home/dunguyen/Training/nest
     *   **RTS Quay Đầu (BR-04):** Includes 3 failed delivery attempts, an `RTS` scan event, and reverse routing.
     *   **Weight Discrepancy (BR-06):** 15% of parcels have measured hub weights differing from declared weights.
 
-The script generated [seed.sql](file:///home/dunguyen/Training/nestjs/shipping-system/seed.sql) (3.5MB), which was successfully loaded into the PostgreSQL container.
+The script generated [db/seed.sql](file:///home/dunguyen/Training/nestjs/shipping-system/db/seed.sql) (3.5MB), which was successfully loaded into the PostgreSQL container.
 
 ---
 

@@ -4,7 +4,7 @@
 # docker-compose stack: bring it up, reseed deterministically (seed.sql
 # TRUNCATEs first, so this is safe to rerun), then run queries.sql end to
 # end and fail loudly on the first SQL error. Run this before committing
-# changes to init-db.sql/seed.sql/queries.sql.
+# changes to db/init-db.sql, db/seed.sql, or db/queries.sql.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,10 +24,10 @@ if ! docker exec shipping_postgres pg_isready -U postgres >/dev/null 2>&1; then
 fi
 
 echo "==> seeding (seed.sql TRUNCATEs first, safe to rerun)"
-docker exec -i shipping_postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < seed.sql >/dev/null
+docker exec -i shipping_postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < db/seed.sql >/dev/null
 
 echo "==> running queries.sql"
-if ! docker exec -i shipping_postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < queries.sql > /tmp/verify-local-queries.out 2>&1; then
+if ! docker exec -i shipping_postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < db/queries.sql > /tmp/verify-local-queries.out 2>&1; then
   echo "queries.sql FAILED:" >&2
   grep -i "ERROR" /tmp/verify-local-queries.out >&2 || true
   exit 1

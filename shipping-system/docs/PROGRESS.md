@@ -44,6 +44,12 @@
 - Documented the Ports & Adapters DI convention in `docs/lld/00-conventions.md`
   for Phase 5+ service implementation, plus a `.claude/skills/nest-service-module/`
   skill to scaffold new modules against it.
+- Moved `init-db.sql`/`seed.sql`/`queries.sql` from repo root into `db/`;
+  deleted `demo_queries.sql` (superseded draft of `queries.sql`, unused by any
+  tooling). Updated every reference (docker-compose mount, verify-local.sh,
+  generate_seed.py, consistency-auditor agent, ADR-003, seeding-analysis doc,
+  `.idea` datasource mapping) and confirmed the stack still boots/seeds/queries
+  clean from the new path.
 
 ### 2026-07-07 — Phase 4 complete
 - All 8 apps + 3 libs scaffolded, schema-scoped TypeORM connections wired,

@@ -276,7 +276,7 @@ for o_idx in range(1000):
 
 
 # 12. Write seed.sql file
-with open("seed.sql", "w") as f:
+with open("db/seed.sql", "w") as f:
     f.write("-- Database Seed Data\n")
     f.write("BEGIN;\n\n")
     
