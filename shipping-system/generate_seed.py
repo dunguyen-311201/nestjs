@@ -234,11 +234,13 @@ for o_idx in range(1000):
                         scan_events.append((del_event_id, p_id, None, courier_id, None, "DELIVERED", created_at + timedelta(hours=30)))
                         
                         # 7. Proof of Delivery
+                        # No tracking_event_id: Courier writes this row synchronously,
+                        # before Tracking (async, cross-schema) appends the DELIVERED
+                        # event above — there's no such ID to reference at write time.
                         delivery_proofs.append((
-                            gen_uuid(), 
-                            del_event_id, 
-                            p_id, 
-                            f"http://cdn.shipping.com/sigs/{gen_uuid()}.png", 
+                            gen_uuid(),
+                            p_id,
+                            f"http://cdn.shipping.com/sigs/{gen_uuid()}.png",
                             f"http://cdn.shipping.com/photos/{gen_uuid()}.jpg"
                         ))
                     elif p_state == "OutForDelivery":
@@ -370,7 +372,7 @@ with open("db/seed.sql", "w") as f:
     # 14. Insert Delivery Proofs
     f.write("-- Delivery Proofs\n")
     for row in delivery_proofs:
-        f.write(f"INSERT INTO shipping_courier_db.PROOF_OF_DELIVERY (id, tracking_event_id, parcel_id, signature_url, photo_url) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}');\n")
+        f.write(f"INSERT INTO shipping_courier_db.PROOF_OF_DELIVERY (id, parcel_id, signature_url, photo_url) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}');\n")
     f.write("\n")
     
     # 15. Insert Delivery Attempts

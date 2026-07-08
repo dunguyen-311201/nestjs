@@ -11,7 +11,7 @@ erDiagram
     CUSTOMER ||--o{ SHIPMENT_ORDER : "sends/receives"
     SHIPMENT_ORDER ||--|{ PARCEL : "contains"
     SHIPMENT_ORDER ||--|| PAYMENT : "has"
-    PAYMENT ||--o| PAYMENT_TRANSACTION : "processed_by"
+    PAYMENT ||--o{ PAYMENT_TRANSACTION : "processed_by"
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
     PARCEL ||--o{ TRACKING_EVENT : "tracks"
     ROUTE ||--o{ PARCEL : "directs"
@@ -22,7 +22,6 @@ erDiagram
     ZONE ||--o{ ROUTE : "defines"
     ZONE ||--o{ RATECARD : "prices"
     ZONE ||--o{ COURIER : "deploys"
-    TRACKING_EVENT ||--o| PROOF_OF_DELIVERY : "attaches"
     PARCEL ||--o{ PROOF_OF_DELIVERY : "proves"
     HUB ||--o{ TRACKING_EVENT : "records"
     COURIER ||--o{ TRACKING_EVENT : "records"
@@ -81,7 +80,7 @@ erDiagram
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the payment record. |
 | `shipment_order_id` | uuid FK | References the SHIPMENT_ORDER this payment is for. |
-| `type` | enum | `PREPAID_STRIPE`, `POSTPAID`. |
+| `type` | enum | `PREPAID_STRIPE` only — `CHECK` constraint in `db/init-db.sql`. `POSTPAID`/COD was cut from scope (see `CLAUDE.md` § SCOPE). |
 | `amount_cents` | int | Value of the payment in cents. |
 | `status` | enum | `Unpaid`, `Paid`, `Awaiting_Settlement`. |
 
@@ -170,8 +169,7 @@ erDiagram
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of a proof-of-delivery record. |
-| `tracking_event_id` | uuid FK | The `DELIVERED` scan event this proof is attached to. |
-| `parcel_id` | uuid FK | The parcel that was delivered. |
+| `parcel_id` | uuid FK | The parcel that was delivered. No `tracking_event_id` column — Courier writes this row synchronously, before Tracking has even consumed `parcel.delivered` and appended the corresponding `DELIVERED` row (different service, async, cross-schema); there is no ID Courier could reference at write time. |
 | `signature_url` | string, nullable | Stored recipient signature image URL. |
 | `photo_url` | string, nullable | Stored delivery photo URL. |
 
@@ -184,15 +182,14 @@ erDiagram
 | CUSTOMER | SHIPMENT_ORDER | 1 : N | A customer sends/receives many orders |
 | SHIPMENT_ORDER | PARCEL | 1 : N | An order contains one or more parcels |
 | SHIPMENT_ORDER | PAYMENT | 1 : 1 | An order has one payment record |
-| PAYMENT | PAYMENT_TRANSACTION | 1 : 0..1 | Processed by a provider transaction |
+| PAYMENT | PAYMENT_TRANSACTION | 1 : N | Each checkout/webhook attempt writes a transaction row; `PAYMENT_TRANSACTION.payment_id` has no UNIQUE constraint (only `external_transaction_id` does, for webhook idempotency) — a retried checkout (BR-08, `PAYMENT` still `Unpaid`) can legitimately produce more than one |
 | PARCEL | DELIVERY_ATTEMPT | 1 : N | A parcel has many delivery attempts |
 | PARCEL | TRACKING_EVENT | 1 : N | Each parcel has many scan events (tracking timeline) |
 | ROUTE | PARCEL | 1 : N | A parcel travels along one corridor/route |
 | HUB | LINEHAULTRIP | 1 : N | Hub as origin / destination of trips |
 | DRIVER / TRUCK | LINEHAULTRIP | 1 : N | Assigned to trips |
 | HUB / COURIER | TRACKING_EVENT | 1 : N | A scan is recorded at a hub or by a courier |
-| TRACKING_EVENT | PROOF_OF_DELIVERY | 1 : 0..1 | A `DELIVERED` scan captures one proof of delivery |
-| PARCEL | PROOF_OF_DELIVERY | 1 : 0..1 | Proof of delivery is linked to the parcel |
+| PARCEL | PROOF_OF_DELIVERY | 1 : 0..1 | Proof of delivery is linked to the parcel. No direct `TRACKING_EVENT` relationship — Courier writes `PROOF_OF_DELIVERY` synchronously, before Tracking (a different, async, cross-schema service) has appended the corresponding `DELIVERED` row; there is no `tracking_event_id` Courier could reference at write time. Safe to associate via `parcel_id` alone because BR-04 allows at most one true `DELIVERED` event per parcel in this scoped slice (see note below). |
 | ZONE | HUB / ROUTE / RATECARD / COURIER | 1 : N | Zone groups hubs, routes, rate cards, and couriers |
 
 > **Note (deferred, out of scope):** `1 : 0..1` holds under BR-04 as written — RTS only fires after 3 *failed* delivery attempts, never after a successful `Delivered`. A "recipient receives, then returns the parcel" flow (post-delivery return) is not modeled in this scoped slice: `Delivered`/`Complete` are terminal states today, and reopening them would require new FSM guards and a BR-04 revision. Not scoped into the 16-day slice; revisit if/when this flow is prioritized.

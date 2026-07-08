@@ -150,7 +150,6 @@ CREATE TABLE shipping_courier_db.COURIER (
 
 CREATE TABLE shipping_courier_db.PROOF_OF_DELIVERY (
     id UUID PRIMARY KEY,
-    tracking_event_id UUID UNIQUE NOT NULL,
     parcel_id UUID NOT NULL,
     signature_url VARCHAR(500),
     photo_url VARCHAR(500)

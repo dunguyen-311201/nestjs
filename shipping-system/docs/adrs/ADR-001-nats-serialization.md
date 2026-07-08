@@ -1,7 +1,7 @@
 # ADR-001: Per-Aggregate Serialization Via NATS JetStream
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 When a large truck arrives at a delivery hub or a batch of parcels is processed at shift change, hundreds of scan events are fired in rapid succession. If multiple threads in the `order-service` consume these events concurrently to update the materialized `SHIPMENT_ORDER.status` projection for the same order, this will lead to database write contention, lock acquisition timeouts, and potential deadlock exceptions.

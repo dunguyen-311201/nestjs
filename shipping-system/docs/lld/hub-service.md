@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.1 | 2026-07-08 | Du Nguyen | `POST /hubs/{id}/receive` claimed to synchronously return `tracking_event_id`, but this service never writes `TRACKING_EVENT` — Tracking does, asynchronously, after consuming the published event. Response now returns `event`/`event_id`/`published_at` (what this service actually knows), matching `linehaul-service.md`'s `/depart`/`/arrive` pattern. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
 Owns: `ZONE`, `ROUTE`, `HUB`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including the `Idempotency-Key` header on `POST /hubs/{id}/receive` (a retried scan must not append a duplicate `SCANEVENT` or re-trigger misrouted correction). Bag/manifest consolidation is physical-only and not modeled (see `CLAUDE.md § SCOPE`).
@@ -80,7 +81,7 @@ sequenceDiagram
 | `actual_weight_grams` | int, nullable | > 0 if present; triggers BR-06 reconciliation if it differs from `declared_weight_grams` |
 | `linehaul_trip_id` | uuid, nullable | present only for transit/destination scans, not the very first origin scan |
 
-**Response `201`**: `{ tracking_event_id, event_type }` where `event_type` is server-computed — `HUB_RECEIVE`, `ARRIVED_AT_HUB`, or `MISROUTED` per the BR-02 zone-mismatch check (client never sets this directly). **Errors**: `404` hub/parcel not found · `422 BR-08` prepaid parent order not yet `Confirmed` — parcel routed to a holding area, not rejected outright.
+**Response `201`**: `{ event, event_id, published_at }` where `event` is `parcel.hub_received`, `parcel.arrived_at_hub`, or `parcel.misrouted` — server-computed from `PARCEL.route_id` vs. the scanning hub's zone (client never sets this directly); `event_id`/`published_at` describe the NATS event this service actually published in this request. No `tracking_event_id`: this service never writes `TRACKING_EVENT` itself (Tracking does, asynchronously, after consuming the event). **Errors**: `404` hub/parcel not found · `422 BR-08` prepaid parent order not yet `Confirmed` — parcel routed to a holding area, not rejected outright.
 
 **Side effect (Misrouted, BR-02)**: on zone mismatch, this service also recomputes the corridor from the actual scanning hub's zone to the order's original destination, updates `PARCEL.route_id`, and re-emits a corrective `parcel.hub_received` — see Diagram 4b above.
 

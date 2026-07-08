@@ -144,7 +144,6 @@ CREATE TABLE IF NOT EXISTS shipping_courier_db.COURIER (
 
 CREATE TABLE IF NOT EXISTS shipping_courier_db.PROOF_OF_DELIVERY (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tracking_event_id UUID UNIQUE NOT NULL, -- Logical FK to TRACKING_EVENT.id
     parcel_id UUID NOT NULL,                 -- Logical FK to PARCEL.id
     signature_url VARCHAR(500),
     photo_url VARCHAR(500),
@@ -198,7 +197,6 @@ CREATE INDEX IF NOT EXISTS idx_payment_transaction_payment_id ON shipping_order_
 
 CREATE INDEX IF NOT EXISTS idx_courier_zone_id ON shipping_courier_db.COURIER(zone_id);
 
-CREATE INDEX IF NOT EXISTS idx_proof_of_delivery_tracking_event_id ON shipping_courier_db.PROOF_OF_DELIVERY(tracking_event_id);
 CREATE INDEX IF NOT EXISTS idx_proof_of_delivery_parcel_id ON shipping_courier_db.PROOF_OF_DELIVERY(parcel_id);
 
 CREATE INDEX IF NOT EXISTS idx_delivery_attempt_parcel_id ON shipping_courier_db.DELIVERY_ATTEMPT(parcel_id);

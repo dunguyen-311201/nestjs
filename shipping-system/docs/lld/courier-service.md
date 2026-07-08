@@ -4,6 +4,8 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.2 | 2026-07-08 | Du Nguyen | Same root cause as v1.1, applied to API responses: `POST /pickup` and `POST /deliver` claimed to synchronously return `tracking_event_id` (and `/deliver` also `parcel_state`), but neither `TRACKING_EVENT` nor `PARCEL.state` is written by this service — both are updated asynchronously by other services after consuming the published NATS event. Responses now return only what this service knows synchronously (`event`, `event_id`, `published_at`, and its own local rows), matching the pattern already used in `linehaul-service.md`'s `/depart`/`/arrive`. |
+| v1.1 | 2026-07-08 | Du Nguyen | Removed `PROOF_OF_DELIVERY.tracking_event_id` — it could never be correctly written: this service writes the row synchronously, before Tracking (a different, async, cross-schema service) has appended the corresponding `DELIVERED` `TRACKING_EVENT` row. `parcel_id` is the sole, correct join key. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
 Owns: `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including the `Idempotency-Key` header on every `POST` below (particularly important here: a retried `/deliver` call must not double-count a `DELIVERY_ATTEMPT`). This service never writes `TRACKING_EVENT` directly — it publishes NATS events and Tracking appends the row (see [docs/02-HLD.md § Accepted MVP risk](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md) for the no-outbox trade-off on this path).
@@ -63,7 +65,7 @@ sequenceDiagram
     Courier--)NATS: publish parcel.delivered
     NATS--)Tracking: append DELIVERED scan event
     NATS--)Order: advance PARCEL.state = Delivered
-    Order->>Order: recompute SHIPMENT_ORDER.status (see order-service.md diagram 8)
+    Order->>Order: recompute SHIPMENT_ORDER.status 
     NATS--)Notification: consume parcel.delivered
     Notification->>Notification: send email (best-effort, log+drop on failure)
 ```
@@ -90,9 +92,7 @@ sequenceDiagram
     NATS--)Tracking: append RTS scan event
     NATS--)Order: PARCEL.direction = Reverse_RTS, attempt counter reset to 0
     NATS--)Notification: consume parcel.rts (best-effort email)
-    Note over Order: Parcel re-enters pickup flow (diagram 3a) routed back toward original sender's zone
-```
-
+    Note over Order: Parcel re-enters pickup flow routed back toward original sender's zone
 ```
 
 ## API Contracts
@@ -104,7 +104,7 @@ sequenceDiagram
 | `parcel_id` | uuid | required, must belong to an order in `Confirmed`+ status (BR-08 guard) |
 | `courier_id` | uuid | required, must be an active courier |
 
-**Response `201`**: `{ tracking_event_id, created_at }`. **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed`.
+**Response `201`**: `{ event: "parcel.picked_up", event_id, published_at }` — this service publishes the event synchronously in this request; it never creates `TRACKING_EVENT` itself (Tracking does, asynchronously, after consuming the event), so there is no `tracking_event_id` to return here. **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed`.
 
 ### `POST /couriers/legs/{id}/deliver`
 
@@ -115,7 +115,11 @@ sequenceDiagram
 | `photo_url` | string, nullable | optional |
 | `failure_reason` | string, nullable | required if `outcome=FAILED` |
 
-**Response `201`**: `{ tracking_event_id, parcel_state }`. **Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead.
+**Response `201`** — only fields this service can know synchronously (neither `TRACKING_EVENT` nor `PARCEL.state` are written by this service — see the removed `tracking_event_id`/`parcel_state` fields in the changelog below):
+- `outcome=DELIVERED`: `{ event: "parcel.delivered", event_id, published_at, proof_of_delivery_id }` (`proof_of_delivery_id` is known — this service writes `PROOF_OF_DELIVERY` in the same request).
+- `outcome=FAILED`: `{ delivery_attempt_id, attempt_number }`, plus `{ event: "parcel.rts", event_id, published_at }` if this was the 3rd consecutive failure (BR-04).
+
+**Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead.
 
 **Side effect on failure**: writes a `DELIVERY_ATTEMPT` row (`attempt_number` 1–3); on the 3rd, emits `parcel.rts` instead of allowing a 4th `OUT_FOR_DELIVERY` (BR-04).
 
@@ -124,5 +128,5 @@ sequenceDiagram
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
 | `COURIER` | `idx_courier_zone_id` | PK `id` |
-| `PROOF_OF_DELIVERY` | `idx_proof_of_delivery_tracking_event_id`, `idx_proof_of_delivery_parcel_id` | PK `id` · UNIQUE `tracking_event_id` (one proof per `DELIVERED` event) |
+| `PROOF_OF_DELIVERY` | `idx_proof_of_delivery_parcel_id` | PK `id`. No `tracking_event_id` column: this row is written synchronously by this service, before Tracking (async, cross-schema) has appended the `DELIVERED` row, so there is no ID to reference at write time — see `docs/01-ERD.md` PARCEL↔PROOF_OF_DELIVERY note. |
 | `DELIVERY_ATTEMPT` | `idx_delivery_attempt_parcel_id` | PK `id` · UNIQUE `(parcel_id, attempt_number)` · CHECK `attempt_number BETWEEN 1 AND 3` |

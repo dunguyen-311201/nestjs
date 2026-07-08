@@ -260,6 +260,13 @@ ORDER BY ABS(p.actual_weight_grams - p.declared_weight_grams) DESC;
 -- Finds DELIVERED scan events with no PROOF_OF_DELIVERY row at all, or a POD row
 -- missing signature_url — both indicate incomplete delivery evidence.
 -- A healthy system should always return zero rows.
+--
+-- Joins on parcel_id, not a tracking_event_id FK: Courier writes PROOF_OF_DELIVERY
+-- synchronously in its own request handler, before Tracking has even consumed the
+-- parcel.delivered event and appended this DELIVERED row (different service, async,
+-- cross-schema) — there is no tracking_event_id Courier could have written at POD
+-- creation time. parcel_id is safe as the join key because BR-04 allows at most one
+-- true DELIVERED event per parcel in this scoped slice (see docs/01-ERD.md note).
 -- ----------------------------------------------------------------------------
 \echo '--- QUERY 9: DELIVERED events missing proof of delivery ---'
 SELECT
@@ -269,7 +276,7 @@ SELECT
     pod.id AS proof_of_delivery_id,
     pod.signature_url
 FROM shipping_tracking_db.TRACKING_EVENT te
-LEFT JOIN shipping_courier_db.PROOF_OF_DELIVERY pod ON pod.tracking_event_id = te.id
+LEFT JOIN shipping_courier_db.PROOF_OF_DELIVERY pod ON pod.parcel_id = te.parcel_id
 WHERE te.event_type = 'DELIVERED'
   AND (pod.id IS NULL OR pod.signature_url IS NULL)
 ORDER BY te.created_at DESC;

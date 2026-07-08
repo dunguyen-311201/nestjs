@@ -24,8 +24,7 @@
    - [Weight mismatch reconciliation and passive lost-parcel detection (BR-06 + ERD design note)](#weight-mismatch-reconciliation-and-passive-lost-parcel-detection-br-06--erd-design-note)
    - [Idempotency and outbox mechanics (Order Creation only)](#idempotency-and-outbox-mechanics-order-creation-only)
    - [Prepaid Payment Verification via Stripe (BR-08)](#prepaid-payment-verification-via-stripe-br-08)
-   - [COD Cash Settlement and Reconciliation (BR-09)](#cod-cash-settlement-and-reconciliation-br-09)
-   - [Notification Delivery (BR-10)](#notification-delivery-br-10)
+   - [Notification Delivery (BR-09)](#notification-delivery-br-09)
 7. [Data Isolation Strategy](#data-isolation-strategy)
    - [Schema-per-Service](#schema-per-service)
    - [Logical Foreign Keys](#logical-foreign-keys)
@@ -67,6 +66,16 @@ The system is a set of NestJS microservices over a NATS JetStream event backbone
 - **CQRS-lean**: writes go through the domain + outbox; reads serve materialized projections to meet the latency target.
 
 ### Logical Components
+```mermaid
+flowchart TD
+    Client(["Client / Actors"]) -->|REST / HTTPS| Gateway["API Gateway"]
+    Gateway -->|HTTP Request| Services["Domain Services <br> (Order, Pricing, Tracking, Courier, Hub, etc.)"]
+    Services -->|Read / Write| Postgres[(PostgreSQL <br> Schema-per-Service)]
+    Services -->|Sync Read| Redis[(Redis Cache)]
+    Services -->|Sync Publish| NATS{{"NATS JetStream <br> Event Backbone"}}
+    NATS -->|Async Consume| Services
+```
+
 - **API Gateway** — auth, routing, request validation, OpenAPI.
 - **Domain services** — Order, Pricing, Tracking, Courier, Hub/Sortation, Line-haul, Dispatcher.
 - **NATS JetStream** — event backbone + per-order subjects for serialized projection writes.
@@ -102,13 +111,14 @@ Each entity is write-owned by exactly one service. Cross-service references are 
 
 ## Communication Model
 
-### Synchronous (REST)
-- Used only when the caller needs an immediate result: Order → Pricing at order creation (price must be returned and locked).
-- Client → API Gateway → service, request/response, validated DTOs.
+### Sync vs Async Communication Model
 
-### Asynchronous (NATS JetStream)
-- The default. Every state transition publishes an event; interested services subscribe. No service blocks on another for the main flow.
-- Per-aggregate serialization: order-projection events publish to `orders.status.<order_id>`; JetStream guarantees in-subject ordering, so one order's projection is written serially while different orders run in parallel across the consumer group (ADR-001).
+| Model | Technology | Use Case | Pattern |
+| :--- | :--- | :--- | :--- |
+| **Synchronous (Sync)** | **REST API** | When the caller needs an immediate result: Order → Pricing at order creation (price must be returned and locked). | Client ➔ API Gateway ➔ Service (Request/Response). |
+| **Asynchronous (Async)** | **NATS JetStream** | Default for all other workflows (order updates, scan sweeps, dispatch, notifications). | Event Publishing ➔ JetStream ➔ Decoupled Consumers. |
+
+*   **Per-aggregate serialization**: order-projection events publish to `orders.status.<order_id>`; JetStream guarantees in-subject ordering, so one order's projection is written serially while different orders run in parallel across the consumer group (ADR-001).
 
 ### NATS Subject Map
 Convention: `<domain>.<event>`, lowercase, dot-separated. Per-order projection subject carries the order id. The one deliberate exception is `orders.status.<order_id>` (plural `orders`): it is a per-aggregate projection-write channel, not a domain event, so it is namespaced separately from the `<domain>.<event>` event stream on purpose.
@@ -166,61 +176,80 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 
 | Actor | Endpoint | Purpose |
 | :--- | :--- | :--- |
-| **Sender** | `POST /orders` | Create an order; returns order + locked price |
-| **Sender** | `GET /orders/{id}/quote` | Preview price before creation |
-| **Sender** | `POST /orders/{id}/checkout` | Create a Stripe Checkout/PaymentIntent session |
-| **Stripe System** | `POST /payments/webhook` | Receive async payment succeeded/failed webhooks |
-| **Recipient** | `GET /tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
-| **Courier** | `POST /couriers/legs/{id}/pickup` | Record a pickup scan |
-| **Courier** | `POST /couriers/legs/{id}/deliver` | Record delivery + upload POD |
-| **Hub Operator** | `POST /hubs/{id}/receive` | `HUB_RECEIVE` scan |
-| **Dispatcher** | `POST /trips`, `POST /trips/{id}/assign` | Create trip, assign driver/truck |
-| **Dispatcher** | `POST /trips/{id}/depart` | Manually mark trip as departed (fallback) |
-| **Dispatcher** | `POST /trips/{id}/arrive` | Manually mark trip as arrived (fallback) |
-| **Dispatcher** | `POST /legs/{id}/assign` | Assign courier to a leg |
+| **Sender** | `POST` `/orders` | Create an order; returns order + locked price |
+| **Sender** | `GET` `/orders/{id}/quote` | Preview price before creation |
+| **Sender** | `POST` `/orders/{id}/checkout` | Create a Stripe Checkout/PaymentIntent session |
+| **Stripe System** | `POST` `/payments/webhook` | Receive async payment succeeded/failed webhooks |
+| **Recipient** | `GET` `/tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
+| **Courier** | `POST` `/couriers/legs/{id}/pickup` | Record a pickup scan |
+| **Courier** | `POST` `/couriers/legs/{id}/deliver` | Record delivery + upload POD |
+| **Hub Operator** | `POST` `/hubs/{id}/receive` | `HUB_RECEIVE` scan |
+| **Dispatcher** | `POST` `/trips`, `POST /trips/{id}/assign` | Create trip, assign driver/truck |
+| **Dispatcher** | `POST` `/trips/{id}/depart` | Manually mark trip as departed (fallback) |
+| **Dispatcher** | `POST` `/trips/{id}/arrive` | Manually mark trip as arrived (fallback) |
+| **Dispatcher** | `POST` `/legs/{id}/assign` | Assign courier to a leg |
 
 ---
 
 ## Design Solutions for Specific Cases
 
 ### Misrouted handling and corrective re-route (BR-02)
-1. A hub scan (`HUB_RECEIVE` / `ARRIVED_AT_HUB`) is recorded by the Hub/Sortation service. Before accepting the scan as a forward-progressing event, the service compares the scanning hub's zone against the zone expected by `PARCEL.route_id`.
-2. If they don't match, the guard blocks the normal forward transition: instead of `parcel.hub_received` / `parcel.arrived_at_hub`, the Hub service emits `parcel.misrouted`. Tracking appends a `MISROUTED` scan event (this keeps the append-only rule — no correction overwrites the wrong scan).
-3. Consuming `parcel.misrouted`, the Hub/Sortation service recalculates a corridor from the *actual* scanning hub's zone to the order's original destination zone, updates `PARCEL.route_id`, and re-emits a corrective `parcel.hub_received` so the parcel resumes forward movement on the new route.
-4. `PARCEL.state = Misrouted` is transient — it's superseded by the next scan event once the corrective route is applied. `ORDER.status` reflects `Misrouted` only for the debounce window before the correction lands (BR-05 still applies: least-advanced status).
-5. Batch case: when an entire line-haul trip is misrouted (e.g. the truck unloads its whole load at the wrong hub), every affected `parcel.arrived_at_hub` event carries the same `linehaul_trip_id`. The Hub/Sortation service can validate and re-route the whole trip's cargo in one pass keyed by `linehaul_trip_id`, instead of running the zone-mismatch check independently per parcel.
+*   **Trigger**: Hub scan (`HUB_RECEIVE` / `ARRIVED_AT_HUB`) is recorded by the **Hub/Sortation Service**.
+*   **Zone Matching Guard**:
+    1. Compares the scanning hub's zone against the expected destination zone in `PARCEL.route_id`.
+    2. If zones mismatch, blocks the normal forward transition and emits `parcel.misrouted`.
+    3. **Tracking Service** appends an immutable `MISROUTED` scan event (no database `UPDATE`).
+*   **Re-routing Action**: Hub/Sortation consumes `parcel.misrouted`, recalculates a corridor from the current scanning hub to the original destination zone, updates `PARCEL.route_id`, and re-emits `parcel.hub_received`.
+*   **Transient State**: `PARCEL.state = Misrouted` is transient and resolved once the corrective route is applied. `ORDER.status` only reflects `Misrouted` during the brief debounce window (BR-05 still applies: least-advanced status).
+*   **Batch Re-routing**: If an entire truck is misrouted, Hub/Sortation can re-route all parcels under the `linehaul_trip_id` in a single pass rather than per parcel.
 
 ### RTS after 3 failed attempts (BR-04)
-1. Each failed last-mile attempt needs its own scan event so the append-only log stays the single source of truth. `DELIVERY_FAILED` has been added to the `event_type` enum in `01-ERD.md` for this purpose.
-2. The Courier service counts `DELIVERY_FAILED` scan events for the parcel. On the 3rd `DELIVERY_FAILED`, Courier emits `parcel.rts` instead of dispatching another `OUT_FOR_DELIVERY`.
-3. On `parcel.rts`: `PARCEL.direction` flips to `Reverse_RTS` and the failed-delivery-attempt counter resets to zero, so a delivery failure on the reverse leg back to the sender is counted independently from the original 3 forward-leg failures. The barcode (`PA-XXXX`) and `PARCEL.id` are unchanged — no new parcel row, no new tracking ID (per BR-04).
-4. Loop avoidance: the routing engine always evaluates `(direction, current_zone)` together. A parcel with `direction=Reverse_RTS` is only ever routed toward the original sender's zone; the forward-dispatch guard at any hub explicitly excludes `Reverse_RTS` parcels from outbound-to-recipient routing, so it can never be re-dispatched forward again.
+*   **Trigger**: Courier records 3 consecutive `DELIVERY_FAILED` scan events for a parcel (this event type has been added to the `event_type` enum in [docs/01-ERD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/01-ERD.md)).
+*   **Action**: Courier service emits `parcel.rts` (blocking further `OUT_FOR_DELIVERY` dispatches).
+*   **RTS State Changes**:
+    *   `PARCEL.direction` flips to `Reverse_RTS`.
+    *   The failed-attempt counter resets to `0` for the reverse leg.
+    *   `PARCEL.id` and barcode (`PA-XXXX`) remain **unchanged** (no duplicate rows are created).
+*   **Loop Avoidance**: The routing engine evaluates `(direction, current_zone)`. Parcels with `direction = Reverse_RTS` are filtered out from forward routing and are routed exclusively back to the original sender's zone.
 
 ### ORDER.status projection mechanics (BR-05, BR-07, ADR-001)
-1. Tracking is the producer on `orders.status.<order_id>`: after appending any status-relevant scan event, Tracking publishes a lightweight "recompute" trigger to that order's subject (not the full event payload — just a signal to recompute).
-2. Because JetStream preserves in-order delivery per subject, and each `orders.status.<order_id>` subject is consumed serially, the Order service's projection consumer never processes two triggers for the same order concurrently — this is what makes the per-aggregate serialization in ADR-001 safe without a lock.
-3. Debounce: on receiving a trigger, the consumer (re)starts a short in-memory timer keyed by `order_id` (e.g. a few hundred ms) instead of recomputing immediately. If another trigger for the same order arrives before the timer fires, the timer resets. When it finally fires, the consumer runs **one** recompute pass covering however many scan events landed in that burst — this is what "event-batching debounce" in BR-07 refers to.
-4. Recompute pass: read the latest computed state of every parcel under the order (derived from each parcel's own scan-event sequence), rank each parcel's state (`Created < InHub < InTransit < OutForDelivery < Delivered`, with `Lost`/`Damaged`/`Misrouted` treated as exception states), and set `ORDER.status` to the least-advanced rank across all parcels. If any parcel is terminally `Lost`/`Damaged` while others are `Delivered`, `ORDER.status = Partially_Delivered` (per the BR-05 exception branch). `Cancelled` is set directly by the Order service pre-dispatch and is never derived from parcel state.
+*   **Trigger**: Tracking publishes a lightweight "recompute" signal on NATS subject `orders.status.<order_id>` after any status-relevant scan.
+*   **Concurrency (ADR-001)**: Serialized via NATS JetStream subject ordering. A single consumer instance processes updates for a single `<order_id>` in sequence, preventing concurrent writes/locks.
+*   **Debounce (BR-07)**: An in-memory timer (e.g., a few hundred ms) resets on new triggers, executing a single batch recomputation pass at the end of the window to handle scan bursts.
+*   **Recompute Pass (BR-05)**:
+    1. Reads the latest state of all parcels under the order.
+    2. Ranks states: `Created` < `InHub` < `InTransit` < `OutForDelivery` < `Delivered`.
+    3. Sets `ORDER.status` to the **least-advanced** rank among its parcels.
+    4. Handles terminal exceptions (e.g. if one parcel is `Delivered` but another is `Lost`, status becomes `Partially_Delivered`). `Cancelled` is set directly pre-dispatch.
 
 ### Weight mismatch reconciliation and passive lost-parcel detection (BR-06 + ERD design note)
-- **Weight mismatch**: Hub/Sortation records `actual_weight_grams` at the origin-hub scan and includes it in the `parcel.hub_received` event payload; the Order service applies it to `PARCEL.actual_weight_grams` and compares against `declared_weight_grams`. The delta needs a post-delivery invoice/adjustment. Recommend deferring this the same way RateCard versioning is deferred.
-- **Passive lost-parcel detection**: Tracking owns `TRACKING_EVENT` and is best positioned to run this as a scheduled job. Periodically query for parcels whose latest scan event is an in-transit type (`DEPARTED_LINEHAUL`, `OUT_FOR_DELIVERY`, etc.) older than an SLA threshold, with no subsequent `ARRIVED_AT_HUB` / `DELIVERED` event. On threshold breach, Tracking emits a `parcel.lost_suspected` event. The Order service consumes it, sets `PARCEL.state = Lost`, and the normal projection flow cascades `ORDER.status` to `Partially_Delivered`.
+*   **Weight Mismatch**:
+    *   *Ingestion*: Hub measures and publishes `actual_weight_grams` in `parcel.hub_received`.
+    *   *Action*: Order service records the weight. Discrepancy comparison is audited, and adjustment billing is deferred to post-delivery (does not hold up the physical parcel, BR-06). Recommend deferring this the same way RateCard versioning is deferred.
+*   **Passive Lost-Parcel Detection**:
+    *   *Trigger*: A cron sweep job in **Tracking Service** checks for in-transit parcels (`DEPARTED_LINEHAUL`, `OUT_FOR_DELIVERY`) that have breached their delivery SLA with no subsequent scans.
+    *   *Action*: Tracking emits `parcel.lost_suspected` -> Order service consumes it and sets `PARCEL.state = Lost` -> `ORDER.status` cascades to `Partially_Delivered`.
 
 ### Idempotency and outbox mechanics (Order Creation only)
-1. **Outbox write**: creating an order inserts `ORDER` + `PARCEL` rows and an outbox row (`event_type=order.created`, `event_id=uuid`, `payload`, `status=PENDING`) in the same DB transaction — this avoids the dual-write problem.
-2. **Outbox publish**: a separate poller reads `PENDING` outbox rows and publishes to NATS with the header `Nats-Msg-Id = event_id`, then marks the row published.
-3. **Layer 1 — broker dedup**: the JetStream stream's configured dedup window uses `Nats-Msg-Id` to silently drop a duplicate publish of the same `event_id` within the window.
-4. **Layer 2 — consumer dedup**: each consumer additionally checks `event_id` against its own processed-events record before applying the event, and no-ops if already seen.
+*   **Outbox Pattern**:
+    1. *Write*: Order creation inserts `ORDER`/`PARCEL` records and a `PENDING` outbox row in a single atomic DB transaction.
+    2. *Publish*: A background worker polls `PENDING` outbox rows, publishes them to NATS with a `Nats-Msg-Id = event_id` header, and marks them `PUBLISHED`.
+*   **Idempotency (Two-Layer Dedup)**:
+    *   *Layer 1 (Broker)*: NATS JetStream dedup window drops duplicate publishes based on `Nats-Msg-Id`.
+    *   *Layer 2 (Consumer)*: Consumers track processed `event_id`s in their databases to ignore duplicated deliveries.
 
 ### Prepaid Payment Verification via Stripe (BR-08)
-1. **Stripe Session**: The Order service generates a Stripe checkout session via `POST /orders/{id}/checkout`, writing a pending `PAYMENT` row linked to the `ORDER`.
-2. **Webhook Intake**: Once the customer completes payment, Stripe asynchronously posts to `/payments/webhook`. The Order webhook validator writes a `PAYMENT_TRANSACTION` log and publishes the `payment.succeeded` event on NATS.
-3. **Dispatch Guard**: In accordance with BR-08, the Courier service blocks first-mile pickup assignment (`POST /legs/{id}/assign`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer). Any hub inbound scan device (`POST /hubs/{id}/receive`) will similarly reject a parcel if its parent order is prepaid and unpaid, routing it to a holding area.
+*   **Checkout (Prepaid Stripe)**:
+    1. `POST /orders/{id}/checkout` generates a Stripe Session and creates an `Unpaid` `PAYMENT` record.
+    2. Upon checkout completion, Stripe webhook `POST /payments/webhook` writes `PAYMENT_TRANSACTION` and publishes `payment.succeeded`.
+*   **Dispatch Guard (BR-08)**:
+    *   Courier service blocks first-mile pickup assignment (`POST /legs/{id}/assign`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer).
+    *   Hub receive scan (`POST /hubs/{id}/receive`) rejects unpaid prepaid parcels if `ORDER.status` has not advanced to `Confirmed`, routing them to a temporary holding area.
 
 ### Notification Delivery (BR-09)
-1. **Stateless consumer**: The Notification consumer owns no table and has no REST surface — it only subscribes to the events listed in the NATS Subject Map (`order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected`) and calls an email provider SDK (e.g. SES/SendGrid) synchronously within the consumer handler.
-2. **Best-effort, not outbox-backed**: unlike Order Creation, there is no transactional guarantee here on purpose — a notification is a side effect, not a source of truth. If the send call fails or the provider is down, the consumer logs the failure and acks the message anyway; it never retries indefinitely or blocks the event stream.
-3. **No customer-facing failure mode**: because delivery of the underlying business event (order confirmed, parcel delivered, etc.) already succeeded before Notification ever sees it, a lost email never leaves the system in an inconsistent state — worst case, the customer checks `GET /tracking/{tracking_id}` instead of reading an email.
+*   **Stateless Consumer**: Subscribes to events (`order.created`, `payment.succeeded`, etc.) and calls email SDKs synchronously without owning a database table.
+*   **Best-Effort Delivery (BR-09)**: No transactional outbox or retry loops. If the email API fails, it is logged and acknowledged (`ACK` to NATS) immediately. Email failure never rolls back the business transaction.
+*   **No Inconsistency Risk**: Since the business state (e.g., delivered, paid) is committed before notifications fire, email delivery failures never impact system consistency. Worst case, the customer checks `GET /tracking/{tracking_id}` instead of receiving an email.
 
 ---
 
@@ -248,15 +277,15 @@ All cross-service references (e.g. `TRACKING_EVENT.parcel_id` → `PARCEL.id`) a
 ## Message Broker & Fault Tolerance
 
 ### Stream & Consumer Configuration
-- **Stream**: all subjects under the `parcel.*` and `trip.*` prefixes, plus `order.*` and `orders.status.>` are grouped into one stream, `SHIPPING_PIPELINE`.
-- **Retention policy**: `Limits` — retained indefinitely since the append-only scan history must remain queryable. Time/hub-based partitioning of `TRACKING_EVENT` is explicitly deferred for this local MVP slice (no cloud/production deployment target per Scope); revisit if this ever runs continuously.
-- **Ack policy**: every consumer that writes state uses `AckExplicit`. A message counts as consumed only once the consuming service's database transaction has committed.
+*   **Stream Pipeline**: `SHIPPING_PIPELINE` (groups all subjects under the `parcel.*`, `trip.*`, `order.*`, and `orders.status.>` prefixes).
+*   **Retention Policy**: `Limits` (retained indefinitely since append-only scan history must remain queryable; time/hub-based partitioning is deferred for this local slice).
+*   **Ack Policy**: `AckExplicit` (a message is only consumed once the consuming service's database transaction has successfully committed).
 
 ### Retry & Dead Letter Queue (DLQ)
-When a consumer fails due to a system-level error:
-- **Max deliver**: JetStream is configured with `max_deliver = 5`.
-- **Backoff policy**: exponential backoff between retries — 2s, 4s, 8s, 16s.
-- **DLQ**: if all 5 attempts fail, the consumer sends `Term` back to NATS. JetStream routes the message to a dedicated `SHIPPING_DLQ` stream for monitoring, alerting, and manual operator intervention.
+When a consumer fails due to system-level errors:
+*   **Max Deliver Limit**: `max_deliver = 5` attempts.
+*   **Backoff Policy**: Exponential backoff between retries (`2s` ➔ `4s` ➔ `8s` ➔ `16s`).
+*   **DLQ Stream**: Sends `Term` on the 5th failure, routing the message to `SHIPPING_DLQ` for monitoring and manual intervention.
 
 ---
 
@@ -278,14 +307,14 @@ When a consumer fails due to a system-level error:
 
 ## Architectural Evaluation & Strengths
 
-This design exhibits several key architectural strengths that align with enterprise-grade microservice design patterns:
+This design exhibits several key strengths aligning with enterprise-grade microservice patterns:
 
-- **Strict Scope Discipline**: The elimination of physical `Bag` and `Manifest` abstractions is applied consistently across the entire design (ERD, HLD, business rules, and ADR-004). The design documents the specific pros, cons, and consequences of this simplification, demonstrating high scope discipline suitable for a clean vertical slice implementation.
-- **Robust Event-Driven Projections**: Using `TrackingEvent` as an append-only transaction log (audit trail) serves as the system's source of truth. Implementing NATS JetStream serialized ordering per-order (ADR-001) combined with event-batching debounce on the projection consumer (BR-07) effectively solves the standard concurrent-overwrite problem during high-frequency scan bursts.
-- **Strict Bounded Contexts (No Cross-Database Foreign Keys)**: Database entities are strictly partitioned by write-ownership. Hard foreign key constraints are only enforced within the bounds of a single logical service (e.g., `HUB` and `ZONE`), while cross-service relations use logical UUID mapping. This eliminates database-level coupling, making future schema migration/splitting straightforward.
-- **Detailed Exception Handling and Edge-Case Mapping**: Rather than abstract lists, the HLD provides detailed, step-by-step communication sequences for complex logistical exceptions. This includes misrouted corrective routing (BR-02), multi-attempt failover loops to Return-to-Sender (BR-04), weight mismatch reconciliation (BR-06), and passive loss tracking via daemon threshold jobs.
-- **Dual-Layer Idempotency**: Resolves the "dual write" dilemma using the transactional outbox pattern during order creation, coupled with two-tier message deduplication (NATS deduplication header at broker level and consumer-side validation records).
-- **Traceable Decision Records**: Employs a structured ADR format (Context, Decision, and Consequences), ensuring all design choices (such as the rejection of polymorphic TrackingEvents in ADR-004) are fully documented and traceable.
+*   **Strict Scope Discipline**: Consistently eliminates `Bag` and `Manifest` abstractions across ERD, HLD, business rules, and ADR-004, preserving a clean scoped vertical slice.
+*   **Concurrency-Free Projections**: Avoids database-level row locking (`SELECT FOR UPDATE`) by serializing writes per aggregate using NATS JetStream (ADR-001) combined with event debounce (BR-07).
+*   **Strict Bounded Contexts**: Enforces write-ownership and database isolation (schema-per-service) without cross-schema foreign keys, mapping relationships via logical UUIDs.
+*   **Detailed Exception Modeling**: Step-by-step communication mapping for logistical edge cases: misroutes (BR-02), RTS retry limits (BR-04), weight discrepancy audits (BR-06), and passive loss sweeps.
+*   **Dual-Layer Idempotency**: Resolves dual-write problems via Transactional Outbox (Order Creation) and implements two-tier message deduplication (broker-level Nats-Msg-Id and consumer-side validation records).
+*   **Traceable Decision Records**: Fully documents architectural trade-offs (e.g. rejection of polymorphic events in ADR-004) through structured ADR logs.
 
 ---
 
@@ -294,7 +323,7 @@ This design exhibits several key architectural strengths that align with enterpr
 | ADR | Decision | Status |
 | :--- | :--- | :--- |
 | **ADR-001** | Per-aggregate serialization via NATS JetStream per-order subject; Redis is cache-only | Accepted |
-| **ADR-002** | ORM selection (TypeORM vs Prisma) | To decide in Project Setup |
+| **ADR-002** | ORM selection (TypeORM vs Prisma) | Accepted |
 | **ADR-003** | Shared-DB-for-slice now; DB-per-service when services split | Accepted |
 | **ADR-004** | Polymorphic TrackingEvent (entity_id + entity_type) | Rejected (simplified to direct `parcel_id` FK) |
 | **ADR-005** | Message Broker Selection (NATS JetStream vs. Kafka / RabbitMQ) | Accepted |
