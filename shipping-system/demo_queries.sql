@@ -58,7 +58,7 @@ SELECT
     COUNT(o.id) AS order_count,
     SUM(o.price_cents) / 100.0 AS total_revenue_usd,
     AVG(o.price_cents) / 100.0 AS avg_order_price_usd
-FROM shipping_order_db.ORDER o
+FROM shipping_order_db.SHIPMENT_ORDER o
 JOIN shipping_pricing_db.RATECARD rc ON o.rate_card_id = rc.id
 JOIN shipping_network_db.ZONE z_origin ON rc.origin_zone_id = z_origin.id
 JOIN shipping_network_db.ZONE z_dest ON rc.dest_zone_id = z_dest.id

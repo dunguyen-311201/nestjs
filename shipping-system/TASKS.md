@@ -3,6 +3,26 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-08
+
+### Done
+- Reviewed current project structure (apps/libs/docs layout, build/lint/test all green) at user's request.
+- Explored sibling practice repo `../nhat.duong/facebook-creator-platform` (separate git repo, unrelated to this project) to extract structure/AI-agent-config ideas; reads of its `CLAUDE.md`/`.claude/settings.json`/`.mcp.json`/`docs/CODING-STANDARDS.md` were blocked by a safety hook (likely foreign-instruction guard) — worked from `docs/DECISIONS.md`, `docs/PROGRESS.md`, `.claude/commands/*`, `.claude/skills/*` instead.
+- Asked and confirmed with user: keep the current NestJS Standard Monorepo mode (single `package.json` + `nest-cli.json` projects map) rather than converting to a true per-app pnpm workspace — avoids contradicting the already-accepted Phase 4 ADR/checklist.
+- Added `.claude/commands/start-task.md`, `finish-task.md`, `status.md` — slash commands enforcing the `CLAUDE.md` Workflow section and the TDD rule in `docs/lld/00-conventions.md`, adapted to this project's phase-based (`docs/03-phases.md`) task structure.
+- Added `docs/PROGRESS.md` with a "Resume point" section (current phase, next task, branch, state) plus a dated log — session-handoff pointer complementing `TASKS.md`.
+- Added `docs/reference/` (with `README.md`) for raw/original design artifacts, kept separate from the synthesized numbered docs.
+- Added "Dependency Injection — Ports & Adapters" convention to `docs/lld/00-conventions.md` (v1.3): repository/event-publisher ports as abstract classes, TypeORM/NATS confined to adapters, BR guard failures stay exceptions (no Result pattern, no new dependency).
+- Added `.claude/skills/nest-service-module/SKILL.md` to scaffold new Phase 5+ feature modules against that convention (port/adapter/entity/dto/service/module templates using `@app/contracts`/`@app/dtos`).
+
+### Decisions / open questions
+- Deliberately did NOT convert to a true pnpm workspace (per-app `package.json`) — user chose to keep Standard Monorepo mode; revisit only if a documented trigger (independent per-app versioning/deploy need) shows up, and write an ADR first if so.
+
+- Added `.husky/pre-commit` (`pnpm lint && pnpm test`) at user's explicit request. Added `husky@9.1.7` as a dev dependency (flagged per `CLAUDE.md`'s new-dependency gate — approved by the explicit ask). `package.json` `prepare` script uses `git config core.hooksPath $(git rev-parse --show-prefix).husky` (not plain `husky`) because the git root is `nestjs/`, one level above this project — same nested-repo situation as the reference project. Did NOT run `git config` myself (hard "never touch git config" rule); told user to run `pnpm install` or the command directly to activate the hook locally.
+
+### Next
+- Phase 5 — Core Backend: start with Order Service entities/DTOs/order-creation logic (see `docs/PROGRESS.md` Resume point). Use `/start-task 5` or `/start-task "Order Service entities"` to kick it off.
+
 <!-- Template for a new day:
 ## YYYY-MM-DD
 
@@ -62,8 +82,12 @@ End of day, copy the "Done" bullets straight into your report.
 - Verified live end-to-end: `pnpm build`/`lint`/`test` clean; all 6 DB-backed apps' `/health` hit a real `SELECT 1` on `shipping_postgres` (including `order`'s two connections); `api-gateway` responds with no DB; `notification`'s raw NATS client connects/disconnects cleanly. **Phase 4 (remainder) complete.**
 - Merged all 6 branches sequentially (fast-forward, no conflicts) into `feat/shipping-system`, pushed to GitLab `origin` (`5a146b8..ff4ed76`).
 - Set up a second remote, **GitHub** (`dunguyen-agilityio/nodejs-training`, fixed from a stale URL that pointed at a different repo): full mirror, everything (code + docs + `.claude`). Pushed `feat/shipping-system` + `main` only (initially pushed all 25 local branches by mistake, then deleted the 23 unrelated ones from GitHub, keeping the 3 pre-existing branches there untouched: `feat/apply-devops`, `feat/demo-build-preview-api`, `feat/orbit-logistic-with-datagrip`).
-- For **GitLab**: considered rewriting history with `git filter-repo` to strip `docs/`/`.claude/` retroactively, but that would force every future GitLab push to require `--force` forever (local keeps full content, so a normal push would just re-add them) — declined once that consequence was clear. Went with the sustainable option instead: a second local branch, **`feat/shipping-system-code-only`**, forked from `feat/shipping-system` with `docs/` and `.claude/` removed (`aa9d282`), pushed to GitLab as a **new** branch (no force needed, no history rewritten). GitLab's original `feat/shipping-system` (full, already has docs/.claude from earlier pushes) is left as-is/frozen.
-- **Going forward**: push `feat/shipping-system` (full) to GitHub only; push `feat/shipping-system-code-only` (code, no docs/.claude) to GitLab. Keeping the code-only branch in sync means re-merging from `feat/shipping-system` and re-removing `docs/`/`.claude/` each time — not automatic yet.
+- For **GitLab**: considered rewriting history with `git filter-repo` to strip `docs/`/`.claude/` retroactively, but that would force every future GitLab push to require `--force` forever (local keeps full content, so a normal push would just re-add them) — declined once that consequence was clear. Went with the sustainable option instead: a second local branch forked from `feat/shipping-system` with `docs/` and `.claude/` removed (`aa9d282`), pushed to GitLab as a **new** branch (no force needed, no history rewritten). GitLab's original `feat/shipping-system` (full, already has docs/.claude from earlier pushes) is left as-is/frozen.
+- Renamed that branch from `feat/shipping-system-code-only` to `supporter-review`, then realized the naming should live at the **remote** level (GitLab = supporter-review remote), not the branch name. Final state: **force-pushed the code-only content over GitLab's `feat/shipping-system`** (same branch name as GitHub, `ff4ed76..aa9d282`) and deleted the now-redundant `supporter-review` branch from GitLab. GitLab's `feat/shipping-system` no longer has the old full history with docs/.claude — that's gone from GitLab for good (still intact on GitHub and locally).
+- Also stripped `.gemini/` (a different AI tool's config, not just `.claude/`) from the `supporter-review` branch (`564a1e3`) and force-pushed again to GitLab's `feat/shipping-system` (`aa9d282..564a1e3`). Verified live via `git fetch` + `git ls-tree` against GitLab: no `docs/`, `.claude/`, or `.gemini/` present there.
+- **Going forward**: `feat/shipping-system` means different content per remote — GitHub's has everything (code + docs + `.claude`); GitLab's is code-only. Same local setup: `feat/shipping-system` (full) pushes to `github`, `supporter-review` (code-only) force-pushes to `origin` under the *same remote branch name* `feat/shipping-system` (`git push origin supporter-review:feat/shipping-system --force`) — force required every time, since `supporter-review` needs to be re-synced from `feat/shipping-system` and re-stripped each time, not automatic.
+- **Fixed a footgun**: local `feat/shipping-system` was still tracking `origin` (GitLab) by default from before the split — since GitLab's `feat/shipping-system` now has different (stripped) content, a plain `git push`/`git pull` on this branch would conflict or, worse, silently overwrite GitLab's code-only state if force-pushed by habit. Re-pointed its upstream to `github/feat/shipping-system` (`git branch --set-upstream-to`) so the default push target is now correct.
+- Documented the whole dual-remote workflow (push commands, how to re-sync `supporter-review`, the upstream-tracking footgun) as a permanent "Git Remotes" section in `CLAUDE.md` (`883e922`), plus fixed ADR-002's stale "NOT yet decided" note. Pushed both: GitHub `feat/shipping-system` (`ff4ed76..883e922`) and GitLab `feat/shipping-system` via `supporter-review` sync (`564a1e3..c330a9c`) — verified again via `git ls-tree` that GitLab still has no `docs/`/`.claude/`/`.gemini/`.
 
 ### Decisions / open questions
 - `docker-compose.yml` is new/untracked — not yet added to git, pending your call.

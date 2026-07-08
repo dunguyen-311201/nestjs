@@ -13,7 +13,7 @@ erDiagram
     CUSTOMER ||--o{ SHIPMENT_ORDER : "sends/receives"
     SHIPMENT_ORDER ||--|{ PARCEL : "contains"
     SHIPMENT_ORDER ||--|| PAYMENT : "has"
-    PAYMENT ||--o| STRIPE_TRANSACTION : "processed_by"
+    PAYMENT ||--o| PAYMENT_TRANSACTION : "processed_by"
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
     PARCEL ||--o{ TRACKING_EVENT : "tracks"
     ROUTE ||--o{ PARCEL : "directs"
@@ -131,11 +131,12 @@ CREATE TABLE shipping_order_db.PAYMENT (
     status VARCHAR(50) NOT NULL CHECK (status IN ('Unpaid', 'Paid', 'Awaiting_Settlement'))
 );
 
-CREATE TABLE shipping_order_db.STRIPE_TRANSACTION (
+CREATE TABLE shipping_order_db.PAYMENT_TRANSACTION (
     id UUID PRIMARY KEY,
     payment_id UUID NOT NULL REFERENCES shipping_order_db.PAYMENT(id),
-    stripe_intent_id VARCHAR(255) UNIQUE NOT NULL,
-    stripe_charge_id VARCHAR(255),
+    provider VARCHAR(50) NOT NULL,
+    external_transaction_id VARCHAR(255) UNIQUE NOT NULL,
+    external_reference_id VARCHAR(255),
     status VARCHAR(50) NOT NULL,
     created_at TIMESTAMP NOT NULL
 );
