@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { IOrderRepository } from './ports/order-repository.port';
 import { OrderRepository } from './repositories/order.repository';
 import { IPricingPort } from './ports/pricing.port';
-import { PricingStubAdapter } from './adapters/pricing-stub.adapter';
+import { RateCardPricingAdapter } from './adapters/rate-card-pricing.adapter';
+import { RateCard } from './entities/rate-card.entity';
+import { Zone } from './entities/zone.entity';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
 import {
   REDIS_CLIENT,
@@ -13,11 +16,15 @@ import {
 } from './adapters/redis-idempotency.adapter';
 
 @Module({
+  imports: [
+    TypeOrmModule.forFeature([RateCard], 'pricing'),
+    TypeOrmModule.forFeature([Zone], 'network'),
+  ],
   controllers: [OrderController],
   providers: [
     OrderService,
     { provide: IOrderRepository, useClass: OrderRepository },
-    { provide: IPricingPort, useClass: PricingStubAdapter },
+    { provide: IPricingPort, useClass: RateCardPricingAdapter },
     { provide: IIdempotencyStore, useClass: RedisIdempotencyAdapter },
     {
       provide: REDIS_CLIENT,
