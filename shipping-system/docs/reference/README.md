@@ -13,6 +13,9 @@ numbered docs win; this folder is provenance, not the authoritative spec.
   technical keywords kept (per user preference — see
   [[feedback_commit_granularity_and_walkthrough]] in agent memory).
   Temporary — delete once reviewed.
+- [`task-5.2-walkthrough.md`](task-5.2-walkthrough.md) — same format,
+  for task 5.2 (BusinessRuleException + ParcelStateMachine). Temporary —
+  delete once reviewed.
 
 When a new raw artifact shows up (an original DDL export, a client-provided
 diagram source, a requirements doc) or a planning doc is fully done and no
