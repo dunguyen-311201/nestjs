@@ -1,7 +1,8 @@
 import { BusinessRuleException } from '@app/dtos';
 import { ParcelState } from '../entities/parcel.enums';
 
-// Matches the `event_type` CHECK constraint on TRACKING_EVENT (db/init-db.sql).
+// Matches the `event_type` CHECK constraint on the TRACKING_EVENT table
+// (see db/init-db.sql).
 export enum TrackingEventType {
   PICKUP = 'PICKUP',
   HUB_RECEIVE = 'HUB_RECEIVE',
@@ -20,9 +21,9 @@ function key(state: ParcelState, event: TrackingEventType): TransitionKey {
   return `${state}:${event}`;
 }
 
-// Happy-path transitions only (docs/03-phases.md task 5.2). MISROUTED,
-// DELIVERY_FAILED/RTS, and Lost/Damaged transitions are task 5.3's job -
-// they need cross-service hub-identity data this pure module doesn't have.
+// Happy-path forward transitions only. MISROUTED, DELIVERY_FAILED/RTS, and
+// Lost/Damaged transitions are not yet implemented - some need
+// cross-service hub-identity data this pure module doesn't have access to.
 const HAPPY_PATH_TRANSITIONS: Partial<Record<TransitionKey, ParcelState>> = {
   [key(ParcelState.CREATED, TrackingEventType.PICKUP)]: ParcelState.IN_TRANSIT,
   [key(ParcelState.IN_TRANSIT, TrackingEventType.HUB_RECEIVE)]:

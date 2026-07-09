@@ -5,9 +5,9 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 
-// Docs (docs/02-HLD.md, CLAUDE.md) show the format as `PA-XXXX` without
-// specifying the character class precisely; treating XXXX as a digit
-// sequence (barcode/tracking-number convention), 4 digits minimum.
+// The parcel barcode format is `PA-XXXX` without a precisely specified
+// character class; treating XXXX as a digit sequence (standard
+// barcode/tracking-number convention), 4 digits minimum.
 const PARCEL_BARCODE_REGEX = /^PA-\d{4,}$/;
 
 export function isValidParcelBarcode(value: string): boolean {

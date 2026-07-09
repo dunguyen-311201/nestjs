@@ -1,5 +1,5 @@
 /**
- * NATS subject constants, matching docs/02-HLD.md "NATS Subject Map".
+ * NATS subject constants for every event this system publishes/consumes.
  * Producers and consumers should reference these rather than hardcoding
  * subject strings.
  */
@@ -19,7 +19,7 @@ export const NATS_SUBJECTS = {
   PARCEL_LOST_SUSPECTED: 'parcel.lost_suspected',
 } as const;
 
-/** Per-order projection-write subject (not a domain event - see docs/02-HLD.md). */
+/** Per-order projection-write subject - a recompute trigger, not a domain event. */
 export function orderStatusSubject(orderId: string): string {
   return `orders.status.${orderId}`;
 }

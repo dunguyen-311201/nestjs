@@ -33,9 +33,9 @@ export class OrderService {
       return cached;
     }
 
-    // A single order's parcels may mix types; the pricing call is per-type
-    // (docs/lld/pricing-service.md), so the order's locked price is the sum
-    // across parcels and its ETA is the latest (worst-case) SLA among them.
+    // A single order's parcels may mix types, and the pricing call is
+    // per-type, so the order's locked price is the sum across parcels and
+    // its ETA is the latest (worst-case) SLA among them.
     let totalPriceCents = 0;
     let rateCardId: string | undefined;
     let expectedDeliveryAt: Date | undefined;

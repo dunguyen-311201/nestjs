@@ -3,9 +3,9 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
 /**
- * Checks both the Order schema and the in-process-embedded Pricing schema
- * (docs/lld/pricing-service.md: Pricing has no separate process/app, it's
- * called in-process-boundary by Order - see apps/order/src/app.module.ts).
+ * Checks both the Order schema and the in-process-embedded Pricing schema.
+ * Pricing has no separate process/app - it's called in-process by Order
+ * only (see apps/order/src/app.module.ts's second TypeOrmModule.forRoot).
  */
 @Controller('health')
 export class HealthController {

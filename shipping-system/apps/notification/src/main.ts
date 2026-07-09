@@ -3,10 +3,9 @@ import { connect } from 'nats';
 import { AppModule } from './app.module';
 
 // No app.listen() and no app.connectMicroservice() yet - Notification is a
-// pure NATS consumer (docs/lld/notification-service.md), and the JetStream
-// transport approach is deliberately undecided until Phase 5 (see
-// IMPLEMENTATION_CHECKLIST.md). This bootstrap only proves raw NATS
-// connectivity against the local shipping_nats container.
+// pure NATS consumer, and the JetStream transport approach is deliberately
+// undecided for now. This bootstrap only proves raw NATS connectivity
+// against the local shipping_nats container.
 async function bootstrap() {
   await NestFactory.createApplicationContext(AppModule);
 

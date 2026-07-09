@@ -7,10 +7,10 @@ import {
 export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
 
 /**
- * Extracts the required `Idempotency-Key` header (docs/lld/00-conventions.md)
- * from every mutating POST. Missing header -> 400 Bad Request. Validating the
- * cached-response replay against Redis is service-layer logic, out of scope
- * for this shared decorator.
+ * Extracts the required `Idempotency-Key` header from every mutating POST.
+ * Missing header -> 400 Bad Request. Validating the cached-response replay
+ * against Redis is service-layer logic, out of scope for this shared
+ * decorator.
  */
 export const IdempotencyKey = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): string => {

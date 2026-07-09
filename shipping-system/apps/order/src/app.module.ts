@@ -22,10 +22,9 @@ import { Parcel } from './entities/parcel.entity';
       synchronize: false,
     }),
     OrderModule,
-    // Pricing (docs/lld/pricing-service.md) has no public REST surface and is
-    // invoked in-process-boundary by Order only - it is not its own app, but
-    // it keeps its own schema/connection, named so it doesn't collide with
-    // Order's default connection above.
+    // Pricing has no public REST surface and is invoked in-process by Order
+    // only - it is not its own app, but it keeps its own schema/connection,
+    // named so it doesn't collide with Order's default connection above.
     TypeOrmModule.forRoot({
       name: 'pricing',
       type: 'postgres',
