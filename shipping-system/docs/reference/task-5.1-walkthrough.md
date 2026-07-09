@@ -1,102 +1,107 @@
 # Task 5.1 Walkthrough — Order Service: entities, DTOs, order-creation logic
 
-> Temporary, step-by-step explainer for reviewing task 5.1. Written for
-> someone who may not be fluent in every TypeORM/NestJS/class-validator
-> idiom used — each step explains **what** was written and **why**, not
-> just what changed. Archive or delete once reviewed; it duplicates
-> `TASKS.md`/`docs/PROGRESS.md`'s terser log entries on purpose (those are
-> for recall, this one is for understanding).
+> Tài liệu giải thích tạm thời, viết để review task 5.1. Mỗi bước giải
+> thích cái gì đã viết và tại sao viết như vậy, không chỉ liệt kê thay
+> đổi. Từ ngữ chuyên ngành phổ biến (entity, decorator, abstract,
+> interface, transaction, token...) giữ nguyên tiếng Anh, không dịch.
+> File này archive/xoá sau khi bạn review xong — nó trùng lặp có chủ đích
+> với `TASKS.md`/`docs/PROGRESS.md` (2 file đó ngắn gọn để tra cứu nhanh,
+> còn file này để hiểu sâu).
 
-Commits, in order: `b5a2abe` → `aff2516` → `103f158` → `c6b78b7` →
-`95e2098` → `f338233` (preceded by `759cb4c`, the ADR-006 dependency
-decision).
+Thứ tự commit: `b5a2abe` → `aff2516` → `103f158` → `c6b78b7` →
+`95e2098` → `f338233` (trước đó là `759cb4c`, quyết định ADR-006 về dependency).
 
 ---
 
-## Step 1 — Entities (`b5a2abe`)
+## Bước 1 — Entities (`b5a2abe`)
 
 **Files:** `apps/order/src/entities/{customer,shipment-order,parcel}.entity.ts`, `parcel.enums.ts`, `shipment-order-status.enum.ts`
 
-TypeORM entities are plain classes with decorators that map each class to
-a DB table and each property to a column. A few syntax notes:
+Entity trong TypeORM là một class thường có gắn decorator (`@Entity`,
+`@Column`...) để map class đó vào một bảng DB, mỗi property vào một cột.
 
-- `@Entity({ name: 'CUSTOMER' })` — table name is explicit (uppercase) to
-  match `db/init-db.sql` exactly, since `synchronize: false` means
-  TypeORM never generates schema — it just needs to *read/write* the
-  table that already exists.
-- `@PrimaryGeneratedColumn('uuid')` — the DB's `DEFAULT gen_random_uuid()`
-  generates the id, TypeORM just knows to treat it as the PK and not try
-  to insert its own value.
-- `@Column({ name: 'name_enc', type: 'varchar', length: 500 })` — the
-  `name` option maps the DB's `snake_case` column to a `camelCase` class
-  property (`nameEnc`), because TS/JS convention is camelCase but the SQL
-  schema uses snake_case. This mapping happens at every column.
-- **Why plain `varchar` instead of TypeORM's `enum` column type** for
-  `status`/`type`/`direction`/`state`: Postgres has two ways to constrain
-  a column to a fixed set of values — a native `ENUM` type, or a
-  `VARCHAR` + `CHECK (col IN (...))` constraint. `db/init-db.sql` already
-  uses the `CHECK` approach (see line ~95, ~106-108). TypeORM's `enum:`
-  column option generates a native Postgres `ENUM` type, which would be a
-  mismatch against the real schema. So the entities use plain
-  `type: 'varchar'` and rely on a **TypeScript enum** (`ShipmentOrderStatus`,
-  `ParcelType`, etc.) purely at the application layer for type-safety —
-  the DB-level constraint is still the `CHECK`, unchanged.
-- `@ManyToOne(() => Customer) @JoinColumn({ name: 'sender_id' })` on
-  `ShipmentOrder` — this is TypeORM's way of saying "there's a foreign
-  key column `sender_id`, and when I load an order, I can optionally
-  populate a full `Customer` object under `.sender`." The `@JoinColumn`
-  is only needed on the "owning" side (the side that actually has the FK
-  column); `Customer` itself has no back-reference because nothing in
-  this task needs to query "all orders for a customer" yet.
-- `route_id` on `Parcel` is `nullable: true` and has **no** `@ManyToOne`
-  — per `db/init-db.sql`'s comment `-- Logical FK to ROUTE.id`, this is a
-  cross-service reference (Route belongs to Hub Service's own schema).
-  TypeORM can't join across schemas/services, and the project's
-  convention (`docs/02-HLD.md` § Data Isolation) is to never use a DB
-  `FOREIGN KEY` across service boundaries anyway — it's just a plain
-  `uuid` column, validated later by whichever service consumes it.
+Vài điểm về syntax:
 
-## Step 2 — `CreateOrderDto` (`aff2516`)
+- `@Entity({ name: 'CUSTOMER' })` — tên bảng ghi rõ ràng (viết hoa) để
+  khớp chính xác với `db/init-db.sql`, vì `synchronize: false` nghĩa là
+  TypeORM không tự sinh schema — nó chỉ đọc/ghi vào bảng đã tồn tại sẵn.
+- `@PrimaryGeneratedColumn('uuid')` — DB tự sinh id qua
+  `DEFAULT gen_random_uuid()`, TypeORM chỉ cần biết đây là primary key
+  và không tự chèn giá trị id của riêng nó.
+- `@Column({ name: 'name_enc', type: 'varchar', length: 500 })` — option
+  `name` dùng để map tên cột `snake_case` bên DB (`name_enc`) sang property
+  `camelCase` bên class TypeScript (`nameEnc`). Việc mapping này lặp lại
+  ở mọi cột.
+- **Tại sao dùng `varchar` thường thay vì kiểu column `enum` của TypeORM**
+  cho các cột `status`/`type`/`direction`/`state`: Postgres có 2 cách để
+  giới hạn một cột chỉ nhận vài giá trị cố định — dùng kiểu `ENUM` gốc
+  (native), hoặc dùng `VARCHAR` + ràng buộc `CHECK (col IN (...))`.
+  `db/init-db.sql` đã chọn cách `CHECK` (xem dòng ~95, ~106-108). Option
+  `enum:` của TypeORM lại sinh ra kiểu `ENUM` gốc của Postgres — nếu dùng
+  sẽ không khớp với schema thật đang có. Vì vậy entity dùng
+  `type: 'varchar'` bình thường, còn việc giới hạn giá trị chỉ nằm ở tầng
+  ứng dụng qua TypeScript enum (`ShipmentOrderStatus`, `ParcelType`...)
+  để có type-safety lúc code — ràng buộc thật ở tầng DB vẫn là `CHECK`,
+  không đổi.
+- `@ManyToOne(() => Customer) @JoinColumn({ name: 'sender_id' })` trên
+  `ShipmentOrder` — đây là cách TypeORM diễn đạt "có một cột foreign key
+  tên `sender_id`, và khi load một order lên, tôi có thể load luôn cả
+  object `Customer` đầy đủ vào `.sender`." `@JoinColumn` chỉ cần khai báo
+  ở phía "sở hữu" cột FK; bên `Customer` không cần khai báo chiều ngược
+  lại vì task này chưa cần truy vấn "tất cả order của một customer."
+- `route_id` trên `Parcel` là `nullable: true` và không có `@ManyToOne`
+  — theo comment trong `db/init-db.sql` là `-- Logical FK to ROUTE.id`,
+  đây là tham chiếu chéo service — Route thuộc về schema riêng của Hub
+  Service. TypeORM không thể join xuyên schema/service, và convention
+  của dự án (`docs/02-HLD.md` § Data Isolation) là không bao giờ dùng
+  `FOREIGN KEY` thật ở tầng DB giữa các service khác nhau — nên đây chỉ
+  là một cột `uuid` bình thường, việc validate để sau, do service nào
+  tiêu thụ giá trị đó tự lo.
+
+## Bước 2 — `CreateOrderDto` (`aff2516`)
 
 **Files:** `apps/order/src/dto/create-order.dto.ts` (+ `.spec.ts`)
 
-A DTO (Data Transfer Object) is the class that describes/validates the
-shape of an incoming HTTP request body. `class-validator` decorators
-(`@IsString()`, `@IsNotEmpty()`, `@IsEnum()`, `@IsInt()`, `@Min(1)`) each
-add one validation rule; NestJS's global `ValidationPipe` (already
-configured project-wide) runs all of them automatically before the
-controller method executes — the controller never sees an invalid body.
+DTO (Data Transfer Object) là class mô tả/validate hình dạng của request
+body gửi lên qua HTTP. Các decorator của `class-validator`
+(`@IsString()`, `@IsNotEmpty()`, `@IsEnum()`, `@IsInt()`, `@Min(1)`) —
+mỗi cái thêm một luật kiểm tra. `ValidationPipe` toàn cục của NestJS
+(đã cấu hình sẵn cho cả project) tự động chạy hết các luật này trước khi
+code trong controller chạy — controller sẽ không bao giờ thấy một body
+không hợp lệ.
 
-- `@ValidateNested()` + `@Type(() => AddressDto)` on `sender`/`recipient`
-  — by default `class-validator` only validates *top-level* properties.
-  If `sender` is itself an object with its own required fields,
-  `@ValidateNested()` tells it to recurse into `AddressDto`'s own rules.
-  `@Type(() => AddressDto)` (from `class-transformer`) is needed because
-  incoming JSON is just a plain object — `@Type` tells the transformer
-  to actually instantiate an `AddressDto` class instance first, so the
-  decorators on that class have something to run against.
-- `@IsDefined()` was added *in addition to* `@ValidateNested()` after the
-  first test run (TDD "red" step) showed that a **missing** `sender` key
-  entirely wasn't being flagged — `@ValidateNested()` only validates
-  what's *inside* the object if it exists, it doesn't assert the object
-  itself is present. This is a common class-validator gotcha.
-- `@ArrayMinSize(1)` on `parcels` enforces "at least one parcel" per the
-  `POST /orders` contract table in `docs/lld/order-service.md`.
+- `@ValidateNested()` + `@Type(() => AddressDto)` trên `sender`/`recipient`
+  — mặc định `class-validator` chỉ validate property ở tầng ngoài cùng.
+  Nếu `sender` bản thân nó là một object có luật riêng, `@ValidateNested()`
+  báo cho nó biết phải đi sâu vào trong để chạy luôn luật của `AddressDto`.
+  `@Type(() => AddressDto)` (đến từ `class-transformer`) cần thiết vì JSON
+  gửi lên chỉ là object thường — `@Type` báo cho transformer phải tạo một
+  instance thật của class `AddressDto` trước, để các decorator trên class
+  đó có thứ để chạy lên.
+- `@IsDefined()` được thêm cùng với `@ValidateNested()` sau khi lần chạy
+  test đầu tiên (bước "red" của TDD) cho thấy trường hợp thiếu hẳn key
+  `sender` lại không bị báo lỗi — vì `@ValidateNested()` chỉ validate
+  những gì ở bên trong object nếu nó tồn tại, chứ không tự khẳng định
+  object đó phải có mặt. Đây là một *gotcha* (bẫy nhỏ, dễ mắc phải mà
+  không nhận ra ngay) khá phổ biến của `class-validator`.
+- `@ArrayMinSize(1)` trên `parcels` áp luật "ít nhất một parcel" theo
+  đúng bảng contract của `POST /orders` trong `docs/lld/order-service.md`.
 
-The TDD flow here: `create-order.dto.spec.ts` was written first with 7
-cases (valid payload, missing sender, empty fields, empty array, bad
-weight, bad type, bad payment_type) and run — it failed because
-`create-order.dto.ts` didn't exist yet (`Cannot find module`). Then the
-DTO was implemented until all 7 passed.
+Luồng TDD ở bước này: file `create-order.dto.spec.ts` được viết trước,
+gồm 7 case (payload hợp lệ, thiếu sender, field rỗng, mảng rỗng, weight
+sai, type sai, payment_type sai) và chạy thử — nó fail (bước "red") vì
+`create-order.dto.ts` chưa tồn tại (`Cannot find module`). Sau đó mới
+viết DTO cho đến khi cả 7 test pass (bước "green").
 
-## Step 3 — Ports (`103f158`)
+## Bước 3 — Ports (`103f158`)
 
 **Files:** `apps/order/src/ports/{order-repository,pricing,idempotency-store}.port.ts`
 
-A "port" here is just an `abstract class` with no implementation — it
-exists purely so the service layer can depend on *an interface*, not a
-concrete TypeORM/Redis/HTTP detail. This is the **Ports & Adapters**
-pattern documented in `docs/lld/00-conventions.md`. Concretely:
+"Port" ở đây chỉ là một `abstract class` (class trừu tượng, không có
+implementation cụ thể) — nó tồn tại để tầng service chỉ phụ thuộc vào
+một interface, chứ không phụ thuộc trực tiếp vào chi tiết cụ thể của
+TypeORM/Redis/HTTP. Đây chính là pattern Ports & Adapters đã ghi trong
+`docs/lld/00-conventions.md`. Ví dụ cụ thể:
 
 ```ts
 export abstract class IOrderRepository {
@@ -105,105 +110,112 @@ export abstract class IOrderRepository {
 }
 ```
 
-Why an `abstract class` and not a TypeScript `interface`? NestJS's
-dependency injection works by looking up a *token* at runtime (a class,
-string, or symbol) — plain TS `interface`s don't exist at runtime (they're
-erased during compilation), so they can't be used as an injection token.
-An `abstract class` compiles to a real (if unusable-on-its-own) JS class,
-so it *can* be used as a token: `{ provide: IOrderRepository, useClass: OrderRepository }`.
+**Tại sao dùng `abstract class` mà không dùng `interface` của TypeScript?**
+Dependency Injection (DI) của NestJS hoạt động bằng cách tra cứu một
+token lúc runtime (có thể là class, string, hoặc symbol) — còn
+`interface` thuần của TS thì không tồn tại lúc runtime (bị *erased*,
+nghĩa là bị xoá hoàn toàn khi compile sang JS, không để lại dấu vết gì),
+nên không thể dùng làm injection token được. Một `abstract class` thì
+compile ra một class JS thật (dù không dùng trực tiếp được vì nó
+abstract), nên dùng được làm token:
+`{ provide: IOrderRepository, useClass: OrderRepository }`.
 
-The **why bother** with this indirection at all (rather than injecting
-`OrderRepository` directly): so `OrderService`'s unit tests
-(`order.service.spec.ts`) can pass in a hand-written fake object
-(`{ createOrder: jest.fn(), findById: jest.fn() }`) instead of needing a
-real Postgres/Redis connection. The service code never imports
-`typeorm` or `ioredis` directly — only the adapters do.
+**Tại sao phải thêm một lớp gián tiếp này** thay vì inject thẳng
+`OrderRepository`: để unit test của `OrderService`
+(`order.service.spec.ts`) có thể truyền vào một object giả tự viết tay
+(ví dụ `{ createOrder: jest.fn(), findById: jest.fn() }`) thay vì phải
+có kết nối Postgres/Redis thật. Code của service không bao giờ import
+`typeorm` hay `ioredis` trực tiếp — chỉ có các adapter mới làm việc đó.
 
-## Step 4 — Adapters + Repository (`c6b78b7`)
+## Bước 4 — Adapters + Repository (`c6b78b7`)
 
-**Files:** `apps/order/src/adapters/{pricing-stub,redis-idempotency}.adapter.ts`, `apps/order/src/repositories/order.repository.ts`, plus `ioredis` added to `package.json`
+**Files:** `apps/order/src/adapters/{pricing-stub,redis-idempotency}.adapter.ts`, `apps/order/src/repositories/order.repository.ts`, cộng thêm `ioredis` được thêm vào `package.json`
 
-These are the concrete implementations of the ports above.
+Đây là phần implementation cụ thể cho các port ở bước trên.
 
-- **`OrderRepository`** — the only place that imports `DataSource` from
-  `typeorm`. `dataSource.transaction(async (manager) => {...})` wraps the
-  three inserts (sender `Customer`, recipient `Customer`, `ShipmentOrder`,
-  `Parcel[]`) in **one DB transaction** — either all rows commit or none
-  do, satisfying `docs/lld/order-service.md`'s "writes SHIPMENT_ORDER +
-  PARCEL... in one DB transaction" requirement.
-- **`PricingStubAdapter`** — a deliberate placeholder. The real Pricing
-  Service (task **5.4**, not yet built) looks up a `RATECARD` row by
-  `(origin_zone_id, dest_zone_id, parcel_type)`. Since that table/logic
-  doesn't exist yet, this adapter just returns a fixed price per parcel
-  type (`parcel` → 5000 cents, `pallet` → 20000 cents) and a fixed
-  3-day SLA. **Nothing else in the codebase needs to change** when task
-  5.4 replaces this — `OrderModule` just swaps
-  `{ provide: IPricingPort, useClass: PricingStubAdapter }` for the real
-  adapter class.
-- **`RedisIdempotencyAdapter`** — wraps `ioredis`'s `get`/`set` behind
-  `IIdempotencyStore`. This is why `ioredis` was added as a new
-  dependency this task (approved, documented in
+- **`OrderRepository`** — nơi duy nhất import `DataSource` từ `typeorm`.
+  `dataSource.transaction(async (manager) => {...})` gói 4 lệnh insert
+  (Customer của sender, Customer của recipient, ShipmentOrder, Parcel[])
+  vào một transaction DB duy nhất — hoặc tất cả các dòng cùng commit,
+  hoặc không dòng nào commit cả, đúng với yêu cầu "ghi SHIPMENT_ORDER +
+  PARCEL ... trong một transaction" của `docs/lld/order-service.md`.
+- **`PricingStubAdapter`** — một placeholder có chủ đích. Pricing Service
+  thật (task **5.4**, chưa xây) sẽ tra bảng `RATECARD` theo
+  `(origin_zone_id, dest_zone_id, parcel_type)`. Vì bảng/logic đó chưa
+  tồn tại, adapter này tạm trả về giá cố định theo từng loại parcel
+  (`parcel` → 5000 cents, `pallet` → 20000 cents) và SLA cố định 3 ngày.
+  Không cần sửa gì thêm ở chỗ khác khi task 5.4 thay thế cái này —
+  `OrderModule` chỉ cần đổi
+  `{ provide: IPricingPort, useClass: PricingStubAdapter }` sang class
+  adapter thật.
+- **`RedisIdempotencyAdapter`** — bọc `get`/`set` của `ioredis` đằng sau
+  `IIdempotencyStore`. Đây là lý do `ioredis` được thêm làm dependency
+  mới ở task này (đã được bạn duyệt, ghi lại ở
   `docs/adrs/ADR-006-redis-client-selection.md`).
 
-## Step 5 — `OrderService` (`95e2098`)
+## Bước 5 — `OrderService` (`95e2098`)
 
 **Files:** `apps/order/src/order.service.ts` (+ `.spec.ts`)
 
-This is the actual business logic for UC-02 (Create Order). Reading
-`order.service.ts` top to bottom:
+Đây là business logic thật sự cho UC-02 (Create Order). Đọc
+`order.service.ts` từ trên xuống:
 
-1. **Idempotency check first** — before doing anything else, look up
-   `idem:order:{key}` in the store. If found, return the cached response
-   immediately (no Pricing call, no DB write) — this is what "replay
-   instead of reprocessing" means concretely.
-2. **Price/SLA loop** — for *each* parcel in the order, call
+1. **Kiểm tra idempotency trước tiên** — trước khi làm bất cứ gì, tra
+   khoá `idem:order:{key}` trong store. Nếu tìm thấy, trả về response đã
+   cache ngay lập tức (không gọi Pricing, không ghi DB) — đây chính là ý
+   nghĩa cụ thể của "replay thay vì xử lý lại."
+2. **Vòng lặp tính Price/SLA** — với từng parcel trong order, gọi
    `pricingPort.getPrice(originRegionCode, destRegionCode, parcelType)`.
-   If any call returns `null` (no matching rate card), throw
-   `NotFoundException` immediately — this becomes a `404` per the
-   contract. Otherwise accumulate `totalPriceCents` (sum across parcels)
-   and track the **latest** (worst-case) `slaExpectedDelivery` as the
-   order's single ETA. *(This "sum + max" rule for multi-parcel orders
-   isn't spelled out explicitly in the LLD — it's a reasonable reading of
-   "SHIPMENT_ORDER has one price_cents field but can contain N parcels of
-   different types," flagged here in case it needs revisiting.)*
-3. **Encrypt PII** — `encrypt()` from `@app/crypto` (built in Phase 4) is
-   called on `name`/`phone`/`address` before they're ever handed to the
-   repository, so plaintext PII never reaches the DB layer.
-4. **Persist** via `orderRepository.createOrder(...)` — this is the
-   mocked call in tests, the real transaction in production.
-5. **Cache the result**, then return it.
+   Nếu bất kỳ lần gọi nào trả về `null` (không có rate card khớp), throw
+   `NotFoundException` ngay — cái này sẽ trở thành lỗi `404` theo
+   contract. Ngược lại thì cộng dồn `totalPriceCents` (tổng giá qua các
+   parcel) và giữ lại `slaExpectedDelivery` muộn nhất (worst-case,
+   trường hợp xấu nhất) làm ETA chung của cả order. *(Luật "tổng + lấy
+   max" này cho order có nhiều parcel không được nói rõ trong LLD — đây
+   là cách hiểu hợp lý cho việc "SHIPMENT_ORDER chỉ có một field
+   price_cents nhưng có thể chứa N parcel khác loại nhau," ghi chú lại ở
+   đây phòng khi cần xem lại.)*
+3. **Mã hoá PII** — hàm `encrypt()` từ `@app/crypto` (xây ở Phase 4)
+   được gọi lên `name`/`phone`/`address` trước khi đưa cho repository,
+   để dữ liệu PII dạng plaintext (chưa mã hoá) không bao giờ chạm tới
+   tầng DB.
+4. **Lưu** qua `orderRepository.createOrder(...)` — đây là lời gọi bị
+   mock trong test, còn ở production thì là transaction thật.
+5. **Cache lại kết quả**, rồi trả về.
 
-The TDD spec (`order.service.spec.ts`) constructs `OrderService` directly
-with 3 hand-written mock objects (no NestJs `Test.createTestingModule` —
-not needed for a plain unit test with no DI container behavior to
-exercise) and covers: happy path (asserts the exact price/rateCardId
-passed to the repository — this is the BR-01 "price locked" check),
-Pricing-404, idempotent replay (no Pricing/repository calls at all), and
-cache-write-after-success.
+Spec TDD (`order.service.spec.ts`) khởi tạo `OrderService` trực tiếp
+bằng 3 object mock tự viết tay (không dùng `Test.createTestingModule`
+của NestJS — không cần thiết vì đây là unit test thuần, không cần chạy
+qua DI container thật). Test bao phủ: happy path (kiểm tra đúng
+giá/rateCardId được truyền cho repository — đây chính là phần kiểm
+chứng BR-01 "giá bị khoá"), Pricing trả về 404, replay khi trùng
+Idempotency-Key (không gọi Pricing/repository lần nào), và ghi cache
+sau khi thành công.
 
-One test-infra detail worth knowing: `@app/crypto`'s `encrypt()` throws
-if `process.env.PII_ENCRYPTION_KEY` isn't a 64-character hex string, so
-the spec sets `process.env.PII_ENCRYPTION_KEY = 'ab'.repeat(32)` in a
-`beforeAll` — a throwaway test key, unrelated to any real secret.
+Một chi tiết nhỏ về test đáng biết: hàm `encrypt()` của `@app/crypto`
+sẽ throw lỗi nếu `process.env.PII_ENCRYPTION_KEY` không phải chuỗi hex
+64 ký tự, nên spec set `process.env.PII_ENCRYPTION_KEY = 'ab'.repeat(32)`
+trong `beforeAll` — chỉ là key giả dùng cho test, dùng xong bỏ đi
+(*throwaway*, không cần giữ lại), không liên quan gì tới bí mật thật.
 
-## Step 6 — Controller + Module wiring (`f338233`)
+## Bước 6 — Controller + Module wiring (`f338233`)
 
 **Files:** `apps/order/src/order.controller.ts` (+ `.spec.ts`), `order.module.ts`, `apps/order/src/app.module.ts`
 
-- **`OrderController`** is intentionally thin — `create()` is a
-  one-line delegation to `orderService.createOrder(dto, idempotencyKey)`.
-  The `@IdempotencyKey()` decorator (built in Phase 4,
-  `libs/dtos/src/idempotency-key.decorator.ts`) extracts and validates
-  the header, throwing `400` if it's missing — the controller doesn't
-  need its own logic for that.
-- `quote()` calls `pricingPort` **directly** (not through
-  `OrderService`) — per `docs/lld/order-service.md`, `GET /orders/{id}/quote`
-  is described as "nothing persisted," a pure passthrough preview, so
-  routing it through the order-creation service would add an unnecessary
-  hop.
-- **`OrderModule`** is where the abstract ports actually get bound to
-  concrete classes — this is the one file where you can see the whole
-  Ports & Adapters wiring at a glance:
+- **`OrderController`** cố tình viết mỏng (thin) — `create()` chỉ là
+  một dòng, giao thẳng cho `orderService.createOrder(dto, idempotencyKey)`.
+  Decorator `@IdempotencyKey()` (xây từ Phase 4,
+  `libs/dtos/src/idempotency-key.decorator.ts`) tự lấy và kiểm tra
+  header đó, tự throw lỗi `400` nếu thiếu — controller không cần viết
+  logic riêng cho việc này.
+- `quote()` gọi `pricingPort` trực tiếp (không đi qua `OrderService`) —
+  vì theo `docs/lld/order-service.md`, `GET /orders/{id}/quote` được mô
+  tả là "không lưu gì cả," chỉ là một bản xem trước đi thẳng qua, nên
+  nếu route nó qua service tạo order sẽ chỉ tạo thêm một bước trung gian
+  không cần thiết.
+- **`OrderModule`** là nơi các port trừu tượng thực sự được gắn với
+  class cụ thể — đây là file duy nhất nhìn vào là thấy hết toàn bộ
+  wiring của Ports & Adapters:
   ```ts
   providers: [
     OrderService,
@@ -213,18 +225,18 @@ the spec sets `process.env.PII_ENCRYPTION_KEY = 'ab'.repeat(32)` in a
     { provide: REDIS_CLIENT, useFactory: () => new Redis({...}) },
   ],
   ```
-- `app.module.ts` gained one line: the three new entity classes added to
-  the existing `TypeOrmModule.forRoot({ entities: [...] })` call, so
-  TypeORM knows about them at bootstrap. `OrderModule` is imported
-  alongside it.
+- `app.module.ts` chỉ thêm đúng 1 dòng: 3 entity class mới được thêm
+  vào lời gọi `TypeOrmModule.forRoot({ entities: [...] })` đã có sẵn,
+  để TypeORM biết về chúng lúc khởi động. `OrderModule` cũng được import
+  kèm theo.
 
 ---
 
-## Why the commits are split this way
+## Tại sao chia commit theo cách này
 
-Each commit is one reviewable layer, in dependency order (entities have
-no dependents yet, so they come first; the controller depends on
-everything else, so it comes last). This makes it possible to review
-"does the DB mapping look right?" independently from "does the business
-logic look right?" independently from "is the wiring correct?" — rather
-than reviewing all four concerns mixed into a single diff.
+Mỗi commit là một layer có thể review độc lập, theo đúng thứ tự phụ
+thuộc — entities chưa ai phụ thuộc vào nên đứng đầu tiên; controller
+phụ thuộc vào mọi thứ khác nên đứng cuối cùng. Cách chia này giúp bạn
+review riêng từng câu hỏi: "mapping DB có đúng không?" tách biệt với
+"business logic có đúng không?" tách biệt với "wiring có đúng không?" —
+thay vì phải review cả 4 mối quan tâm trộn chung trong một diff.
