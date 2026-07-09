@@ -6,6 +6,14 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-09
 
 ### Done
+- Completed task **5.4** (Pricing Service: rate-card matrix + Order-to-Pricing sync, `docs/03-phases.md`):
+  - **Schema fix** (confirmed with user): `RATECARD` had no column to compute `PARCEL.sla_expected_delivery` from, despite `docs/01-ERD.md` describing that field as "computed from RATECARD lookup" — added `sla_days INT NOT NULL CHECK (sla_days > 0)` to `db/init-db.sql`'s `shipping_pricing_db.RATECARD`, updated `docs/01-ERD.md`, corrected a stale "mutate-in-place, one row per lane × type" description in `docs/lld/pricing-service.md` to match the schema's actual `effective_from`/`effective_to` versioning columns.
+  - Updated `generate_seed.py` to generate `sla_days` per rate card and derive each seeded order's `expected_delivery_at` from it; regenerated `db/seed.sql`.
+  - **Integration gap fix** (confirmed with user): `POST /orders`'s `sender`/`recipient` only carry `region_code`, but `RATECARD` keys off `zone_id` (owned by Hub Service, not yet built — task 6.2). Added a read-only `Zone` entity + new `network` TypeORM connection (`shipping_network_db`) purely to resolve `region_code → zone_id`; `IPricingPort`'s signature and `CreateOrderDto` stayed unchanged.
+  - Added `RateCard` entity (`apps/order/src/entities/rate-card.entity.ts`) and `RateCardPricingAdapter implements IPricingPort` (`apps/order/src/adapters/rate-card-pricing.adapter.ts`): resolves region codes to zone ids, queries the currently-effective `RATECARD` row for `(origin_zone_id, dest_zone_id, parcel_type)`, returns price/SLA or `null`.
+  - Wired into `order.module.ts` in place of task 5.1's `PricingStubAdapter`, which is now **deleted** (no dead code).
+  - TDD: 4 new tests (happy path, unresolvable region_code, no matching rate card, effective-date query condition), all written and confirmed red before implementation. 67/67 total passing; `pnpm build`/`pnpm lint` clean. Committed as 3 logical pieces (`2a188a9` schema/ERD/seed, `27e0e41` entities/connection, `cf874dc` adapter/wiring/stub removal).
+  - **Live-verified** (not just unit tests): reseeded `shipping_postgres` from scratch (`docker compose down -v && up -d`), ran `order` for real, confirmed `POST /orders` with `REG-100`/`REG-101` returns the actual seeded price/SLA (not the old stub's fixed values), unresolvable `region_code` 404s, and `GET /orders/:id/quote` matches a second lane.
 - Completed task **5.3** (Terminal exception states + RTS flags, `docs/03-phases.md`):
   - Extended `ParcelStateMachine` (`apps/order/src/domain/parcel-state-machine.ts`) with the transitions task 5.2 deliberately left out:
     - **Misrouted** (BR-02, second half): `MISROUTED` event blocks the forward flow from `InTransit`/`InHub` into `Misrouted`; `HUB_RECEIVE`/`ARRIVED_AT_HUB` resume forward flow back to `InHub` once corrected — matches BR-02's "transient state" design.
@@ -19,11 +27,13 @@ End of day, copy the "Done" bullets straight into your report.
   - Post-wrap code review caught a real gap: `DELIVERY_FAILED` (a valid `TRACKING_EVENT.event_type`) had no `TRANSITIONS` table entry, so `ParcelStateMachine.transition()` would throw on it even though a failed delivery attempt doesn't change `PARCEL.state` — this would've forced a future event-replay/projection consumer (task 5.6) to filter `DELIVERY_FAILED` out before folding over a parcel's events. Added a self-transition (`OutForDelivery` + `DELIVERY_FAILED` → `OutForDelivery`); 1 new test, 63/63 total passing (`4282fd1`). Also verified `ParcelState.OUT_FOR_DELIVERY`'s `'OutForDelivery'` string matches `db/init-db.sql`'s `CHECK` constraint exactly — no drift.
 
 ### Decisions / open questions
+- Confirmed with the user: added `sla_days` to `RATECARD` (schema change) rather than leaving `PARCEL.sla_expected_delivery`'s computation undefined — a real gap in the original schema, not a deferred/open item.
+- Confirmed with the user: resolved the `region_code`→`zone_id` gap via a new read-only `network` TypeORM connection reading Hub Service's `ZONE` table directly, rather than changing `IPricingPort`'s signature or `POST /orders`'s API contract (`CreateOrderDto`). Order/Pricing never writes to this schema; Hub Service (task 6.2) remains its sole owner/writer.
 - Confirmed with the user: code comments must never cite `docs/*.md` (or `TASKS.md`/`IMPLEMENTATION_CHECKLIST.md`) paths, since the GitLab `supporter-review` remote strips `docs/`/`.claude/`/`.gemini/` before every push — such comments become dangling references there. BR-XX/UC-XX/ADR IDs are fine to keep (portable identifiers, not file paths).
 - Confirmed with the user: `Damaged` has no documented trigger in this scoped slice (no BR, no `event_type`, not in the "Deferred" list) — implemented as a generic, always-available administrative transition rather than inventing a business rule for it.
 
 ### Next
-- Task **5.4** Pricing Service: rate-card matrix + Order-to-Pricing sync (`docs/03-phases.md`), via `/begin-task 5.4`.
+- Task **5.5** Tracking Service: append-only event store + consumers (`docs/03-phases.md`), via `/begin-task 5.5`.
 
 - Manually ran the `order` app end-to-end (`docker compose up -d` +
   `PII_ENCRYPTION_KEY=... npx nest start order` + `curl`) to "test around"

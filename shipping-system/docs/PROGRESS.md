@@ -10,53 +10,115 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.4` Pricing Service: rate-card matrix + Order-to-Pricing
-  sync. Run `/begin-task 5.4` to start it.
+- **Next task:** `5.5` Tracking Service: append-only event store +
+  consumers. Run `/begin-task 5.5` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.3` (Terminal exception states + RTS flags) complete,
-  committed as one commit (`4d0a23f`), extending `ParcelStateMachine`
-  with: Misrouted in/out (BR-02, transient state), `markLostSuspected`
-  (passive SLA-timeout detection), `applyRts` (BR-04 direction flip),
-  `markDamaged` (generic administrative action, no documented trigger
-  exists for it in this scoped slice). Task `5.2` (Parcel State Machine +
-  guard conditions) complete, committed as 2 logical commits (`b37e8a2`
-  shared `BusinessRuleException` in `libs/dtos`, `2ff2075`
-  `ParcelStateMachine` + BR-02 guard in `apps/order/src/domain/`). Task
-  `5.1` (Order Service: entities, DTOs, order-creation logic) complete,
+- **State:** Task `5.4` (Pricing Service: rate-card matrix +
+  Order-to-Pricing sync) complete, committed as 3 logical commits
+  (`2a188a9` schema/ERD/seed regen, `27e0e41` `RateCard`/`Zone` entities +
+  `network` connection, `cf874dc` `RateCardPricingAdapter` + wiring +
+  `PricingStubAdapter` removal). BR-01's price lookup is now real:
+  resolves `region_code → zone_id` via a read-only `Zone` mapping, queries
+  the currently-effective `RATECARD` row, returns `null` (→ `404`) when
+  either doesn't resolve. `RATECARD` gained an `sla_days` column (a real
+  schema gap, fixed — see Log). Task `5.3` (Terminal exception states +
+  RTS flags) complete, committed as one commit (`4d0a23f` + a post-review
+  fix `4282fd1`), extending `ParcelStateMachine` with: Misrouted in/out
+  (BR-02, transient state), `markLostSuspected` (passive SLA-timeout
+  detection), `applyRts` (BR-04 direction flip), `markDamaged` (generic
+  administrative action, no documented trigger exists for it in this
+  scoped slice), and a `DELIVERY_FAILED` self-transition. Task `5.2`
+  (Parcel State Machine + guard conditions) complete, committed as 2
+  logical commits (`b37e8a2` shared `BusinessRuleException` in
+  `libs/dtos`, `2ff2075` `ParcelStateMachine` + BR-02 guard). Task `5.1`
+  (Order Service: entities, DTOs, order-creation logic) complete,
   committed as 6 logical commits (`b5a2abe` entities, `aff2516` DTO,
   `103f158` ports, `c6b78b7` adapters/repository, `95e2098` service,
   `f338233` controller/module wiring), preceded by `759cb4c` (ADR-006 for
-  `ioredis`). `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
-  `OrderService.createOrder` (UC-02, price/ETA locked via a stubbed
-  `IPricingPort` pending task 5.4's real `RATECARD` lookup), thin
-  `OrderController` (`POST /orders`, `GET /orders/:id/quote`), Redis-backed
-  Idempotency-Key replay, and the full `ParcelStateMachine` (happy-path +
-  BR-02 guard + Misrouted/Lost/RTS/Damaged + `DELIVERY_FAILED`
-  self-transition). `pnpm build`/`pnpm lint`/`pnpm test` all green (63
-  tests: the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2 + 26 from 5.3).
-  **Post-task manual verification** (`1689a2b`, `e88fe50`): running
+  `ioredis`). `pnpm build`/`pnpm lint`/`pnpm test` all green (67 tests:
+  the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2 + 26 from 5.3 + 4 from
+  5.4). **Post-task manual verification** (`1689a2b`, `e88fe50`): running
   `order` end-to-end against the live Postgres/Redis found 2 real bugs
   invisible to unit tests — entity table names didn't match the live
   schema's lowercase names, and `ValidationPipe` was never registered
-  globally. Both fixed; see the 2026-07-09 "Post-task manual
-  verification" log entry for detail. Also, at user request (`f557713`):
-  every code comment across `apps/`+`libs/` that referenced a `docs/*.md`
-  path was rewritten to be self-contained — those paths don't exist on
-  the GitLab code-only remote.
+  globally. Both fixed. Also, at user request (`f557713`): every code
+  comment across `apps/`+`libs/` that referenced a `docs/*.md` path was
+  rewritten to be self-contained — those paths don't exist on the GitLab
+  code-only remote.
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
   connection, not its own app — see `apps/order/src/app.module.ts` and
-  `docs/lld/pricing-service.md`). `ParcelStateMachine` is now feature-
-  complete for Order-owned FSM logic (happy path, BR-02 both halves,
-  BR-04's direction flip, Lost, Damaged) — still a pure module with no
-  REST endpoint or NATS wiring; those land in tasks 5.5/5.6. Courier
-  Service's own side of BR-04 (counting 3 failed `DELIVERY_FAILED`
-  attempts and publishing `parcel.rts`) is task **6.1**, not yet built.
-  Known open items carried forward unchanged: `docs/lld/order-service.md`'s
-  "abandoned prepaid payment" gap, and `Damaged`'s complete lack of a
-  documented trigger event (no task assigned to either).
+  `docs/lld/pricing-service.md`), now joined by a third, read-only
+  `network` connection (Hub Service's `ZONE` table — Order/Pricing never
+  writes there; Hub Service, task 6.2, remains its sole owner/writer).
+  `ParcelStateMachine` is feature-complete for Order-owned FSM logic —
+  still a pure module with no REST endpoint or NATS wiring; those land in
+  tasks 5.5/5.6. Courier Service's own side of BR-04 (counting 3 failed
+  `DELIVERY_FAILED` attempts and publishing `parcel.rts`) is task **6.1**,
+  not yet built. Known open items carried forward unchanged:
+  `docs/lld/order-service.md`'s "abandoned prepaid payment" gap, and
+  `Damaged`'s complete lack of a documented trigger event (no task
+  assigned to either).
 
 ## Log
+
+### 2026-07-09 — Task 5.4: Pricing Service rate-card matrix + Order-to-Pricing sync
+- **Schema fix** (confirmed with user before implementing): `docs/01-ERD.md`
+  describes `PARCEL.sla_expected_delivery` as "computed from RATECARD
+  lookup at order creation," but `RATECARD` had no column to compute it
+  from — a genuine gap, not a deferred item. Added
+  `sla_days INT NOT NULL CHECK (sla_days > 0)` to `db/init-db.sql`'s
+  `shipping_pricing_db.RATECARD`, updated `docs/01-ERD.md`, and corrected
+  a stale "mutate-in-place, one row per lane × type" description in
+  `docs/lld/pricing-service.md` that predated the schema's actual
+  `effective_from`/`effective_to` versioning columns.
+- Updated `generate_seed.py` to generate `sla_days` per rate card
+  (`parcel` 2–5 days, `pallet` 4–7 days) and derive each generated
+  order's `expected_delivery_at` from its rate card's `sla_days` instead
+  of an unrelated random 1–3 day value. Regenerated `db/seed.sql`
+  (`2a188a9`).
+- **Integration gap fix** (confirmed with user before implementing):
+  `POST /orders`'s `sender`/`recipient` only carry `region_code`, but
+  `RATECARD` (and Pricing's documented internal contract) key off
+  `zone_id` — owned by Hub/Sortation Service (`shipping_network_db.ZONE`),
+  not yet built (task 6.2). Added a read-only `Zone` entity mapped onto
+  `ZONE`, via a new `network` TypeORM connection (`27e0e41`) — used only
+  to resolve `region_code → zone_id`; `IPricingPort`'s signature and
+  `CreateOrderDto`'s contract stayed unchanged, so nothing built in task
+  5.1 needed touching.
+- Added `RateCard` entity (`apps/order/src/entities/rate-card.entity.ts`)
+  and `RateCardPricingAdapter implements IPricingPort`
+  (`apps/order/src/adapters/rate-card-pricing.adapter.ts`): resolves
+  both region codes to zone ids, queries the currently-effective
+  `RATECARD` row (`effective_from <= now`, `effective_to` null or in the
+  future) for `(origin_zone_id, dest_zone_id, parcel_type)`, returns
+  `{ rateCardId, priceCents, slaExpectedDelivery }` or `null`. Wired into
+  `order.module.ts` in place of task 5.1's `PricingStubAdapter`, which is
+  now deleted (`cf874dc`).
+- TDD: 4 new tests (happy path, unresolvable region_code, zones resolve
+  but no matching rate card, query includes the effective-date
+  condition), all written and confirmed red before implementation.
+  67/67 total passing; `pnpm build`/`pnpm lint` clean.
+- **Live-verified**, per the standing practice from tasks 5.1/5.2:
+  reseeded `shipping_postgres` from scratch (`docker compose down -v &&
+  up -d`, reseed), ran `order` for real, confirmed `POST /orders` with
+  `REG-100`/`REG-101` returns the actual seeded price (`2809` cents) and
+  a matching 2-day ETA — not the old stub's fixed `5000`/3-days.
+  Unresolvable `region_code` correctly 404s; `GET /orders/:id/quote`
+  confirmed on a second lane (pallet, `8204` cents/6-day ETA). Checked
+  the DB rows directly, not just HTTP responses.
+
+### Decisions / open questions
+- Confirmed with the user: `sla_days` added to `RATECARD` — a real
+  schema gap (the ERD's own description implied the field should exist),
+  not a deferred/open item.
+- Confirmed with the user: the `region_code → zone_id` resolution gap is
+  solved via a read-only cross-schema connection (`network`) rather than
+  changing `IPricingPort`'s signature or `POST /orders`'s API contract.
+  This is a one-way read dependency from Order/Pricing onto Hub-owned
+  data — acceptable since it's read-only and Hub Service hasn't been
+  built yet to own the lookup itself; worth revisiting once task 6.2
+  exists, in case Hub Service should own resolving this instead.
 
 ### 2026-07-09 — Task 5.3: Terminal exception states + RTS flags
 - Extended `ParcelStateMachine` (`apps/order/src/domain/parcel-state-machine.ts`),
