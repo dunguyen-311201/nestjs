@@ -18,12 +18,20 @@ End of day, copy the "Done" bullets straight into your report.
   - TDD: 14 new specs across `create-order.dto.spec.ts`, `order.service.spec.ts` (price lock, Pricing-404, idempotent replay, cache-write), `order.controller.spec.ts` — all written red-first. Full suite: 23/23 passing; `pnpm build`/`pnpm lint` clean.
   - Known gap carried forward (not a regression): `POST /orders/{id}/checkout` abandoned-payment handling is still the documented open item in `docs/lld/order-service.md`; untouched by this task.
 
+- Completed task **5.2** (Parcel State Machine + guard conditions, `docs/03-phases.md`):
+  - Added shared `BusinessRuleException` in `libs/dtos/src/business-rule.exception.ts` (extends `UnprocessableEntityException`, `{ rule, message }` per `docs/lld/00-conventions.md`'s error envelope) — one class reused across every service's business-rule guards, not a per-service subclass.
+  - Added `ParcelStateMachine.transition(currentState, eventType)` in `apps/order/src/domain/parcel-state-machine.ts`: a pure lookup table for the happy-path forward transitions (`Created → InTransit → InHub → InTransit → InHub → OutForDelivery → Delivered`) plus the **BR-02** guard (`Out_for_Delivery` blocked unless arriving from `InHub`, throws `BusinessRuleException('BR-02', ...)`).
+  - TDD: 14 new specs (`business-rule.exception.spec.ts` — 3; `parcel-state-machine.spec.ts` — 11: every happy-path transition, BR-02 guard-failure from every non-`InHub` state, and one generic invalid-transition case) — all written red-first. Full suite: 37/37 passing; `pnpm build`/`pnpm lint` clean.
+  - **Deliberate scope boundary**: `Misrouted`/`Lost`/`Damaged`/RTS transitions (BR-04, second half of BR-02) are explicitly NOT implemented here — task 5.3's job, since they need cross-service hub-identity data (`route_id` → Hub Service) this pure FSM module doesn't have.
+  - Caught and fixed a mislabeling during implementation: initially tagged *every* invalid transition as `BR-02`, which would have been wrong (BR-02 only covers the `Out_for_Delivery` case) — a generic invalid transition (e.g. `Delivered` + `PICKUP`) now throws a plain `Error`, not a mislabeled BR.
+
 ### Decisions / open questions
 - Confirmed with the user that `ioredis` is approved as a new dependency to satisfy the Idempotency-Key and caching requirements for task 5.1 and future tasks.
 - BR-01's "no post-creation edit" clause is enforced structurally (no `PATCH /orders/{id}` route exists, would be 405) rather than via a runtime `422` guard — so no guard-failure test was added for it; confirmed this isn't a coverage gap, just a different enforcement mechanism than a Business-Rule-Guard exception.
+- Confirmed with the user: `BusinessRuleException` belongs in `libs/dtos` (shared across services) rather than staying local to `apps/order`, per `docs/lld/00-conventions.md`'s "one shared exception class... not a new pattern per service" — touches a second project beyond `apps/order`, flagged and approved before implementing.
 
 ### Next
-- Task **5.2** Parcel State Machine + guard conditions (`docs/03-phases.md`), via `/begin-task 5.2`.
+- Task **5.3** Terminal exception states (`Partially_Delivered`, `Lost`, `Damaged`, `Misrouted`) + RTS flags (`docs/03-phases.md`), via `/begin-task 5.3`.
 
 ## 2026-07-08
 

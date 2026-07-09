@@ -10,29 +10,70 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.2` Parcel State Machine + guard conditions.
-  Run `/begin-task 5.2` to start it.
+- **Next task:** `5.3` Terminal exception states (`Partially_Delivered`,
+  `Lost`, `Damaged`, `Misrouted`) + RTS flags. Run `/begin-task 5.3` to
+  start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.1` (Order Service: entities, DTOs, order-creation logic)
-  complete, committed as 6 logical commits (`b5a2abe` entities,
-  `aff2516` DTO, `103f158` ports, `c6b78b7` adapters/repository,
-  `95e2098` service, `f338233` controller/module wiring), preceded by
-  `759cb4c` (ADR-006 for `ioredis`). `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
+- **State:** Task `5.2` (Parcel State Machine + guard conditions) complete,
+  committed as 2 logical commits (`b37e8a2` shared `BusinessRuleException`
+  in `libs/dtos`, `2ff2075` `ParcelStateMachine` + BR-02 guard in
+  `apps/order/src/domain/`). Task `5.1` (Order Service: entities, DTOs,
+  order-creation logic) complete, committed as 6 logical commits
+  (`b5a2abe` entities, `aff2516` DTO, `103f158` ports, `c6b78b7`
+  adapters/repository, `95e2098` service, `f338233` controller/module
+  wiring), preceded by `759cb4c` (ADR-006 for `ioredis`).
+  `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
   `OrderService.createOrder` (UC-02, price/ETA locked via a stubbed
   `IPricingPort` pending task 5.4's real `RATECARD` lookup), thin
   `OrderController` (`POST /orders`, `GET /orders/:id/quote`), Redis-backed
-  Idempotency-Key replay. `pnpm build`/`pnpm lint`/`pnpm test` all green
-  (23 tests: the 9 from Phase 4 + 14 new for 5.1).
+  Idempotency-Key replay, and `ParcelStateMachine.transition()` (happy-path
+  transitions + BR-02 guard). `pnpm build`/`pnpm lint`/`pnpm test` all
+  green (37 tests: the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2).
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
   connection, not its own app — see `apps/order/src/app.module.ts` and
-  `docs/lld/pricing-service.md`). `Parcel.state`/`.direction` columns exist
-  (matching `db/init-db.sql`) but the actual state-machine guards are task
-  5.2's job — 5.1 only ever writes `Created`/`Forward` at creation time.
-  Known open item carried forward unchanged: `docs/lld/order-service.md`'s
-  "abandoned prepaid payment" gap (no task assigned yet).
+  `docs/lld/pricing-service.md`). `ParcelStateMachine` is a pure module —
+  no REST endpoint, no NATS wiring yet; those land in tasks 5.3/5.5/5.6.
+  It deliberately does NOT implement `Misrouted`/`Lost`/`Damaged`/RTS
+  transitions (BR-04, second half of BR-02) — that's task 5.3's job,
+  since it needs cross-service hub-identity data (`route_id` → Hub
+  Service) this module doesn't have. Known open item carried forward
+  unchanged: `docs/lld/order-service.md`'s "abandoned prepaid payment"
+  gap (no task assigned yet).
 
 ## Log
+
+### 2026-07-09 — Task 5.2: Parcel State Machine + guard conditions
+- Added shared `BusinessRuleException` in `libs/dtos/src/business-rule.exception.ts`
+  (extends `UnprocessableEntityException`, `{ rule, message }` per
+  `docs/lld/00-conventions.md`'s error envelope) — confirmed with the user
+  first, since this touches a second project (`libs/dtos`) beyond
+  `apps/order`, per `docs/lld/00-conventions.md`'s "one shared exception
+  class... not a new pattern per service" (`b37e8a2`).
+- Added `ParcelStateMachine.transition(currentState, eventType)` in
+  `apps/order/src/domain/parcel-state-machine.ts`: a pure lookup table
+  covering the happy-path forward transitions (`Created → InTransit →
+  InHub → InTransit → InHub → OutForDelivery → Delivered`) plus the
+  **BR-02** guard (`Out_for_Delivery` blocked unless arriving from
+  `InHub`) (`2ff2075`).
+- TDD throughout: `business-rule.exception.spec.ts` (3 tests) and
+  `parcel-state-machine.spec.ts` (11 tests: every happy-path transition,
+  BR-02 guard-failure from every non-`InHub` state, one generic
+  invalid-transition case) — all written and confirmed red before
+  implementation. 14 new tests, 37/37 total passing; `pnpm build`/`pnpm
+  lint` clean.
+- **Deliberate scope boundary**: `Misrouted`/`Lost`/`Damaged`/RTS
+  transitions (BR-04, second half of BR-02) are explicitly out of scope
+  here — task 5.3's job, since determining "wrong hub" needs
+  cross-service hub-identity data (`route_id` → Hub Service) this pure
+  module doesn't have. No REST endpoint or NATS wiring yet either — those
+  land in tasks 5.3/5.5/5.6.
+- **Self-caught mistake, fixed before commit**: an early draft tagged
+  *every* invalid transition as `BR-02`, which would have mislabeled
+  unrelated FSM edges (e.g. `Delivered` + `PICKUP`) under a rule that
+  doesn't describe them. Fixed so only the documented `Out_for_Delivery`
+  case throws `BusinessRuleException('BR-02', ...)`; any other
+  undefined transition throws a plain `Error` instead.
 
 ### 2026-07-09 — Task 5.1: Order Service entities, DTOs, order-creation logic
 - Added `ioredis` as a new dependency (approved by user) to back the
