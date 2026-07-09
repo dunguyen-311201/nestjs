@@ -31,6 +31,11 @@ describe('ParcelStateMachine', () => {
         TrackingEventType.DELIVERED,
         ParcelState.DELIVERED,
       ],
+      [
+        ParcelState.OUT_FOR_DELIVERY,
+        TrackingEventType.DELIVERY_FAILED,
+        ParcelState.OUT_FOR_DELIVERY,
+      ],
     ])(
       'transitions %s --%s--> %s',
       (from: ParcelState, event: TrackingEventType, to: ParcelState) => {

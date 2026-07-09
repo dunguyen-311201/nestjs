@@ -25,8 +25,12 @@ function key(state: ParcelState, event: TrackingEventType): TransitionKey {
 // that path: a wrong-hub scan blocks the forward flow and parks the parcel
 // in Misrouted; once corrected, the same hub-arrival events used by the
 // forward flow (HUB_RECEIVE/ARRIVED_AT_HUB) resume it from Misrouted back
-// into InHub. DELIVERY_FAILED/RTS and Lost/Damaged are handled by the
-// separate methods below - they aren't scan-event-driven the same way.
+// into InHub. RTS and Lost/Damaged are handled by the separate methods
+// below - they aren't scan-event-driven the same way. DELIVERY_FAILED is
+// a self-transition (state doesn't change until the 3rd failure triggers
+// applyRts) so that an event-replay/projection consumer can fold over
+// every TRACKING_EVENT row, including DELIVERY_FAILED ones, without
+// having to filter them out first.
 const TRANSITIONS: Partial<Record<TransitionKey, ParcelState>> = {
   [key(ParcelState.CREATED, TrackingEventType.PICKUP)]: ParcelState.IN_TRANSIT,
   [key(ParcelState.IN_TRANSIT, TrackingEventType.HUB_RECEIVE)]:
@@ -39,6 +43,8 @@ const TRANSITIONS: Partial<Record<TransitionKey, ParcelState>> = {
     ParcelState.OUT_FOR_DELIVERY,
   [key(ParcelState.OUT_FOR_DELIVERY, TrackingEventType.DELIVERED)]:
     ParcelState.DELIVERED,
+  [key(ParcelState.OUT_FOR_DELIVERY, TrackingEventType.DELIVERY_FAILED)]:
+    ParcelState.OUT_FOR_DELIVERY,
   [key(ParcelState.IN_TRANSIT, TrackingEventType.MISROUTED)]:
     ParcelState.MISROUTED,
   [key(ParcelState.IN_HUB, TrackingEventType.MISROUTED)]: ParcelState.MISROUTED,
