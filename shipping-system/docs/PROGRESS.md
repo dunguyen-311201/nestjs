@@ -10,44 +10,108 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.3` Terminal exception states (`Partially_Delivered`,
-  `Lost`, `Damaged`, `Misrouted`) + RTS flags. Run `/begin-task 5.3` to
-  start it.
+- **Next task:** `5.4` Pricing Service: rate-card matrix + Order-to-Pricing
+  sync. Run `/begin-task 5.4` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.2` (Parcel State Machine + guard conditions) complete,
-  committed as 2 logical commits (`b37e8a2` shared `BusinessRuleException`
-  in `libs/dtos`, `2ff2075` `ParcelStateMachine` + BR-02 guard in
-  `apps/order/src/domain/`). Task `5.1` (Order Service: entities, DTOs,
-  order-creation logic) complete, committed as 6 logical commits
-  (`b5a2abe` entities, `aff2516` DTO, `103f158` ports, `c6b78b7`
-  adapters/repository, `95e2098` service, `f338233` controller/module
-  wiring), preceded by `759cb4c` (ADR-006 for `ioredis`).
-  `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
+- **State:** Task `5.3` (Terminal exception states + RTS flags) complete,
+  committed as one commit (`4d0a23f`), extending `ParcelStateMachine`
+  with: Misrouted in/out (BR-02, transient state), `markLostSuspected`
+  (passive SLA-timeout detection), `applyRts` (BR-04 direction flip),
+  `markDamaged` (generic administrative action, no documented trigger
+  exists for it in this scoped slice). Task `5.2` (Parcel State Machine +
+  guard conditions) complete, committed as 2 logical commits (`b37e8a2`
+  shared `BusinessRuleException` in `libs/dtos`, `2ff2075`
+  `ParcelStateMachine` + BR-02 guard in `apps/order/src/domain/`). Task
+  `5.1` (Order Service: entities, DTOs, order-creation logic) complete,
+  committed as 6 logical commits (`b5a2abe` entities, `aff2516` DTO,
+  `103f158` ports, `c6b78b7` adapters/repository, `95e2098` service,
+  `f338233` controller/module wiring), preceded by `759cb4c` (ADR-006 for
+  `ioredis`). `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
   `OrderService.createOrder` (UC-02, price/ETA locked via a stubbed
   `IPricingPort` pending task 5.4's real `RATECARD` lookup), thin
   `OrderController` (`POST /orders`, `GET /orders/:id/quote`), Redis-backed
-  Idempotency-Key replay, and `ParcelStateMachine.transition()` (happy-path
-  transitions + BR-02 guard). `pnpm build`/`pnpm lint`/`pnpm test` all
-  green (37 tests: the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2).
+  Idempotency-Key replay, and the full `ParcelStateMachine` (happy-path +
+  BR-02 guard + Misrouted/Lost/RTS/Damaged). `pnpm build`/`pnpm lint`/
+  `pnpm test` all green (62 tests: the 9 from Phase 4 + 14 from 5.1 + 14
+  from 5.2 + 25 from 5.3).
   **Post-task manual verification** (`1689a2b`, `e88fe50`): running
   `order` end-to-end against the live Postgres/Redis found 2 real bugs
   invisible to unit tests — entity table names didn't match the live
   schema's lowercase names, and `ValidationPipe` was never registered
   globally. Both fixed; see the 2026-07-09 "Post-task manual
-  verification" log entry below for detail.
+  verification" log entry for detail. Also, at user request (`f557713`):
+  every code comment across `apps/`+`libs/` that referenced a `docs/*.md`
+  path was rewritten to be self-contained — those paths don't exist on
+  the GitLab code-only remote.
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
   connection, not its own app — see `apps/order/src/app.module.ts` and
-  `docs/lld/pricing-service.md`). `ParcelStateMachine` is a pure module —
-  no REST endpoint, no NATS wiring yet; those land in tasks 5.3/5.5/5.6.
-  It deliberately does NOT implement `Misrouted`/`Lost`/`Damaged`/RTS
-  transitions (BR-04, second half of BR-02) — that's task 5.3's job,
-  since it needs cross-service hub-identity data (`route_id` → Hub
-  Service) this module doesn't have. Known open item carried forward
-  unchanged: `docs/lld/order-service.md`'s "abandoned prepaid payment"
-  gap (no task assigned yet).
+  `docs/lld/pricing-service.md`). `ParcelStateMachine` is now feature-
+  complete for Order-owned FSM logic (happy path, BR-02 both halves,
+  BR-04's direction flip, Lost, Damaged) — still a pure module with no
+  REST endpoint or NATS wiring; those land in tasks 5.5/5.6. Courier
+  Service's own side of BR-04 (counting 3 failed `DELIVERY_FAILED`
+  attempts and publishing `parcel.rts`) is task **6.1**, not yet built.
+  Known open items carried forward unchanged: `docs/lld/order-service.md`'s
+  "abandoned prepaid payment" gap, and `Damaged`'s complete lack of a
+  documented trigger event (no task assigned to either).
 
 ## Log
+
+### 2026-07-09 — Task 5.3: Terminal exception states + RTS flags
+- Extended `ParcelStateMachine` (`apps/order/src/domain/parcel-state-machine.ts`),
+  built in task 5.2, with the transitions that task deliberately left out:
+  - **Misrouted** (BR-02, second half): `MISROUTED` event blocks the
+    forward flow from `InTransit`/`InHub`, parking the parcel in
+    `Misrouted`. It's transient — `HUB_RECEIVE`/`ARRIVED_AT_HUB` (the
+    same events used by the normal forward flow) resume it back into
+    `InHub` once Hub/Sortation applies a corrective re-route.
+  - **`markLostSuspected`**: a dedicated method rather than a
+    `TrackingEventType` table entry, since this is triggered by
+    Tracking's internal passive SLA-timeout sweep, not a real scan
+    event. Valid from any actively-moving state (`InTransit`, `InHub`,
+    `OutForDelivery`, `Misrouted`); rejects `Created` (never dispatched)
+    and the terminal states.
+  - **`applyRts`** (BR-04): flips `direction = Reverse_RTS` and resets
+    `state = InTransit`, valid only from `OutForDelivery`. This is a
+    defensive re-assertion, not BR-04's actual enforcement point —
+    Courier Service (task 6.1, not yet built) is the one that counts 3
+    consecutive `DELIVERY_FAILED` events and decides to call this.
+  - **`markDamaged`**: generic administrative transition, allowed from
+    any non-terminal state. No `TrackingEventType`/BR backs it — see
+    Decision below.
+  - `Delivered`/`Lost`/`Damaged` remain true terminal states throughout
+    — no outgoing transition is ever defined for them, so any further
+    event correctly throws.
+- TDD: 25 new tests (Misrouted in/out, `markLostSuspected` happy +
+  reject, `applyRts` happy + reject, `markDamaged` happy + reject,
+  terminal-state rejection of `transition()`), all written and
+  confirmed red before implementation. 62/62 total passing; `pnpm
+  build`/`pnpm lint` clean. One commit (`4d0a23f`) — small enough not to
+  need splitting the way task 5.1 was.
+- **Reviewed and fixed, at user request**: every code comment across
+  `apps/`+`libs/` that referenced a `docs/*.md` path (13 files total,
+  including 9 pre-existing Phase-4 files not touched this session) —
+  rewrote each to be self-contained, since those paths don't exist on
+  the GitLab `supporter-review` remote (`f557713`).
+- Added a verified "How to run/test" section to the root `README.md`
+  (previously doc-index only) with the actual `docker compose`/`pnpm`/
+  `curl` commands re-run to confirm they work, and fixed a stale
+  `ADR-001 through ADR-004` reference to `ADR-006` (`0a01e52`).
+
+### Decisions / open questions
+- Confirmed with the user: `Damaged` has zero documented trigger in this
+  scoped slice — no BR describes it, no `DAMAGED` value exists in
+  `TRACKING_EVENT.event_type`'s `CHECK` constraint, and it's not in the
+  "Deferred" list either. Implemented as a generic, always-available
+  administrative transition rather than inventing a business rule to
+  back it. Flagged as an open gap, not assigned to any task.
+- Confirmed with the user: code comments must never cite `docs/*.md` (or
+  `TASKS.md`/`IMPLEMENTATION_CHECKLIST.md`) file paths — the GitLab
+  `supporter-review` remote strips `docs/`/`.claude/`/`.gemini/` before
+  every push, so such references become dangling for reviewers there.
+  BR-XX/UC-XX/ADR IDs are fine to keep (portable identifiers, not file
+  paths) — saved as a standing rule for future sessions.
 
 ### 2026-07-09 — Post-task manual verification (tasks 5.1/5.2)
 - At user request, manually "tested around" after 5.1/5.2 were marked

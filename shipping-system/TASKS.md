@@ -6,6 +6,24 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-09
 
 ### Done
+- Completed task **5.3** (Terminal exception states + RTS flags, `docs/03-phases.md`):
+  - Extended `ParcelStateMachine` (`apps/order/src/domain/parcel-state-machine.ts`) with the transitions task 5.2 deliberately left out:
+    - **Misrouted** (BR-02, second half): `MISROUTED` event blocks the forward flow from `InTransit`/`InHub` into `Misrouted`; `HUB_RECEIVE`/`ARRIVED_AT_HUB` resume forward flow back to `InHub` once corrected — matches BR-02's "transient state" design.
+    - **`markLostSuspected`**: dedicated method (not a `TrackingEventType` entry) for Tracking's passive SLA-timeout sweep; valid from any actively-moving state, rejects `Created`/terminal states.
+    - **`applyRts`** (BR-04): flips `direction = Reverse_RTS`, resets `state = InTransit`, only valid from `Out_for_Delivery`; a defensive check, not BR-04's actual enforcement point (that's Courier Service, task 6.1, out of scope).
+    - **`markDamaged`**: generic administrative action, no BR/event backing it in this scoped slice (confirmed with user — no `DAMAGED` value exists in `TRACKING_EVENT.event_type`, no BR describes a trigger); allowed from any non-terminal state.
+  - `Delivered`/`Lost`/`Damaged` remain true terminal states — no transition out of them defined, so any further event throws.
+  - TDD: 25 new tests, all written and confirmed red before implementation. 62/62 total passing; `pnpm build`/`pnpm lint` clean. Single commit (`4d0a23f`) — small enough not to need splitting like 5.1.
+  - Reviewed and fixed, at user request: every code comment across `apps/`+`libs/` that referenced a `docs/*.md` path (13 files, including 9 pre-existing Phase-4 files) — those paths don't exist on the GitLab code-only remote, so they'd be dangling references for reviewers there. Rewrote each comment to be self-contained (`f557713`).
+  - Added a verified "How to run/test" section to the root `README.md` (was doc-index only) and fixed a stale `ADR-001 through ADR-004` reference to `ADR-006` (`0a01e52`).
+
+### Decisions / open questions
+- Confirmed with the user: code comments must never cite `docs/*.md` (or `TASKS.md`/`IMPLEMENTATION_CHECKLIST.md`) paths, since the GitLab `supporter-review` remote strips `docs/`/`.claude/`/`.gemini/` before every push — such comments become dangling references there. BR-XX/UC-XX/ADR IDs are fine to keep (portable identifiers, not file paths).
+- Confirmed with the user: `Damaged` has no documented trigger in this scoped slice (no BR, no `event_type`, not in the "Deferred" list) — implemented as a generic, always-available administrative transition rather than inventing a business rule for it.
+
+### Next
+- Task **5.4** Pricing Service: rate-card matrix + Order-to-Pricing sync (`docs/03-phases.md`), via `/begin-task 5.4`.
+
 - Manually ran the `order` app end-to-end (`docker compose up -d` +
   `PII_ENCRYPTION_KEY=... npx nest start order` + `curl`) to "test around"
   after tasks 5.1/5.2 were marked done, per user request. Found and fixed
