@@ -8,26 +8,65 @@
 
 ## Resume point
 
-- **Current phase:** Phase 5 — Core Backend (6.0d), not yet started. See
+- **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.1` Order Service — entities, DTOs, order-creation logic.
-  Run `/begin-task 5.1` to start it.
+- **Next task:** `5.2` Parcel State Machine + guard conditions.
+  Run `/begin-task 5.2` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Phase 4 (Project Setup) complete and committed (`ce6d072`
-  `feat: scaffold 8 apps with schema-scoped TypeORM + /health`). All 8 apps +
-  3 shared libs (`contracts`, `dtos`, `crypto`) scaffolded under NestJS
-  Standard Monorepo mode (`nest-cli.json` `projects` map, single root
-  `package.json` — kept deliberately, see `docs/03-phases.md` Phase 4 and
-  `docs/reference/phase-4-implementation-checklist.md`). `pnpm build` / `pnpm lint` / `pnpm test`
-  all green (9 tests: `libs/crypto` PII round-trip, `libs/dtos` barcode
-  validator). No business logic yet — that's Phase 5.
+- **State:** Task `5.1` (Order Service: entities, DTOs, order-creation logic)
+  complete, committed as 6 logical commits (`b5a2abe` entities,
+  `aff2516` DTO, `103f158` ports, `c6b78b7` adapters/repository,
+  `95e2098` service, `f338233` controller/module wiring), preceded by
+  `759cb4c` (ADR-006 for `ioredis`). `Customer`/`ShipmentOrder`/`Parcel` entities, `CreateOrderDto`,
+  `OrderService.createOrder` (UC-02, price/ETA locked via a stubbed
+  `IPricingPort` pending task 5.4's real `RATECARD` lookup), thin
+  `OrderController` (`POST /orders`, `GET /orders/:id/quote`), Redis-backed
+  Idempotency-Key replay. `pnpm build`/`pnpm lint`/`pnpm test` all green
+  (23 tests: the 9 from Phase 4 + 14 new for 5.1).
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
   connection, not its own app — see `apps/order/src/app.module.ts` and
-  `docs/lld/pricing-service.md`). Docs-only commits since Phase 4 (dual-remote
-  git workflow write-up).
+  `docs/lld/pricing-service.md`). `Parcel.state`/`.direction` columns exist
+  (matching `db/init-db.sql`) but the actual state-machine guards are task
+  5.2's job — 5.1 only ever writes `Created`/`Forward` at creation time.
+  Known open item carried forward unchanged: `docs/lld/order-service.md`'s
+  "abandoned prepaid payment" gap (no task assigned yet).
 
 ## Log
+
+### 2026-07-09 — Task 5.1: Order Service entities, DTOs, order-creation logic
+- Added `ioredis` as a new dependency (approved by user) to back the
+  Idempotency-Key store per `docs/lld/00-conventions.md`; documented the
+  choice in `docs/adrs/ADR-006-redis-client-selection.md` and registered it
+  in `docs/02-HLD.md`'s decision index (`759cb4c`).
+- Added `Customer`, `ShipmentOrder`, `Parcel` TypeORM entities
+  (`apps/order/src/entities/`) matching `db/init-db.sql`'s
+  `shipping_order_db` schema field-for-field, including enum values.
+- Added `CreateOrderDto`/`AddressDto`/`OrderParcelDto`
+  (`apps/order/src/dto/`) per `docs/lld/order-service.md`'s `POST /orders`
+  contract.
+- Implemented UC-02 order creation in `OrderService` (Ports & Adapters:
+  `IOrderRepository`/`OrderRepository`, `IPricingPort`/`PricingStubAdapter`,
+  `IIdempotencyStore`/`RedisIdempotencyAdapter`) — price/ETA locked
+  (BR-01), PII encrypted via `@app/crypto` before persisting, one DB
+  transaction for order+parcels, Idempotency-Key replay-cache.
+- Added thin `OrderController` (`POST /orders`, `GET /orders/:id/quote`),
+  wired via `order.module.ts` into `apps/order/src/app.module.ts`.
+- TDD throughout: DTO validation spec, service spec (BR-01 price lock,
+  Pricing-404, idempotent replay + cache-write), controller spec — all
+  written and confirmed red before implementation. 14 new tests, 23/23
+  total passing; `pnpm build`/`pnpm lint` clean, split across 6 logical
+  commits per file/layer for easier review (see State above).
+- **Deliberate scope boundary**: `IPricingPort` uses a fixed-price stub
+  (`PricingStubAdapter`) rather than a real `RATECARD` lookup — that's
+  task 5.4's job. The real adapter can be swapped in later without
+  touching `OrderService`.
+- **No new BR guard-failure test needed**: BR-01's "locked, no edits"
+  clause is enforced by the absence of a `PATCH /orders/{id}` route
+  (405 by design), not a runtime `422` guard — confirmed this isn't a
+  coverage gap.
+- **Known gap, unchanged**: `docs/lld/order-service.md`'s "abandoned
+  prepaid payment" open item still has no assigned task.
 
 ### 2026-07-08 — Session tooling
 - Added `/begin-task`, `/wrap-task`, `/recap` slash commands

@@ -9,11 +9,21 @@ End of day, copy the "Done" bullets straight into your report.
 - Reviewed the decision to add a Redis client dependency and created [ADR-006: Redis Client Selection](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) to document choosing `ioredis` for API idempotency-key checks and projection caching.
 - Registered [ADR-006](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) in the Key Design Decisions index table of [docs/02-HLD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md).
 
+- Completed task **5.1** (Order Service: entities, DTOs, order-creation logic, `docs/03-phases.md`):
+  - Added `Customer`, `ShipmentOrder`, `Parcel` TypeORM entities under `apps/order/src/entities/` matching `db/init-db.sql`'s `shipping_order_db` schema exactly (columns, indexes, enum values).
+  - Added `CreateOrderDto` (+ `AddressDto`, `OrderParcelDto`) in `apps/order/src/dto/` per the `POST /orders` contract in `docs/lld/order-service.md`.
+  - Implemented `OrderService.createOrder` (UC-02): locks price/ETA via a stubbed `IPricingPort` (`PricingStubAdapter`, placeholder for the real `RATECARD` lookup landing in task 5.4), persists `SHIPMENT_ORDER` + `PARCEL` in one TypeORM transaction (BR-01), encrypts PII via `@app/crypto` before persisting.
+  - Added Idempotency-Key enforcement + replay-cache for `POST /orders` via `IIdempotencyStore` backed by Redis (`ioredis`, see ADR-006 above).
+  - Added thin `OrderController` for `POST /orders` and `GET /orders/:id/quote`, wired through `order.module.ts` (Ports & Adapters bindings) into `apps/order/src/app.module.ts`.
+  - TDD: 14 new specs across `create-order.dto.spec.ts`, `order.service.spec.ts` (price lock, Pricing-404, idempotent replay, cache-write), `order.controller.spec.ts` — all written red-first. Full suite: 23/23 passing; `pnpm build`/`pnpm lint` clean.
+  - Known gap carried forward (not a regression): `POST /orders/{id}/checkout` abandoned-payment handling is still the documented open item in `docs/lld/order-service.md`; untouched by this task.
+
 ### Decisions / open questions
 - Confirmed with the user that `ioredis` is approved as a new dependency to satisfy the Idempotency-Key and caching requirements for task 5.1 and future tasks.
+- BR-01's "no post-creation edit" clause is enforced structurally (no `PATCH /orders/{id}` route exists, would be 405) rather than via a runtime `422` guard — so no guard-failure test was added for it; confirmed this isn't a coverage gap, just a different enforcement mechanism than a Business-Rule-Guard exception.
 
 ### Next
-- Proceed with Phase 5 — Core Backend, starting with task **5.1** Order Service entities/DTOs/order-creation logic (using `/begin-task 5.1`).
+- Task **5.2** Parcel State Machine + guard conditions (`docs/03-phases.md`), via `/begin-task 5.2`.
 
 ## 2026-07-08
 
