@@ -3,6 +3,18 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-09
+
+### Done
+- Reviewed the decision to add a Redis client dependency and created [ADR-006: Redis Client Selection](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) to document choosing `ioredis` for API idempotency-key checks and projection caching.
+- Registered [ADR-006](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) in the Key Design Decisions index table of [docs/02-HLD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md).
+
+### Decisions / open questions
+- Confirmed with the user that `ioredis` is approved as a new dependency to satisfy the Idempotency-Key and caching requirements for task 5.1 and future tasks.
+
+### Next
+- Proceed with Phase 5 — Core Backend, starting with task **5.1** Order Service entities/DTOs/order-creation logic (using `/begin-task 5.1`).
+
 ## 2026-07-08
 
 ### Done

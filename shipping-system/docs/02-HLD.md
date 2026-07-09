@@ -327,6 +327,7 @@ This design exhibits several key strengths aligning with enterprise-grade micros
 | **ADR-003** | Shared-DB-for-slice now; DB-per-service when services split | Accepted |
 | **ADR-004** | Polymorphic TrackingEvent (entity_id + entity_type) | Rejected (simplified to direct `parcel_id` FK) |
 | **ADR-005** | Message Broker Selection (NATS JetStream vs. Kafka / RabbitMQ) | Accepted |
+| **ADR-006** | Redis client selection (ioredis) | Accepted |
 
 ---
 
