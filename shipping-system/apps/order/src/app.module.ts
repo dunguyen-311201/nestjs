@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
+import { OrderModule } from './order.module';
+import { Customer } from './entities/customer.entity';
+import { ShipmentOrder } from './entities/shipment-order.entity';
+import { Parcel } from './entities/parcel.entity';
 
 @Module({
   imports: [
@@ -14,9 +18,10 @@ import { HealthController } from './health.controller';
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'postgres',
       schema: 'shipping_order_db',
-      entities: [],
+      entities: [Customer, ShipmentOrder, Parcel],
       synchronize: false,
     }),
+    OrderModule,
     // Pricing (docs/lld/pricing-service.md) has no public REST surface and is
     // invoked in-process-boundary by Order only - it is not its own app, but
     // it keeps its own schema/connection, named so it doesn't collide with
