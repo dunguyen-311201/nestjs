@@ -13,7 +13,7 @@ import { Customer } from './customer.entity';
 import { Parcel } from './parcel.entity';
 import { ShipmentOrderStatus } from './shipment-order-status.enum';
 
-@Entity({ name: 'SHIPMENT_ORDER' })
+@Entity({ name: 'shipment_order' })
 export class ShipmentOrder {
   @PrimaryGeneratedColumn('uuid')
   id: string;

@@ -11,7 +11,7 @@ import {
 import { ShipmentOrder } from './shipment-order.entity';
 import { ParcelDirection, ParcelState, ParcelType } from './parcel.enums';
 
-@Entity({ name: 'PARCEL' })
+@Entity({ name: 'parcel' })
 export class Parcel {
   @PrimaryGeneratedColumn('uuid')
   id: string;
