@@ -39,7 +39,7 @@ Pricing has **no REST endpoint exposed via the API Gateway** — it is called sy
 
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
-| `RATECARD` | — | PK `id` · UNIQUE `(origin_zone_id, dest_zone_id, parcel_type)` (one active price per lane × type) |
+| `RATECARD` | — | PK `id` · UNIQUE `(origin_zone_id, dest_zone_id, parcel_type, effective_from)` (one rate-card version per lane × type × start date; the currently-effective row is the one where `effective_from <= now` and `effective_to` is null or in the future) |
 
 ## Open Decision
 

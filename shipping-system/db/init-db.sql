@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS shipping_pricing_db.RATECARD (
     dest_zone_id UUID NOT NULL,   -- Logical FK to ZONE.id
     parcel_type VARCHAR(50) NOT NULL CHECK (parcel_type IN ('parcel', 'pallet')),
     price_cents INT NOT NULL,
+    sla_days INT NOT NULL CHECK (sla_days > 0),
     effective_from TIMESTAMP NOT NULL DEFAULT NOW(),
     effective_to TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),

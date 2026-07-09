@@ -132,6 +132,7 @@ erDiagram
 | `dest_zone_id` | uuid FK | Destination zone the rate applies to. |
 | `parcel_type` | enum | Parcel type (`parcel` or `pallet`). |
 | `price_cents` | int | Fixed price in cents for this route × type. |
+| `sla_days` | int | Number of days from order creation to `PARCEL.sla_expected_delivery` for this route × type. |
 | `effective_from` | timestamp | Start of this rate card version's validity window. |
 | `effective_to` | timestamp, nullable | End of this rate card version's validity window; null while still current. |
 

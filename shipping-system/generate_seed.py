@@ -45,9 +45,9 @@ for i in range(10):
         routes.append((route_id, zone_ids[i], zone_ids[j]))
         
         # Rate card for parcel
-        ratecards.append((gen_uuid(), zone_ids[i], zone_ids[j], "parcel", random.randint(1500, 3000))) # $15 - $30
+        ratecards.append((gen_uuid(), zone_ids[i], zone_ids[j], "parcel", random.randint(1500, 3000), random.randint(2, 5))) # $15 - $30, 2-5 day SLA
         # Rate card for pallet
-        ratecards.append((gen_uuid(), zone_ids[i], zone_ids[j], "pallet", random.randint(8000, 15000))) # $80 - $150
+        ratecards.append((gen_uuid(), zone_ids[i], zone_ids[j], "pallet", random.randint(8000, 15000), random.randint(4, 7))) # $80 - $150, 4-7 day SLA
 
 # 3. Generate 20 Couriers
 courier_ids = [gen_uuid() for _ in range(20)]
@@ -128,8 +128,8 @@ for o_idx in range(1000):
         status = "Created"
         
     created_at = start_date + timedelta(minutes=o_idx * 45 + random.randint(0, 30))
-    expected_delivery = created_at + timedelta(days=random.randint(1, 3))
-    
+    expected_delivery = created_at + timedelta(days=rate_card[5])
+
     price_cents = rate_card[4]
     
     orders.append((order_id, sender[0], recipient[0], rate_card[0], price_cents, expected_delivery, status, created_at))
@@ -319,7 +319,7 @@ with open("db/seed.sql", "w") as f:
     # 6. Insert Rate Cards
     f.write("-- Rate Cards\n")
     for row in ratecards:
-        f.write(f"INSERT INTO shipping_pricing_db.RATECARD (id, origin_zone_id, dest_zone_id, parcel_type, price_cents) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', {row[4]});\n")
+        f.write(f"INSERT INTO shipping_pricing_db.RATECARD (id, origin_zone_id, dest_zone_id, parcel_type, price_cents, sla_days) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', {row[4]}, {row[5]});\n")
     f.write("\n")
     
     # 7. Insert Couriers
