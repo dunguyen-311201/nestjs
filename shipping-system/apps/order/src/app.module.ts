@@ -6,6 +6,8 @@ import { OrderModule } from './order.module';
 import { Customer } from './entities/customer.entity';
 import { ShipmentOrder } from './entities/shipment-order.entity';
 import { Parcel } from './entities/parcel.entity';
+import { RateCard } from './entities/rate-card.entity';
+import { Zone } from './entities/zone.entity';
 
 @Module({
   imports: [
@@ -34,7 +36,23 @@ import { Parcel } from './entities/parcel.entity';
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'postgres',
       schema: 'shipping_pricing_db',
-      entities: [],
+      entities: [RateCard],
+      synchronize: false,
+    }),
+    // Read-only mapping onto Hub/Sortation Service's ZONE table, used only
+    // to resolve region_code -> zone_id for the RateCard lookup above.
+    // Order/Pricing never writes here - Hub Service (not yet built) owns
+    // this schema.
+    TypeOrmModule.forRoot({
+      name: 'network',
+      type: 'postgres',
+      host: process.env.POSTGRES_HOST ?? 'localhost',
+      port: Number(process.env.POSTGRES_PORT ?? 5432),
+      username: process.env.POSTGRES_USER ?? 'postgres',
+      password: process.env.POSTGRES_PASSWORD ?? 'postgres',
+      database: process.env.POSTGRES_DB ?? 'postgres',
+      schema: 'shipping_network_db',
+      entities: [Zone],
       synchronize: false,
     }),
   ],
