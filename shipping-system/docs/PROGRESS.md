@@ -32,9 +32,9 @@
   `IPricingPort` pending task 5.4's real `RATECARD` lookup), thin
   `OrderController` (`POST /orders`, `GET /orders/:id/quote`), Redis-backed
   Idempotency-Key replay, and the full `ParcelStateMachine` (happy-path +
-  BR-02 guard + Misrouted/Lost/RTS/Damaged). `pnpm build`/`pnpm lint`/
-  `pnpm test` all green (62 tests: the 9 from Phase 4 + 14 from 5.1 + 14
-  from 5.2 + 25 from 5.3).
+  BR-02 guard + Misrouted/Lost/RTS/Damaged + `DELIVERY_FAILED`
+  self-transition). `pnpm build`/`pnpm lint`/`pnpm test` all green (63
+  tests: the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2 + 26 from 5.3).
   **Post-task manual verification** (`1689a2b`, `e88fe50`): running
   `order` end-to-end against the live Postgres/Redis found 2 real bugs
   invisible to unit tests — entity table names didn't match the live
@@ -98,6 +98,17 @@
   (previously doc-index only) with the actual `docker compose`/`pnpm`/
   `curl` commands re-run to confirm they work, and fixed a stale
   `ADR-001 through ADR-004` reference to `ADR-006` (`0a01e52`).
+- **Post-wrap code review fix**: `DELIVERY_FAILED` (a valid
+  `TRACKING_EVENT.event_type`) had no `TRANSITIONS` table entry, so
+  `transition()` threw on it even though a failed delivery attempt
+  doesn't change `PARCEL.state` (it stays `OutForDelivery` until the
+  3rd failure triggers `applyRts`, BR-04). Left unfixed, a future
+  event-replay/projection consumer (task 5.6) would have had to filter
+  `DELIVERY_FAILED` out before folding over a parcel's events. Added a
+  self-transition (`OutForDelivery` + `DELIVERY_FAILED` →
+  `OutForDelivery`); 1 new test, 63/63 total passing (`4282fd1`). Also
+  verified `ParcelState.OUT_FOR_DELIVERY`'s `'OutForDelivery'` string
+  matches `db/init-db.sql`'s `CHECK` constraint exactly.
 
 ### Decisions / open questions
 - Confirmed with the user: `Damaged` has zero documented trigger in this
