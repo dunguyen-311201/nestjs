@@ -30,6 +30,12 @@
   Idempotency-Key replay, and `ParcelStateMachine.transition()` (happy-path
   transitions + BR-02 guard). `pnpm build`/`pnpm lint`/`pnpm test` all
   green (37 tests: the 9 from Phase 4 + 14 from 5.1 + 14 from 5.2).
+  **Post-task manual verification** (`1689a2b`, `e88fe50`): running
+  `order` end-to-end against the live Postgres/Redis found 2 real bugs
+  invisible to unit tests — entity table names didn't match the live
+  schema's lowercase names, and `ValidationPipe` was never registered
+  globally. Both fixed; see the 2026-07-09 "Post-task manual
+  verification" log entry below for detail.
 - **Notes:** Pricing is in-process inside `order` (own named TypeORM
   connection, not its own app — see `apps/order/src/app.module.ts` and
   `docs/lld/pricing-service.md`). `ParcelStateMachine` is a pure module —
@@ -42,6 +48,44 @@
   gap (no task assigned yet).
 
 ## Log
+
+### 2026-07-09 — Post-task manual verification (tasks 5.1/5.2)
+- At user request, manually "tested around" after 5.1/5.2 were marked
+  done rather than trusting `pnpm test` alone: brought up
+  `docker compose` (Postgres/Redis already running), started the `order`
+  app for real (`PII_ENCRYPTION_KEY=... npx nest start order`), and hit
+  `POST /orders`/`GET /orders/:id/quote` with `curl`.
+- Found and fixed 2 real bugs, both invisible to the existing unit tests:
+  - `1689a2b` — `Customer`/`ShipmentOrder`/`Parcel` entities declared
+    `@Entity({ name: 'CUSTOMER' })` etc. (quoted uppercase), but
+    `db/init-db.sql` declares table names unquoted, so Postgres folds
+    them to lowercase (confirmed via `\dt`: `customer`, `shipment_order`,
+    `parcel`). Every real query failed with `relation "CUSTOMER" does
+    not exist` (`42P01`). `order.service.spec.ts` mocks
+    `IOrderRepository`, so it never touched the real DB and never caught
+    this.
+  - `e88fe50` — `apps/order/src/main.ts` never called
+    `app.useGlobalPipes(new ValidationPipe(...))`. `CreateOrderDto`'s
+    `class-validator` decorators were correct but never actually ran on
+    a real request; an invalid `POST /orders` body reached
+    `OrderService` and crashed with `500` (calling `encrypt(undefined)`)
+    instead of the documented `400`. `create-order.dto.spec.ts` calls
+    `class-validator`'s `validate()` directly, bypassing the NestJS
+    request pipeline entirely, so it never caught this either.
+- Corrected a false claim in `docs/reference/task-5.1-walkthrough.md`
+  that said `ValidationPipe` was "already configured project-wide" — it
+  wasn't, until this fix.
+- Added verified "Cách tự chạy test / thử nghiệm" (how to test around)
+  sections — with the actual commands run above, not hypothetical ones —
+  to both `task-5.1-walkthrough.md` (full `curl` walkthrough against a
+  running app) and `task-5.2-walkthrough.md` (unit tests +
+  `ts-node -r tsconfig-paths/register` one-liner, since that task has no
+  REST endpoint yet).
+- **Takeaway, worth repeating for future tasks**: a fully-mocked unit
+  test suite can be green while the real DB/HTTP pipeline is broken.
+  Any task that adds a real DB schema mapping or a validated REST
+  endpoint should get at least one live smoke test before being
+  considered done, not just `pnpm test`.
 
 ### 2026-07-09 — Task 5.2: Parcel State Machine + guard conditions
 - Added shared `BusinessRuleException` in `libs/dtos/src/business-rule.exception.ts`

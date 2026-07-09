@@ -172,6 +172,81 @@ không hợp lệ chung chung (kiểm tra nó **không** bị gắn `BR-02`).
 
 ---
 
+## Cách tự chạy test / thử nghiệm (test around)
+
+Task này **chưa có REST endpoint hay HTTP route nào** — `ParcelStateMachine`
+là một pure module (không đụng DB, không đụng NATS), nên không có gì để
+`curl` cả. Có 2 cách để bạn tự chạy thử:
+
+### Cách 1 — chạy lại đúng bộ test đã viết
+
+```bash
+# chỉ chạy 2 file test của task này
+pnpm test libs/dtos/src/business-rule.exception.spec.ts apps/order/src/domain/parcel-state-machine.spec.ts
+
+# hoặc chạy toàn bộ test suite của repo (kể cả task 5.1)
+pnpm test
+
+# chế độ watch - tự chạy lại mỗi khi bạn sửa file, tiện để thử nghiệm nhanh
+pnpm test:watch apps/order/src/domain/parcel-state-machine.spec.ts
+```
+
+Muốn "thử around" theo kiểu tự tay đổi input xem kết quả ra sao: mở
+`apps/order/src/domain/parcel-state-machine.spec.ts`, thêm tạm một `it(...)`
+mới với state/event bạn muốn thử, chạy `pnpm test:watch <file đó>`, xem
+kết quả, rồi xoá test tạm đi khi xong (đừng để lại — task này đã có bộ
+test chính thức riêng rồi, việc "thử" chỉ nên tồn tại lúc bạn đang khám phá).
+
+### Cách 2 — gọi trực tiếp qua một script dùng thử (throwaway script)
+
+Vì `ParcelStateMachine.transition()` là static method thuần, gọi được
+ngay không cần bootstrap NestJS app hay kết nối DB/Redis nào:
+
+```bash
+cd /home/dunguyen/Training/nestjs/shipping-system
+npx ts-node -r tsconfig-paths/register -e "
+import { ParcelStateMachine, TrackingEventType } from './apps/order/src/domain/parcel-state-machine';
+import { ParcelState } from './apps/order/src/entities/parcel.enums';
+
+// happy path
+console.log(ParcelStateMachine.transition(ParcelState.IN_HUB, TrackingEventType.OUT_FOR_DELIVERY));
+// -> 'OutForDelivery'
+
+// thử guard BR-02: gọi OUT_FOR_DELIVERY khi parcel chưa ở InHub
+try {
+  ParcelStateMachine.transition(ParcelState.IN_TRANSIT, TrackingEventType.OUT_FOR_DELIVERY);
+} catch (e) {
+  console.log('rule:', (e as any).rule, '| message:', (e as Error).message);
+}
+"
+```
+
+Đã tự chạy thử lệnh trên (verify trước khi đưa vào guide) — output đúng
+như mong đợi:
+```
+OutForDelivery
+rule: BR-02 | message: Parcel must arrive at its destination hub before Out_for_Delivery (current state: InTransit)
+```
+
+`-r tsconfig-paths/register` là bắt buộc — nếu bỏ flag đó, `ts-node` sẽ
+không biết cách resolve alias `@app/dtos` (khai báo trong `tsconfig.json`'s
+`paths`) và báo lỗi "Cannot find module". Package `tsconfig-paths` đã có
+sẵn trong `devDependencies`, không cần cài thêm gì.
+
+Lệnh trên chỉ để bạn quan sát trực tiếp (không phải test chính thức,
+không cần lưu lại).
+
+### Vì sao chưa "chạy cả app lên rồi bấm thử" được
+
+`ParcelStateMachine` chưa được wire vào bất kỳ controller, consumer, hay
+event handler nào — việc đó là của task 5.3 (khi state `Misrouted` thật
+sự được set) và task 5.5/5.6 (khi NATS consumer đọc `TRACKING_EVENT` rồi
+gọi vào state machine này). Nên hiện tại, "chạy app lên" (`pnpm start:dev`
+hay tương tự) sẽ không có chỗ nào trong app thật sự gọi tới code này —
+unit test (Cách 1) là cách duy nhất để verify hành vi ở giai đoạn này.
+
+---
+
 ## Vì sao chia làm 2 commit
 
 `b37e8a2` (BusinessRuleException, thuộc `libs/dtos`) đứng trước

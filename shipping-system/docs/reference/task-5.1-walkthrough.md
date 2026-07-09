@@ -65,10 +65,20 @@ Vài điểm về syntax:
 DTO (Data Transfer Object) là class mô tả/validate hình dạng của request
 body gửi lên qua HTTP. Các decorator của `class-validator`
 (`@IsString()`, `@IsNotEmpty()`, `@IsEnum()`, `@IsInt()`, `@Min(1)`) —
-mỗi cái thêm một luật kiểm tra. `ValidationPipe` toàn cục của NestJS
-(đã cấu hình sẵn cho cả project) tự động chạy hết các luật này trước khi
-code trong controller chạy — controller sẽ không bao giờ thấy một body
-không hợp lệ.
+mỗi cái thêm một luật kiểm tra. Để các luật này thật sự chạy trên mỗi
+request, cần đăng ký `ValidationPipe` toàn cục trong `main.ts`
+(`app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))`).
+
+> **Đính chính (phát hiện khi "test around" sau khi task done):** bản
+> gốc của file này viết nhầm là "ValidationPipe đã cấu hình sẵn cho cả
+> project" — **sai**. Thực tế `main.ts` ban đầu không hề gọi
+> `useGlobalPipes`, nên một request với body rỗng/thiếu field lại rơi
+> thẳng xuống `OrderService`, gây lỗi `500` (crash khi gọi `encrypt()`
+> với `undefined`) thay vì trả về đúng `400` như tài liệu mô tả. Lỗi này
+> không bị unit test bắt được vì test chỉ gọi `validate()` của
+> class-validator trực tiếp lên instance DTO — không đi qua pipeline
+> HTTP thật của NestJS. Chỉ phát hiện được khi chạy hẳn app lên và gọi
+> `curl` thật. Đã sửa trong commit `e88fe50` (task 5.2's wrap-up).
 
 - `@ValidateNested()` + `@Type(() => AddressDto)` trên `sender`/`recipient`
   — mặc định `class-validator` chỉ validate property ở tầng ngoài cùng.
@@ -229,6 +239,108 @@ trong `beforeAll` — chỉ là key giả dùng cho test, dùng xong bỏ đi
   vào lời gọi `TypeOrmModule.forRoot({ entities: [...] })` đã có sẵn,
   để TypeORM biết về chúng lúc khởi động. `OrderModule` cũng được import
   kèm theo.
+
+---
+
+## Cách tự chạy test / thử nghiệm (test around)
+
+Khác với task 5.2 (pure logic, chưa có endpoint), task 5.1 có REST
+endpoint thật (`POST /orders`, `GET /orders/:id/quote`) nên gọi được
+bằng `curl`. Các bước dưới đây đã được tự chạy thử thật (không chỉ viết
+suông) — và thực ra chính nhờ chạy thử này mà phát hiện ra 2 bug thật sự
+(xem 2 commit fix riêng, `1689a2b` và `e88fe50`, đã áp dụng lên code).
+
+### 1. Đảm bảo Postgres/Redis đang chạy
+
+```bash
+docker compose up -d
+docker ps --format "{{.Names}}: {{.Status}}"
+# cần thấy: shipping_postgres, shipping_redis (nats không bắt buộc cho task 5.1)
+```
+
+### 2. Chạy app `order` với biến môi trường cần thiết
+
+`PII_ENCRYPTION_KEY` không có default — bắt buộc phải set (64 ký tự hex)
+trước khi `encrypt()` trong `OrderService` chạy được, nếu không app sẽ
+crash `500` ngay khi có request đầu tiên gọi tới nó:
+
+```bash
+export PII_ENCRYPTION_KEY=$(python3 -c "print('ab'*32)")  # key giả, chỉ để chạy thử local
+export PORT=3099   # tránh đụng port mặc định 3001 nếu có process khác đang chạy
+npx nest start order
+```
+
+Log thấy `Nest application successfully started` cùng 3 route
+(`GET /health`, `POST /orders`, `GET /orders/:id/quote`) là app đã sẵn
+sàng nhận request.
+
+### 3. Gọi thử các case
+
+```bash
+# happy path - tạo order thành công
+curl -s -X POST http://localhost:3099/orders \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-key-1" \
+  -d '{
+    "sender": {"name":"Alice","phone":"0900000000","address":"1 Alice St","region_code":"HN01"},
+    "recipient": {"name":"Bob","phone":"0911111111","address":"2 Bob St","region_code":"SG01"},
+    "parcels": [{"declared_weight_grams":500,"type":"parcel"}],
+    "payment_type": "PREPAID_STRIPE"
+  }' -w "\nHTTP_STATUS:%{http_code}\n"
+# -> 201, { shipment_order_id, price_cents, expected_delivery_at, status }
+
+# gọi lại với CÙNG Idempotency-Key -> phải trả về ĐÚNG shipment_order_id cũ (replay, không tạo order mới)
+# (lặp lại y hệt lệnh trên)
+
+# thiếu header Idempotency-Key -> 400
+curl -s -X POST http://localhost:3099/orders -H "Content-Type: application/json" \
+  -d '{...}' -w "\nHTTP_STATUS:%{http_code}\n"
+
+# payload thiếu field bắt buộc -> phải là 400 (không phải 500!)
+curl -s -X POST http://localhost:3099/orders \
+  -H "Content-Type: application/json" -H "Idempotency-Key: test-key-2" \
+  -d '{"sender":{},"recipient":{},"parcels":[],"payment_type":"PREPAID_STRIPE"}' \
+  -w "\nHTTP_STATUS:%{http_code}\n"
+
+# quote - xem giá trước khi tạo order
+curl -s "http://localhost:3099/orders/any-id/quote?origin_zone_id=HN01&dest_zone_id=SG01&parcel_type=parcel"
+```
+
+### 4. Kiểm tra dữ liệu thật sự được ghi vào DB (không chỉ tin response)
+
+```bash
+docker exec shipping_postgres psql -U postgres -d postgres \
+  -c "SELECT id, status, price_cents FROM shipping_order_db.shipment_order ORDER BY created_at DESC LIMIT 5;"
+```
+
+### 5. Dừng app khi xong
+
+```bash
+pkill -f "dist/apps/order/apps/order/src/main"
+```
+
+### 2 bug thật đã phát hiện được nhờ các bước trên (không phải chỉ lý thuyết)
+
+1. **Tên bảng sai hoa/thường** — entity khai báo `@Entity({ name: 'CUSTOMER' })`
+   (viết hoa, có quote) nhưng bảng thật trong Postgres là `customer`
+   (viết thường, vì `init-db.sql` khai báo tên bảng không quote nên
+   Postgres tự hạ chữ thường). Kết quả: mọi query thật đều lỗi
+   `relation "CUSTOMER" does not exist` (`42P01`). Unit test không bắt
+   được vì test luôn mock tầng repository, chưa từng chạm Postgres thật.
+   Fix: `1689a2b`.
+2. **Thiếu `ValidationPipe` toàn cục** — DTO có đủ decorator
+   (`@IsNotEmpty()`...) nhưng không ai gọi `app.useGlobalPipes(...)`
+   trong `main.ts`, nên NestJS **không tự động chạy** các luật đó trên
+   request thật. Payload rỗng/thiếu field lọt thẳng xuống
+   `OrderService`, crash `500` khi gọi `encrypt(undefined)` thay vì trả
+   `400` đúng như tài liệu. Unit test của DTO chỉ gọi thẳng
+   `class-validator`'s `validate()`, không đi qua NestJS pipeline nên
+   không phát hiện được. Fix: `e88fe50`.
+
+Cả 2 bug đều thuộc dạng "chỉ lộ ra khi chạy thật, unit test không thấy
+được" — đây chính xác là lý do nên luôn "test around" thủ công ít nhất
+một lần sau khi một task có REST endpoint được coi là "done", trước khi
+tin hoàn toàn vào `pnpm test` xanh.
 
 ---
 

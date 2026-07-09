@@ -6,6 +6,35 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-09
 
 ### Done
+- Manually ran the `order` app end-to-end (`docker compose up -d` +
+  `PII_ENCRYPTION_KEY=... npx nest start order` + `curl`) to "test around"
+  after tasks 5.1/5.2 were marked done, per user request. Found and fixed
+  2 real bugs unit tests hadn't caught:
+  - `1689a2b` — entities used `@Entity({ name: 'CUSTOMER' })` (quoted
+    uppercase) but the live schema's actual table names are lowercase
+    (`customer`, `shipment_order`, `parcel` — `db/init-db.sql` declares
+    them unquoted, so Postgres folds to lowercase). Every real query
+    failed with `relation "CUSTOMER" does not exist` (42P01).
+  - `e88fe50` — `apps/order/src/main.ts` never called
+    `app.useGlobalPipes(new ValidationPipe(...))`, so `CreateOrderDto`'s
+    validation decorators were never enforced on a real request; an
+    invalid `POST /orders` body crashed with `500` instead of the
+    documented `400`.
+  - Both bugs were invisible to `pnpm test` because the service/DTO
+    specs mock the repository layer / call `class-validator` directly,
+    bypassing the real DB and the NestJS request pipeline respectively.
+  - Corrected a false claim in `docs/reference/task-5.1-walkthrough.md`
+    that said `ValidationPipe` was "already configured project-wide" —
+    it wasn't; fixed the doc alongside the code.
+  - Added "Cách tự chạy test / thử nghiệm" (how to test around) sections
+    with the actual verified `curl`/`docker`/`ts-node` commands to both
+    `task-5.1-walkthrough.md` and `task-5.2-walkthrough.md`.
+  - Noticed (unrelated to 5.1/5.2, not fixed): `libs/crypto/src/pii-crypto.spec.ts`'s
+    "throws instead of returning garbage when ciphertext is tampered with"
+    test failed once out of ~6 runs (`Received function did not throw`).
+    Pre-existing from Phase 4, not caused by this session's changes —
+    flagged for a future look, not investigated further here.
+
 - Reviewed the decision to add a Redis client dependency and created [ADR-006: Redis Client Selection](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) to document choosing `ioredis` for API idempotency-key checks and projection caching.
 - Registered [ADR-006](file:///home/dunguyen/Training/nestjs/shipping-system/docs/adrs/ADR-006-redis-client-selection.md) in the Key Design Decisions index table of [docs/02-HLD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md).
 
