@@ -10,11 +10,38 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.6` Status projection (read model, <300ms) +
-  Transactional Outbox. Run `/begin-task 5.6` to start it.
+- **Next task:** `5.7` Per-aggregate serialization: NATS JetStream
+  per-order subject + event-batching. Run `/begin-task 5.7` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.5` (Tracking Service: append-only event store +
+- **State:** Task `5.6` (Status projection (read model, <300ms) +
+  Transactional Outbox) complete, committed as 6 logical commits
+  (`265ec0a` `OUTBOX` schema + BR-05 mapping doc + Redis key doc +
+  `orderStatusSubject()` fix, `fc29f4f` `pnpm build` quality-gate fix +
+  `@nestjs/microservices` dependency, `c24f040` Transactional Outbox for
+  `order.created`, `03c8d07` `ParcelEventConsumer` +
+  `StatusProjectionConsumer`, `9101890` Tracking's consumer refactored
+  onto `@nestjs/microservices` + recompute-trigger publish, `0f238b7`
+  `GET /tracking/:id` reads the real Redis status cache). **Two real
+  bugs caught only by live verification, invisible to mocked unit
+  tests**: (1) `pnpm build` (`nest build`, no args) silently only
+  type-checked the default `api-gateway` project in this monorepo —
+  every other app had never actually been type-checked by the quality
+  gate; building each app individually surfaced 2 real type errors, now
+  fixed, and the script is now `nest build --all`; (2)
+  `NatsRecordBuilder.setHeaders()` needs a real `nats`-package `MsgHdrs`
+  (via `headers()`), not a plain object — a plain object type-checks and
+  passes mocked tests fine but fails at actual publish with `hdrs.encode
+  is not a function`. Both fixed. **Live-verified end-to-end**: a real
+  `POST /orders` → outbox row → poller published it for real; a real
+  `parcel.picked_up` NATS message flipped `PARCEL.state` to `InTransit`
+  (Order's own new consumer) and appended a `TRACKING_EVENT` row
+  (Tracking's consumer) and recomputed `SHIPMENT_ORDER.status` to
+  `Active` in Postgres and Redis and `GET /tracking/:id` returned that
+  real non-null status alongside the timeline — the full Diagram 8 loop
+  confirmed working, not just individually mocked pieces. 132/132 tests
+  passing; `pnpm build`/`pnpm lint`/`pnpm test` all green across every
+  app and lib. Task `5.5` (Tracking Service: append-only event store +
   consumers) complete, committed as 4 logical commits (`270bd52` schema
   fix — `event_id` added to `TRACKING_EVENT` for consumer-side dedup —
   + ERD/seed regen, `dc8bd0e` `TrackingEvent` entity + repository/
@@ -71,24 +98,148 @@
   `docs/lld/pricing-service.md`), now joined by a third, read-only
   `network` connection (Hub Service's `ZONE` table — Order/Pricing never
   writes there; Hub Service, task 6.2, remains its sole owner/writer).
-  `ParcelStateMachine` is feature-complete for Order-owned FSM logic and
-  is now actually wired to real scan events: Tracking's NATS consumer
-  (task 5.5) appends `TRACKING_EVENT` rows, but nothing yet calls
-  `ParcelStateMachine.transition()` off those rows to update
-  `PARCEL.state` in Order — that projection/consumer wiring, plus the
-  `orders.status.<order_id>` recompute trigger and Transactional Outbox,
-  is task **5.6**. Courier Service's own side of BR-04 (counting 3 failed
-  `DELIVERY_FAILED` attempts and publishing `parcel.rts`) is task **6.1**,
-  not yet built — so `parcel.rts`/`parcel.delivered`/etc. currently have
-  no real producer either; Tracking's consumer can only be exercised by
-  hand-publishing test messages until Phase 6 lands. Known open items
-  carried forward unchanged: `docs/lld/order-service.md`'s "abandoned
-  prepaid payment" gap, `Damaged`'s complete lack of a documented trigger
-  event, UC-15's passive lost-parcel SLA sweep job (unassigned to any
-  task), and the HLD listing `trip.departed`/`trip.arrived` as Tracking
-  inputs despite neither carrying a `parcel_id` (no task assigned).
+  `ParcelStateMachine` is now fully wired end to end: Tracking's consumer
+  appends `TRACKING_EVENT` rows and publishes a recompute trigger; Order
+  independently consumes the same events to update `PARCEL.state`; Order's
+  `StatusProjectionConsumer` debounces the trigger and recomputes
+  `SHIPMENT_ORDER.status` + Redis. Both Order and Tracking now run as
+  hybrid HTTP+NATS apps on `@nestjs/microservices` (core NATS transport,
+  not JetStream — per-aggregate JetStream ordering/serialization is task
+  **5.7**, not yet built, so concurrent bursts for the same order aren't
+  guaranteed in-order yet, only debounced). Courier Service's own side of
+  BR-04 (counting 3 failed `DELIVERY_FAILED` attempts and publishing
+  `parcel.rts`) is task **6.1**, not yet built — so `parcel.rts`/
+  `parcel.delivered`/etc. still have no real producer; both consumers can
+  only be exercised by hand-publishing test messages (see
+  `scripts/publish-event.js`) until Phase 6 lands. `pnpm build` now
+  actually validates every app/lib in the monorepo (`nest build --all`),
+  not just `api-gateway` — worth double-checking this stays true if
+  `nest-cli.json`'s project list ever changes. Known open items carried
+  forward unchanged: `docs/lld/order-service.md`'s "abandoned prepaid
+  payment" gap, `Damaged`'s complete lack of a documented trigger event,
+  UC-15's passive lost-parcel SLA sweep job (unassigned to any task), the
+  HLD listing `trip.departed`/`trip.arrived` as Tracking inputs despite
+  neither carrying a `parcel_id` (no task assigned), and `DELIVERY_FAILED`'s
+  missing NATS contract (blocked on Courier Service, task 6.1).
 
 ## Log
+
+### 2026-07-10 — Task 5.6: Status projection + Transactional Outbox
+- **Docs written before implementing** (confirmed with user): added the
+  BR-05 status-projection mapping table to `docs/04-business-rules.md`
+  (parcel-state combinations → `SHIPMENT_ORDER.status` — BR-05's
+  one-line principle doesn't specify this) and the `order:status:{id}`
+  Redis cache-key convention to `docs/lld/order-service.md`. Added the
+  `OUTBOX` table to `db/init-db.sql`/`docs/01-ERD.md` (no ERD entity had
+  existed for it — a genuine gap, same class as prior schema fixes).
+  Fixed `orderStatusSubject()` in `libs/contracts/src/subjects.ts` from
+  `orders.status.<id>` to `shipment_orders.status.<id>` to match
+  ADR-001/Diagram 8 exactly (`265ec0a`).
+- **New dependency, confirmed with user**: `@nestjs/microservices`, used
+  for NATS transport in both Order (this task) and Tracking (refactored
+  for consistency, see below).
+- **Quality-gate gap found and fixed**: discovered `pnpm build` (`nest
+  build` with no project arg) only builds/type-checks the default
+  `api-gateway` project in this monorepo — every other app
+  (`order`/`tracking`/`courier`/`hub`/`linehaul`/`dispatcher`/
+  `notification`) had silently never been type-checked by the standard
+  quality gate command since the monorepo was scaffolded in Phase 4.
+  Running `nest build <project>` per-app caught 2 real type errors that
+  had been passing undetected: `IOrderRepository.updateShipmentOrderStatus`
+  typed its `status` param as a loose `string` instead of the entity's
+  actual `ShipmentOrderStatus` enum column type, and a decorator-metadata
+  type-import issue in Tracking's refactored consumer. Fixed both; the
+  `build` script is now `nest build --all` (`fc29f4f`).
+- **Transactional Outbox for `order.created`** (`c24f040`): `Outbox`
+  entity, `IOutboxRepository`/`OutboxRepository` (`findPendingBatch`,
+  `markPublished`), `IEventPublisher`/`NatsEventPublisher`
+  (`ClientProxy`-backed). `OrderRepository.createOrder` now writes the
+  outbox row in the same transaction as `SHIPMENT_ORDER`/`PARCEL` — this
+  event was declared in task 5.1's design but never actually implemented
+  until now, a real gap closed. `OutboxPollerService` polls `PENDING`
+  rows on an interval (no new scheduler dependency) and publishes them.
+  **Bug caught only by live verification**: `NatsRecordBuilder.setHeaders()`
+  requires a real `nats`-package `MsgHdrs` object (built via `headers()`),
+  not a plain object — a plain `{ 'Nats-Msg-Id': eventId }` passes
+  TypeScript's structural typing and every mocked unit test, but fails at
+  actual publish time with `hdrs.encode is not a function`. Fixed.
+- **`ParcelEventConsumer` + `StatusProjectionConsumer`** (`03c8d07`):
+  Order now independently consumes the same 8 `parcel.*` events Tracking
+  consumes, to keep its own `PARCEL.state` in sync via `ParcelStateMachine`
+  (built in tasks 5.2/5.3, unwired until now) — BR-02/invalid-transition
+  failures are logged and dropped rather than thrown, since a NATS
+  consumer has no HTTP response to return a `422` on.
+  `StatusProjectionConsumer` debounces bursts of recompute triggers
+  (`shipment_orders.status.>`, published by Tracking after each scan)
+  per `shipment_order_id` (Diagram 8), recomputes `SHIPMENT_ORDER.status`
+  via the new pure function `computeOrderStatus` (BR-05 mapping), and
+  write-throughs to Redis. `apps/order/src/main.ts` is now a hybrid
+  HTTP+NATS app.
+- **Tracking refactored onto `@nestjs/microservices`** (`9101890`,
+  confirmed with user for cross-service consistency): was built on the
+  raw `nats` client in task 5.5; the subject→event mapping logic
+  (`map-subject-to-tracking-event.ts`) is untouched, only the connection/
+  subscription wiring moved. Also now publishes the per-order recompute
+  trigger after appending each `TRACKING_EVENT` row
+  (`IOrderLookupPort.findShipmentOrderIdByParcelId`, new) — the producer
+  side of Diagram 8 that task 5.5 deliberately deferred.
+- **`GET /tracking/:id` reads the real status cache** (`0f238b7`):
+  `IStatusCachePort`/`RedisStatusCacheAdapter` reads `order:status:{id}`;
+  a cache miss still returns `null` (documented transient state, not an
+  error), but a populated order now returns its real, live status.
+- Added `scripts/publish-event.js` (manual NATS test-publish CLI) and
+  excluded `scripts/` from the TS-aware ESLint config (`2106cea`).
+- TDD throughout, all written and confirmed red before implementation:
+  BR-05 mapping (6 cases incl. empty-parcel-list guard), outbox insert/
+  repository/poller (dedup-safe insert, continues past one failed
+  publish, no concurrent double-poll), event-publisher header-setting,
+  parcel-event consumer (state update, unknown parcel, BR-02 guard drop,
+  malformed payload, one handler per subject), status-projection
+  consumer (debounce collapses bursts, per-order isolation, Postgres+Redis
+  write, cache-miss no-op, subject-parsing), Tracking's new lookup method
+  + publish call (append-then-lookup-then-publish, skip-publish-on-
+  unresolvable-order), Tracking's refactored consumer (all 8 subjects,
+  malformed/unresolvable-order paths), status-cache adapter (key format,
+  cache miss), `TrackingService`'s cache-read. 132/132 total passing;
+  `pnpm build`/`pnpm lint` clean across every app and lib for the first
+  time (see quality-gate fix above).
+- **Live-verified end-to-end**, not just unit tests: reseeded
+  `shipping_postgres` from scratch, ran `order` and `tracking` for real
+  against live NATS/Redis. `POST /orders` → real outbox row (`PENDING`)
+  → poller published it for real (flipped to `PUBLISHED` with a
+  timestamp) — this is what caught the `MsgHdrs` bug above. Published a
+  real `parcel.picked_up` NATS message for a real seeded parcel/courier
+  and confirmed, by querying the actual DB/Redis (not just HTTP
+  responses): `PARCEL.state` flipped `Created` → `InTransit` (Order's new
+  consumer), a `TRACKING_EVENT` row was appended (Tracking's consumer),
+  `SHIPMENT_ORDER.status` recomputed to `Active` in Postgres, Redis
+  `order:status:{id}` populated with `Active`, and `GET /tracking/:id`
+  returned that same real, non-null status alongside the timeline — the
+  full Diagram 8 loop confirmed working end to end, across two services,
+  not just individually mocked pieces.
+
+### Decisions / open questions
+- Confirmed with the user: `@nestjs/microservices` added as a new
+  dependency.
+- Confirmed with the user: refactored Tracking's task-5.5 consumer (raw
+  `nats` client) onto `@nestjs/microservices` too, so both services use
+  the same NATS technique — supersedes task 5.5's original "no new
+  dependency" call now that 5.6 needs it anyway for Order.
+- Confirmed with the user: documented the `OUTBOX` schema addition, the
+  BR-05 mapping table, and the Redis key convention *before* writing any
+  implementation code.
+- Confirmed with the user: fixed `pnpm build` to `nest build --all`.
+- Kept in scope for 5.6 (per user): Order's own `parcel.*` consumer
+  wiring `ParcelStateMachine` — not itemized in `docs/03-phases.md`'s
+  5.6 description, but necessary for the status projection to have real
+  `PARCEL.state` data to compute from.
+- Known accepted design gap, not a bug: Order's `parcel.*` consumer and
+  its `StatusProjectionConsumer` both subscribe independently with no
+  coordination between them, so in principle a recompute could run
+  against a not-yet-updated `PARCEL.state` for the same burst of events —
+  this is exactly why Diagram 8 debounces (~a few hundred ms) rather than
+  recomputing synchronously inline. True ordering guarantees arrive with
+  task 5.7's JetStream per-aggregate serialization.
 
 ### 2026-07-10 — Task 5.5: Tracking Service append-only event store + consumers
 - **Schema fix** (confirmed with user, same class of gap as 5.4's
