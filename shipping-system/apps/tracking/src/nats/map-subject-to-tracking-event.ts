@@ -2,9 +2,9 @@ import { NATS_SUBJECTS } from '@app/contracts';
 import { NewTrackingEvent } from '../ports/tracking-event-repository.port';
 import { TrackingEventType } from '../entities/tracking-event.entity';
 
-interface ParcelLifecyclePayload {
-  event_id: string;
-  parcel_id: string;
+export interface ParcelLifecyclePayload {
+  event_id?: string;
+  parcel_id?: string;
   hub_id?: string;
   courier_id?: string;
   linehaul_trip_id?: string;

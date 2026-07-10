@@ -2,12 +2,12 @@ import { OrderLookupAdapter } from './order-lookup.adapter';
 
 describe('OrderLookupAdapter', () => {
   let shipmentOrderRepository: { findOne: jest.Mock };
-  let parcelRepository: { find: jest.Mock };
+  let parcelRepository: { find: jest.Mock; findOne: jest.Mock };
   let adapter: OrderLookupAdapter;
 
   beforeEach(() => {
     shipmentOrderRepository = { findOne: jest.fn() };
-    parcelRepository = { find: jest.fn() };
+    parcelRepository = { find: jest.fn(), findOne: jest.fn() };
     adapter = new OrderLookupAdapter(
       shipmentOrderRepository as never,
       parcelRepository as never,
@@ -36,5 +36,24 @@ describe('OrderLookupAdapter', () => {
       { id: 'parcel-1', state: 'InTransit' },
       { id: 'parcel-2', state: 'Delivered' },
     ]);
+  });
+
+  it('resolves the shipment_order_id for a given parcel_id', async () => {
+    parcelRepository.findOne.mockResolvedValue({
+      id: 'parcel-1',
+      shipmentOrderId: 'order-1',
+    });
+
+    const result = await adapter.findShipmentOrderIdByParcelId('parcel-1');
+
+    expect(result).toBe('order-1');
+  });
+
+  it('returns null when the parcel_id does not resolve to any order', async () => {
+    parcelRepository.findOne.mockResolvedValue(null);
+
+    const result = await adapter.findShipmentOrderIdByParcelId('unknown');
+
+    expect(result).toBeNull();
   });
 });

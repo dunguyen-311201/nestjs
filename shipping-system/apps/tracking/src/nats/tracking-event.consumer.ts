@@ -1,72 +1,91 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
-import { connect, JSONCodec, NatsConnection, Subscription } from 'nats';
+import { Controller, Inject, Logger } from '@nestjs/common';
+import { ClientProxy, EventPattern } from '@nestjs/microservices';
+import { firstValueFrom } from 'rxjs';
+import { NATS_SUBJECTS, orderStatusSubject } from '@app/contracts';
 import { ITrackingEventRepository } from '../ports/tracking-event-repository.port';
-import {
-  CONSUMED_SUBJECTS,
-  mapSubjectToTrackingEvent,
-} from './map-subject-to-tracking-event';
+import { IOrderLookupPort } from '../ports/order-lookup.port';
+import { NATS_CLIENT } from './nats-client.token';
+import { mapSubjectToTrackingEvent } from './map-subject-to-tracking-event';
+import type { ParcelLifecyclePayload } from './map-subject-to-tracking-event';
 
-const codec = JSONCodec();
-
-// Core NATS subscribe (fire-and-forget) for the parcel-lifecycle event
-// store, per task 5.5's scope. JetStream durable/ordered delivery for
-// per-order projection serialization (BR-07/ADR-001) is task 5.7's job -
-// this consumer only appends TRACKING_EVENT rows.
-@Injectable()
-export class TrackingEventConsumer implements OnModuleInit, OnModuleDestroy {
+// Built on @nestjs/microservices' NATS transport (core NATS pub/sub, not
+// JetStream - per-aggregate JetStream ordering is task 5.7's job). After
+// appending a TRACKING_EVENT row, also publishes the per-order recompute
+// trigger (Diagram 8, docs/lld/order-service.md) so Order's projection
+// consumer (task 5.6) can recompute SHIPMENT_ORDER.status.
+@Controller()
+export class TrackingEventConsumer {
   private readonly logger = new Logger(TrackingEventConsumer.name);
-  private connection: NatsConnection | null = null;
-  private subscriptions: Subscription[] = [];
 
   constructor(
     private readonly trackingEventRepository: ITrackingEventRepository,
+    private readonly orderLookupPort: IOrderLookupPort,
+    @Inject(NATS_CLIENT) private readonly client: ClientProxy,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    this.connection = await connect({
-      servers: process.env.NATS_URL ?? 'nats://localhost:4222',
-    });
-
-    this.subscriptions = CONSUMED_SUBJECTS.map((subject) => {
-      const subscription = this.connection!.subscribe(subject);
-      void this.consume(subject, subscription);
-      return subscription;
-    });
+  @EventPattern(NATS_SUBJECTS.PARCEL_PICKED_UP)
+  onPickedUp(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_PICKED_UP, payload);
   }
 
-  async onModuleDestroy(): Promise<void> {
-    for (const subscription of this.subscriptions) {
-      subscription.unsubscribe();
-    }
-    await this.connection?.close();
+  @EventPattern(NATS_SUBJECTS.PARCEL_HUB_RECEIVED)
+  onHubReceived(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_HUB_RECEIVED, payload);
   }
 
-  private async consume(
+  @EventPattern(NATS_SUBJECTS.PARCEL_LOADED_FOR_LINEHAUL)
+  onLoadedForLinehaul(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_LOADED_FOR_LINEHAUL, payload);
+  }
+
+  @EventPattern(NATS_SUBJECTS.PARCEL_ARRIVED_AT_HUB)
+  onArrivedAtHub(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_ARRIVED_AT_HUB, payload);
+  }
+
+  @EventPattern(NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY)
+  onOutForDelivery(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY, payload);
+  }
+
+  @EventPattern(NATS_SUBJECTS.PARCEL_DELIVERED)
+  onDelivered(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_DELIVERED, payload);
+  }
+
+  @EventPattern(NATS_SUBJECTS.PARCEL_MISROUTED)
+  onMisrouted(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_MISROUTED, payload);
+  }
+
+  @EventPattern(NATS_SUBJECTS.PARCEL_RTS)
+  onRts(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_RTS, payload);
+  }
+
+  private async handle(
     subject: string,
-    subscription: Subscription,
+    payload: ParcelLifecyclePayload,
   ): Promise<void> {
-    for await (const message of subscription) {
-      try {
-        const payload = codec.decode(message.data);
-        const event = mapSubjectToTrackingEvent(
-          subject,
-          payload as Parameters<typeof mapSubjectToTrackingEvent>[1],
-        );
-        if (!event) {
-          this.logger.warn(`Unrecognized or malformed message on ${subject}`);
-          continue;
-        }
-        await this.trackingEventRepository.appendEvent(event);
-      } catch (error) {
-        this.logger.error(
-          `Failed to process message on ${subject}: ${(error as Error).message}`,
-        );
-      }
+    const event = mapSubjectToTrackingEvent(subject, payload);
+    if (!event) {
+      this.logger.warn(`Unrecognized or malformed message on ${subject}`);
+      return;
     }
+
+    await this.trackingEventRepository.appendEvent(event);
+
+    const shipmentOrderId =
+      await this.orderLookupPort.findShipmentOrderIdByParcelId(event.parcelId);
+    if (!shipmentOrderId) {
+      this.logger.warn(
+        `Could not resolve shipment_order_id for parcel ${event.parcelId}; skipping projection recompute trigger`,
+      );
+      return;
+    }
+
+    await firstValueFrom(
+      this.client.emit(orderStatusSubject(shipmentOrderId), {}),
+    );
   }
 }

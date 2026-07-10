@@ -32,4 +32,13 @@ export class OrderLookupAdapter implements IOrderLookupPort {
     });
     return parcels.map((parcel) => ({ id: parcel.id, state: parcel.state }));
   }
+
+  async findShipmentOrderIdByParcelId(
+    parcelId: string,
+  ): Promise<string | null> {
+    const parcel = await this.parcelRepository.findOne({
+      where: { id: parcelId },
+    });
+    return parcel?.shipmentOrderId ?? null;
+  }
 }

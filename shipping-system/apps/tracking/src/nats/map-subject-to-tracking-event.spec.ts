@@ -107,7 +107,7 @@ describe('mapSubjectToTrackingEvent', () => {
   it('returns null when the payload is missing parcel_id', () => {
     const result = mapSubjectToTrackingEvent(NATS_SUBJECTS.PARCEL_PICKED_UP, {
       event_id: 'evt-10',
-    } as never);
+    });
 
     expect(result).toBeNull();
   });
@@ -115,7 +115,7 @@ describe('mapSubjectToTrackingEvent', () => {
   it('returns null when the payload is missing event_id', () => {
     const result = mapSubjectToTrackingEvent(NATS_SUBJECTS.PARCEL_PICKED_UP, {
       parcel_id: 'parcel-1',
-    } as never);
+    });
 
     expect(result).toBeNull();
   });

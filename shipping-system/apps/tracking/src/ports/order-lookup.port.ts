@@ -10,4 +10,10 @@ export abstract class IOrderLookupPort {
   abstract findParcelsByShipmentOrderId(
     shipmentOrderId: string,
   ): Promise<OrderParcelSummary[] | null>;
+
+  // Used by TrackingEventConsumer to resolve which order's status
+  // projection to trigger a recompute for, after appending a scan event.
+  abstract findShipmentOrderIdByParcelId(
+    parcelId: string,
+  ): Promise<string | null>;
 }
