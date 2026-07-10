@@ -3,6 +3,27 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-10
+
+### Done
+- Completed task **5.5** (Tracking Service: append-only event store + consumers, `docs/03-phases.md`), touching UC-04 (Track Parcel) and BR-03 (append-only):
+  - **Schema fix** (confirmed with user, same class of gap as 5.4's `sla_days`): `TRACKING_EVENT` had no column to carry the NATS event's `event_id`, so consumers couldn't de-dup on it per `CLAUDE.md`'s two-layer idempotency. Added `event_id UUID NOT NULL UNIQUE` to `db/init-db.sql`'s `shipping_tracking_db.TRACKING_EVENT`, updated `docs/01-ERD.md`, regenerated `event_id` per scan event in `generate_seed.py` and `db/seed.sql` (`270bd52`).
+  - Added `TrackingEvent` entity + `ITrackingEventRepository`/`TrackingEventRepository` (`apps/tracking/src/entities/`, `ports/`, `repositories/`): append-only insert via `ON CONFLICT (event_id) DO NOTHING`, timeline query ordered oldest-first. Added a read-only cross-schema lookup into Order's `shipping_order_db` (`ShipmentOrder`/`Parcel` minimal entities, new named `'order'` TypeORM connection, same pattern as 5.4's `network` connection) via `IOrderLookupPort`/`OrderLookupAdapter`, to resolve `tracking_id (shipment_order_id) -> parcel ids/states` (`dc8bd0e`).
+  - Added `TrackingEventConsumer` (`apps/tracking/src/nats/`) — the **first real NATS consumer in the codebase**, built directly on the raw `nats` client (no new dependency, no `@nestjs/microservices`). Subscribes to the 8 parcel-lifecycle subjects that map to `TRACKING_EVENT.event_type` (excludes `trip.departed`/`trip.arrived` — no `parcel_id`, flagged as an HLD/schema mismatch, not fixed; excludes `DELIVERY_FAILED` — no NATS contract yet, pre-existing gap). Subject->event mapping extracted into a pure, unit-tested function (`map-subject-to-tracking-event.ts`) separate from the NATS I/O. Added `TrackingService`/`TrackingController`: `GET /tracking/:trackingId`, 404 on unknown order id, `status: null` until Order's projection consumer (task 5.6) populates the Redis cache (`211a72a`).
+  - TDD: 18 new tests (repository dedup + timeline query, order-lookup adapter 404/happy path, 11 subject-mapping cases including unrecognized-subject and missing-field guards, service 404 + grouping, thin controller delegation) — all written and confirmed red before implementation. 85/85 total passing; `pnpm build`/`pnpm lint` clean.
+  - **Live-verified**: reseeded `shipping_postgres` from scratch, ran `tracking` for real against live NATS — `GET /tracking/:id` returned the actual seeded 6-event timeline for a real order, unknown order 404s. Published a real `parcel.picked_up` NATS message twice with the same `event_id` and confirmed exactly one `TRACKING_EVENT` row was written (BR-03 dedup working end-to-end, not just mocked).
+  - Backfilled the two missing session walkthrough docs from 2026-07-09: `docs/reference/task-5.3-walkthrough.md` and `docs/reference/task-5.4-walkthrough.md` (`3eab552`).
+
+### Decisions / open questions
+- Confirmed with the user: added `event_id` to `TRACKING_EVENT` (schema change) — a real gap for consumer-side idempotency, not deferred.
+- Confirmed with the user: built the NATS consumer on the raw `nats` client rather than adding `@nestjs/microservices` as a new dependency.
+- Confirmed with the user: `trip.departed`/`trip.arrived` are not consumed in this task (no `parcel_id`, no `TRACKING_EVENT` row possible) — flagged as an HLD documentation mismatch, not solved here.
+- Confirmed with the user: UC-15 (passive lost-parcel SLA sweep, a producer/job) is out of scope for 5.5 ("event store + consumers") — still unassigned to any task.
+- Confirmed with the user: `GET /tracking/:id`'s `status` field returns `null` until task 5.6 wires the Redis cache-write — documented behavior, not a bug.
+
+### Next
+- Task **5.6** Status projection (read model, <300ms) + Transactional Outbox (`docs/03-phases.md`), via `/begin-task 5.6`.
+
 ## 2026-07-09
 
 ### Done

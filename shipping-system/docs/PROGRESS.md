@@ -10,11 +10,31 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.5` Tracking Service: append-only event store +
-  consumers. Run `/begin-task 5.5` to start it.
+- **Next task:** `5.6` Status projection (read model, <300ms) +
+  Transactional Outbox. Run `/begin-task 5.6` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.4` (Pricing Service: rate-card matrix +
+- **State:** Task `5.5` (Tracking Service: append-only event store +
+  consumers) complete, committed as 4 logical commits (`270bd52` schema
+  fix — `event_id` added to `TRACKING_EVENT` for consumer-side dedup —
+  + ERD/seed regen, `dc8bd0e` `TrackingEvent` entity + repository/
+  order-lookup ports, `211a72a` NATS consumer + `GET /tracking/:trackingId`
+  wiring, `3eab552` backfilled 5.3/5.4 walkthrough docs). This is the
+  **first real NATS consumer in the codebase** — built directly on the
+  raw `nats` client, not `@nestjs/microservices` (no new dependency).
+  Subscribes to the 8 parcel-lifecycle subjects that map onto
+  `TRACKING_EVENT.event_type`; `trip.departed`/`trip.arrived` (no
+  `parcel_id`) and `DELIVERY_FAILED` (no NATS contract yet) are
+  deliberately not consumed. `GET /tracking/:trackingId` resolves parcel
+  ids/states via a new read-only `'order'` connection into
+  `shipping_order_db` (same pattern as 5.4's `network` connection) and
+  returns the real Postgres timeline; `status` is `null` until 5.6 wires
+  the Redis cache-write. 18 new tests (85 total); `pnpm build`/`pnpm
+  lint`/`pnpm test` all green. **Live-verified**: real seeded order's
+  timeline returned correctly, unknown order 404s, and a duplicate
+  `event_id` published twice over NATS produced exactly one DB row
+  (BR-03 dedup confirmed end-to-end, not just mocked). Task `5.4`
+  (Pricing Service: rate-card matrix +
   Order-to-Pricing sync) complete, committed as 3 logical commits
   (`2a188a9` schema/ERD/seed regen, `27e0e41` `RateCard`/`Zone` entities +
   `network` connection, `cf874dc` `RateCardPricingAdapter` + wiring +
@@ -51,16 +71,87 @@
   `docs/lld/pricing-service.md`), now joined by a third, read-only
   `network` connection (Hub Service's `ZONE` table — Order/Pricing never
   writes there; Hub Service, task 6.2, remains its sole owner/writer).
-  `ParcelStateMachine` is feature-complete for Order-owned FSM logic —
-  still a pure module with no REST endpoint or NATS wiring; those land in
-  tasks 5.5/5.6. Courier Service's own side of BR-04 (counting 3 failed
+  `ParcelStateMachine` is feature-complete for Order-owned FSM logic and
+  is now actually wired to real scan events: Tracking's NATS consumer
+  (task 5.5) appends `TRACKING_EVENT` rows, but nothing yet calls
+  `ParcelStateMachine.transition()` off those rows to update
+  `PARCEL.state` in Order — that projection/consumer wiring, plus the
+  `orders.status.<order_id>` recompute trigger and Transactional Outbox,
+  is task **5.6**. Courier Service's own side of BR-04 (counting 3 failed
   `DELIVERY_FAILED` attempts and publishing `parcel.rts`) is task **6.1**,
-  not yet built. Known open items carried forward unchanged:
-  `docs/lld/order-service.md`'s "abandoned prepaid payment" gap, and
-  `Damaged`'s complete lack of a documented trigger event (no task
-  assigned to either).
+  not yet built — so `parcel.rts`/`parcel.delivered`/etc. currently have
+  no real producer either; Tracking's consumer can only be exercised by
+  hand-publishing test messages until Phase 6 lands. Known open items
+  carried forward unchanged: `docs/lld/order-service.md`'s "abandoned
+  prepaid payment" gap, `Damaged`'s complete lack of a documented trigger
+  event, UC-15's passive lost-parcel SLA sweep job (unassigned to any
+  task), and the HLD listing `trip.departed`/`trip.arrived` as Tracking
+  inputs despite neither carrying a `parcel_id` (no task assigned).
 
 ## Log
+
+### 2026-07-10 — Task 5.5: Tracking Service append-only event store + consumers
+- **Schema fix** (confirmed with user, same class of gap as 5.4's
+  `sla_days`): `TRACKING_EVENT` had no `event_id` column, so consumers had
+  no way to satisfy `CLAUDE.md`'s "(2) consumers also de-dup on event_id"
+  idempotency layer. Added `event_id UUID NOT NULL UNIQUE`, updated
+  `docs/01-ERD.md`, regenerated `event_id` per scan event in
+  `generate_seed.py`/`db/seed.sql` (`270bd52`).
+- Added `TrackingEvent` entity + `ITrackingEventRepository`/
+  `TrackingEventRepository`: append-only insert via
+  `ON CONFLICT (event_id) DO NOTHING`, timeline query ordered
+  oldest-first. Added a read-only cross-schema lookup into Order's
+  `shipping_order_db` (minimal `ShipmentOrder`/`Parcel` entities, new
+  named `'order'` connection — same pattern as 5.4's `network`
+  connection) via `IOrderLookupPort`/`OrderLookupAdapter`, to resolve a
+  `tracking_id` to its parcel ids/states (`dc8bd0e`).
+- Added `TrackingEventConsumer` — the first real NATS consumer in the
+  codebase, built directly on the raw `nats` client rather than adding
+  `@nestjs/microservices` as a new dependency (confirmed with user).
+  Subscribes to the 8 parcel-lifecycle subjects that map onto
+  `TRACKING_EVENT.event_type`. Subject-to-event mapping is a pure,
+  separately unit-tested function (`map-subject-to-tracking-event.ts`),
+  kept apart from the NATS connection/subscription wiring itself (which,
+  like other bootstrap code in this repo, isn't unit-tested — it was
+  live-verified instead, see below). Added `TrackingService`/
+  `TrackingController`: `GET /tracking/:trackingId`, 404 on unknown order
+  id, `status: null` pending task 5.6's Redis cache-write (`211a72a`).
+- TDD: 18 new tests, all written and confirmed red before implementation
+  (repository dedup + timeline ordering, order-lookup adapter 404/happy
+  path, 11 subject-mapping cases in the pure mapper — including
+  unrecognized-subject and missing-`event_id`/`parcel_id` guards —
+  service 404 + per-parcel grouping, thin controller delegation). 85/85
+  total passing; `pnpm build`/`pnpm lint` clean.
+- **Live-verified** (not just unit tests): reseeded `shipping_postgres`
+  from scratch, ran `tracking` for real against the live NATS container.
+  `GET /tracking/:id` against a real seeded order returned its actual
+  6-event Postgres timeline (PICKUP → HUB_RECEIVE → DEPARTED_LINEHAUL →
+  ARRIVED_AT_HUB → OUT_FOR_DELIVERY → DELIVERED); an unknown order id
+  404s. Published a real `parcel.picked_up` message twice over NATS with
+  the same `event_id` and confirmed exactly one `TRACKING_EVENT` row
+  landed — BR-03's dedup guarantee holding end-to-end, not just against
+  a mock.
+- Backfilled `docs/reference/task-5.3-walkthrough.md` and
+  `task-5.4-walkthrough.md`, which were never written when those tasks
+  were completed on 2026-07-09, unlike 5.1/5.2 (`3eab552`).
+
+### Decisions / open questions
+- Confirmed with the user: `trip.departed`/`trip.arrived` are not
+  consumed by this task's `TrackingEventConsumer` — neither carries a
+  `parcel_id`, so there is no `TRACKING_EVENT` row they could produce.
+  The HLD's subject-map table lists Tracking as a consumer of both
+  anyway; that's flagged as a documentation/schema mismatch, not
+  resolved here.
+- Confirmed with the user: UC-15 (passive lost-parcel SLA sweep — a
+  scheduled job/producer, not a consumer) stays out of scope for a task
+  titled "event store + consumers." Still has no assigned task number.
+- Confirmed with the user: `GET /tracking/:id`'s `status` field returns
+  `null` for every order until task 5.6 wires the
+  `SHIPMENT_ORDER.status` Redis cache-write — documented interim
+  behavior, not a bug to fix now.
+- `DELIVERY_FAILED`'s missing NATS contract (flagged during the Phase 6
+  LLD review, 2026-07-08) remains unassigned — Courier Service (task 6.1)
+  is still the one that would need to publish it.
 
 ### 2026-07-09 — Task 5.4: Pricing Service rate-card matrix + Order-to-Pricing sync
 - **Schema fix** (confirmed with user before implementing): `docs/01-ERD.md`
