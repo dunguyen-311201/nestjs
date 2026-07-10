@@ -159,6 +159,7 @@ erDiagram
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of a tracking event (append-only). |
+| `event_id` | uuid, unique | The NATS event envelope's `event_id`; consumer-side dedup (2nd idempotency layer, alongside the broker-level JetStream dedup). |
 | `parcel_id` | uuid FK | The parcel that was scanned. |
 | `hub_id` | uuid FK, nullable | Hub where the scan happened; null for courier-side scans. |
 | `courier_id` | uuid FK, nullable | Courier who recorded the scan; null for hub-side scans. |

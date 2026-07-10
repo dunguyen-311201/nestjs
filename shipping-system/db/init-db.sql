@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS shipping_courier_db.DELIVERY_ATTEMPT (
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS shipping_tracking_db.TRACKING_EVENT (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL UNIQUE, -- NATS event envelope id; consumer-side dedup (2nd idempotency layer)
     parcel_id UUID NOT NULL,       -- Logical FK to PARCEL.id
     hub_id UUID,                  -- Logical FK to HUB.id
     courier_id UUID,              -- Logical FK to COURIER.id

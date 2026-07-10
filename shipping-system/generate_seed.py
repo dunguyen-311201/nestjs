@@ -205,33 +205,33 @@ for o_idx in range(1000):
         # Timeline always starts with PICKUP scan
         if p_state in ["InHub", "InTransit", "OutForDelivery", "Delivered", "Lost", "Damaged"]:
             # 1. Pickup Event
-            scan_events.append((gen_uuid(), p_id, None, courier_id, None, "PICKUP", created_at + timedelta(hours=2)))
+            scan_events.append((gen_uuid(), gen_uuid(), p_id, None, courier_id, None, "PICKUP", created_at + timedelta(hours=2)))
             
             # 2. Hub Inbound Event
             if p_state in ["InTransit", "OutForDelivery", "Delivered"]:
-                scan_events.append((gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", created_at + timedelta(hours=6)))
+                scan_events.append((gen_uuid(), gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", created_at + timedelta(hours=6)))
                 
                 # BR-02 Misrouted simulation (5% of in-transit orders)
                 is_misrouted = (random.random() < 0.05)
                 if is_misrouted:
                     misrouted_time = created_at + timedelta(hours=12)
-                    scan_events.append((gen_uuid(), p_id, transit_hub_id, None, None, "MISROUTED", misrouted_time))
+                    scan_events.append((gen_uuid(), gen_uuid(), p_id, transit_hub_id, None, None, "MISROUTED", misrouted_time))
                     # Corrective route scan
-                    scan_events.append((gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", misrouted_time + timedelta(hours=4)))
+                    scan_events.append((gen_uuid(), gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", misrouted_time + timedelta(hours=4)))
                 
                 # 3. Depart Line-haul Event
                 if p_state in ["OutForDelivery", "Delivered"]:
-                    scan_events.append((gen_uuid(), p_id, None, None, trip_id, "DEPARTED_LINEHAUL", created_at + timedelta(hours=14)))
+                    scan_events.append((gen_uuid(), gen_uuid(), p_id, None, None, trip_id, "DEPARTED_LINEHAUL", created_at + timedelta(hours=14)))
                     # 4. Arrive Hub Event
-                    scan_events.append((gen_uuid(), p_id, dest_hub_id, None, None, "ARRIVED_AT_HUB", created_at + timedelta(hours=24)))
+                    scan_events.append((gen_uuid(), gen_uuid(), p_id, dest_hub_id, None, None, "ARRIVED_AT_HUB", created_at + timedelta(hours=24)))
                     
                     # 5. Out for Delivery Event
                     if p_state == "Delivered":
-                        scan_events.append((gen_uuid(), p_id, None, courier_id, None, "OUT_FOR_DELIVERY", created_at + timedelta(hours=28)))
+                        scan_events.append((gen_uuid(), gen_uuid(), p_id, None, courier_id, None, "OUT_FOR_DELIVERY", created_at + timedelta(hours=28)))
                         
                         # 6. Delivered Event
                         del_event_id = gen_uuid()
-                        scan_events.append((del_event_id, p_id, None, courier_id, None, "DELIVERED", created_at + timedelta(hours=30)))
+                        scan_events.append((del_event_id, gen_uuid(), p_id, None, courier_id, None, "DELIVERED", created_at + timedelta(hours=30)))
                         
                         # 7. Proof of Delivery
                         # No tracking_event_id: Courier writes this row synchronously,
@@ -244,11 +244,11 @@ for o_idx in range(1000):
                             f"http://cdn.shipping.com/photos/{gen_uuid()}.jpg"
                         ))
                     elif p_state == "OutForDelivery":
-                        scan_events.append((gen_uuid(), p_id, None, courier_id, None, "OUT_FOR_DELIVERY", created_at + timedelta(hours=28)))
+                        scan_events.append((gen_uuid(), gen_uuid(), p_id, None, courier_id, None, "OUT_FOR_DELIVERY", created_at + timedelta(hours=28)))
                 elif p_state == "InTransit":
-                    scan_events.append((gen_uuid(), p_id, None, None, trip_id, "DEPARTED_LINEHAUL", created_at + timedelta(hours=14)))
+                    scan_events.append((gen_uuid(), gen_uuid(), p_id, None, None, trip_id, "DEPARTED_LINEHAUL", created_at + timedelta(hours=14)))
             elif p_state == "InHub":
-                scan_events.append((gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", created_at + timedelta(hours=6)))
+                scan_events.append((gen_uuid(), gen_uuid(), p_id, origin_hub_id, None, None, "HUB_RECEIVE", created_at + timedelta(hours=6)))
 
         # BR-04 RTS simulation (3 failed attempts followed by RTS transition)
         # We simulate this for a portion of Delivered/Partially_Delivered orders that were returned
@@ -262,12 +262,12 @@ for o_idx in range(1000):
                 attempt_time = created_at + timedelta(hours=30 + attempt * 2)
                 attempt_id = gen_uuid()
                 delivery_attempts.append((attempt_id, rts_p_id, attempt, "Customer absent", attempt_time))
-                scan_events.append((gen_uuid(), rts_p_id, None, courier_id, None, "DELIVERY_FAILED", attempt_time))
+                scan_events.append((gen_uuid(), gen_uuid(), rts_p_id, None, courier_id, None, "DELIVERY_FAILED", attempt_time))
             
             # Trigger RTS scan event
-            scan_events.append((gen_uuid(), rts_p_id, None, courier_id, None, "RTS", rts_time))
+            scan_events.append((gen_uuid(), gen_uuid(), rts_p_id, None, courier_id, None, "RTS", rts_time))
             # Quet inbound tai kho nguoi gui de hoan tra
-            scan_events.append((gen_uuid(), rts_p_id, origin_hub_id, None, None, "ARRIVED_AT_HUB", rts_time + timedelta(hours=12)))
+            scan_events.append((gen_uuid(), gen_uuid(), rts_p_id, origin_hub_id, None, None, "ARRIVED_AT_HUB", rts_time + timedelta(hours=12)))
             
             # Overwrite state to show RTS was completed
             # Find parcel and modify direction/state
@@ -363,10 +363,10 @@ with open("db/seed.sql", "w") as f:
     # 13. Insert Scan Events
     f.write("-- Scan Events\n")
     for row in scan_events:
-        hub_str = f"'{row[2]}'" if row[2] else "NULL"
-        courier_str = f"'{row[3]}'" if row[3] else "NULL"
-        trip_str = f"'{row[4]}'" if row[4] else "NULL"
-        f.write(f"INSERT INTO shipping_tracking_db.TRACKING_EVENT (id, parcel_id, hub_id, courier_id, linehaul_trip_id, event_type, created_at) VALUES ('{row[0]}', '{row[1]}', {hub_str}, {courier_str}, {trip_str}, '{row[5]}', '{row[6].isoformat()}');\n")
+        hub_str = f"'{row[3]}'" if row[3] else "NULL"
+        courier_str = f"'{row[4]}'" if row[4] else "NULL"
+        trip_str = f"'{row[5]}'" if row[5] else "NULL"
+        f.write(f"INSERT INTO shipping_tracking_db.TRACKING_EVENT (id, event_id, parcel_id, hub_id, courier_id, linehaul_trip_id, event_type, created_at) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', {hub_str}, {courier_str}, {trip_str}, '{row[6]}', '{row[7].isoformat()}');\n")
     f.write("\n")
     
     # 14. Insert Delivery Proofs
