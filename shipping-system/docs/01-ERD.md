@@ -95,6 +95,19 @@ erDiagram
 | `status` | string | Provider transaction status (`succeeded`, `failed`, `pending`). |
 | `created_at` | timestamp | Timestamp of the transaction. |
 
+### OUTBOX
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | uuid PK | Unique identifier of the outbox row. |
+| `event_id` | uuid, unique | The `event_id` published to NATS as `Nats-Msg-Id` (broker-level dedup). |
+| `event_type` | string | The NATS subject this row publishes to (e.g. `order.created`). |
+| `payload` | jsonb | The event body. |
+| `status` | enum | `PENDING`, `PUBLISHED`. |
+| `created_at` | timestamp | When the row was written (same transaction as the triggering write). |
+| `published_at` | timestamp, nullable | When the poller successfully published it. |
+
+Transactional Outbox for Order Creation only (`docs/02-HLD.md` § Idempotency and outbox mechanics) — no relationship to other entities; not a general-purpose event log.
+
 ### LINEHAULTRIP
 | Field | Type | Description |
 | :--- | :--- | :--- |

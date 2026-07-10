@@ -18,6 +18,20 @@ Rules are grouped by operational area. Each rule has an explicit enforcement poi
 | **BR-08** | An order cannot be dispatched for first-mile pickup, nor accepted at any hub inbound scan, until its Stripe payment is confirmed (`SHIPMENT_ORDER.status = Confirmed`). | Payment | Service Logic (`payment.succeeded` consumer) |
 | **BR-09** | Key customer-facing lifecycle transitions (order confirmed, payment succeeded, delivered, RTS triggered) fire an asynchronous email notification. Notification delivery is best-effort: a failure to send never blocks, rolls back, or retries the triggering transaction. | Notifications | Stateless NATS Consumer |
 
+## BR-05 Status Projection Mapping
+
+BR-05 states the general principle ("least-advanced status among its parcels") but not the exact mapping from a `SHIPMENT_ORDER`'s set of `PARCEL.state` values to its own `status`. This table is the mapping the Order Service's projection consumer implements (task 5.6):
+
+| Condition across the order's parcels | `SHIPMENT_ORDER.status` |
+| :--- | :--- |
+| At least one parcel is still non-terminal (`Created`, `InTransit`, `InHub`, `OutForDelivery`, `Misrouted`) | `Active` |
+| All parcels are `Delivered` | `Complete` |
+| All parcels are terminal (`Delivered`/`Lost`/`Damaged`) but not all `Delivered` (a mix) | `Partially_Delivered` |
+| All parcels are `Lost` | `Lost` |
+| All parcels are `Damaged` | `Damaged` |
+
+`Draft`/`Created`/`Confirmed`/`Cancelled` are not produced by this projection — they sit outside the parcel-movement lifecycle (pre-payment, or a manual cancellation), so this recompute never sets them.
+
 ## Parcel Lifecycle (Happy Path)
 
 1. Sender creates order → price locked (BR-01).

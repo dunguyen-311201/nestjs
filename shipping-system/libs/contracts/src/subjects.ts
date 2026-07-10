@@ -19,7 +19,11 @@ export const NATS_SUBJECTS = {
   PARCEL_LOST_SUSPECTED: 'parcel.lost_suspected',
 } as const;
 
-/** Per-order projection-write subject - a recompute trigger, not a domain event. */
-export function orderStatusSubject(orderId: string): string {
-  return `orders.status.${orderId}`;
+// Per-order projection-write subject - a recompute trigger, not a domain
+// event. `shipment_orders` (not `orders`) to match ADR-001 and
+// order-service.md's Diagram 8 exactly.
+export const SHIPMENT_ORDER_STATUS_WILDCARD = 'shipment_orders.status.>';
+
+export function orderStatusSubject(shipmentOrderId: string): string {
+  return `shipment_orders.status.${shipmentOrderId}`;
 }

@@ -132,6 +132,20 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.PAYMENT_TRANSACTION (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Transactional Outbox (Order Creation only, per docs/02-HLD.md § Idempotency
+-- and outbox mechanics). Written in the same DB transaction as
+-- SHIPMENT_ORDER/PARCEL; a background poller publishes PENDING rows to NATS
+-- (Nats-Msg-Id = event_id) and marks them PUBLISHED.
+CREATE TABLE IF NOT EXISTS shipping_order_db.OUTBOX (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PUBLISHED')),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMP
+);
+
 -- -----------------------------------------------------
 -- 4. shipping_courier_db Tables
 -- -----------------------------------------------------
@@ -196,6 +210,8 @@ CREATE INDEX IF NOT EXISTS idx_parcel_shipment_order_id ON shipping_order_db.PAR
 CREATE INDEX IF NOT EXISTS idx_parcel_route_id ON shipping_order_db.PARCEL(route_id);
 
 CREATE INDEX IF NOT EXISTS idx_payment_transaction_payment_id ON shipping_order_db.PAYMENT_TRANSACTION(payment_id);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_status_created_at ON shipping_order_db.OUTBOX(status, created_at) WHERE status = 'PENDING';
 
 CREATE INDEX IF NOT EXISTS idx_courier_zone_id ON shipping_courier_db.COURIER(zone_id);
 
