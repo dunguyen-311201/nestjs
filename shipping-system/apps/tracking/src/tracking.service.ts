@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { IOrderLookupPort } from './ports/order-lookup.port';
 import { ITrackingEventRepository } from './ports/tracking-event-repository.port';
+import { IStatusCachePort } from './ports/status-cache.port';
 import { TrackingEvent } from './entities/tracking-event.entity';
 
 export interface TrackingTimelineEntry {
@@ -26,6 +27,7 @@ export class TrackingService {
   constructor(
     private readonly orderLookupPort: IOrderLookupPort,
     private readonly trackingEventRepository: ITrackingEventRepository,
+    private readonly statusCachePort: IStatusCachePort,
   ) {}
 
   async getTracking(shipmentOrderId: string): Promise<TrackingResult> {
@@ -37,15 +39,20 @@ export class TrackingService {
       );
     }
 
-    const timeline = await this.trackingEventRepository.findTimelineByParcelIds(
-      parcels.map((parcel) => parcel.id),
-    );
+    const [timeline, status] = await Promise.all([
+      this.trackingEventRepository.findTimelineByParcelIds(
+        parcels.map((parcel) => parcel.id),
+      ),
+      this.statusCachePort.getStatus(shipmentOrderId),
+    ]);
 
     return {
       shipment_order_id: shipmentOrderId,
-      // Populated from the SHIPMENT_ORDER.status Redis cache once the
-      // Order projection consumer (task 5.6) writes it - null until then.
-      status: null,
+      // Redis cache miss (order created but Order's projection consumer
+      // hasn't recomputed yet) is a valid transient state, not an error -
+      // surfaces as null rather than falling back to a synchronous
+      // cross-service Postgres read.
+      status,
       parcels: parcels.map((parcel) => ({
         parcel_id: parcel.id,
         state: parcel.state,

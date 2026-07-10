@@ -5,14 +5,17 @@ import { TrackingEventType } from './entities/tracking-event.entity';
 describe('TrackingService', () => {
   let orderLookupPort: { findParcelsByShipmentOrderId: jest.Mock };
   let trackingEventRepository: { findTimelineByParcelIds: jest.Mock };
+  let statusCachePort: { getStatus: jest.Mock };
   let service: TrackingService;
 
   beforeEach(() => {
     orderLookupPort = { findParcelsByShipmentOrderId: jest.fn() };
     trackingEventRepository = { findTimelineByParcelIds: jest.fn() };
+    statusCachePort = { getStatus: jest.fn().mockResolvedValue(null) };
     service = new TrackingService(
       orderLookupPort,
       trackingEventRepository as never,
+      statusCachePort,
     );
   });
 
@@ -68,5 +71,18 @@ describe('TrackingService', () => {
         ],
       },
     ]);
+  });
+
+  it('returns the cached status when available', async () => {
+    orderLookupPort.findParcelsByShipmentOrderId.mockResolvedValue([
+      { id: 'parcel-1', state: 'Delivered' },
+    ]);
+    trackingEventRepository.findTimelineByParcelIds.mockResolvedValue([]);
+    statusCachePort.getStatus.mockResolvedValue('Complete');
+
+    const result = await service.getTracking('order-1');
+
+    expect(statusCachePort.getStatus).toHaveBeenCalledWith('order-1');
+    expect(result.status).toBe('Complete');
   });
 });
