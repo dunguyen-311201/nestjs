@@ -10,10 +10,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ParcelType } from '../entities/parcel.enums';
+import { PaymentType } from '../entities/payment.entity';
 
-export enum PaymentType {
-  PREPAID_STRIPE = 'PREPAID_STRIPE',
-}
+export { PaymentType };
 
 export class AddressDto {
   @IsString()

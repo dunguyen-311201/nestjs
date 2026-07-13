@@ -77,6 +77,7 @@ export class OrderService {
       rateCardId: rateCardId as string,
       priceCents: totalPriceCents,
       expectedDeliveryAt: expectedDeliveryAt as Date,
+      paymentType: dto.payment_type,
       parcels: dto.parcels.map((parcel) => ({
         declaredWeightGrams: parcel.declared_weight_grams,
         type: parcel.type,

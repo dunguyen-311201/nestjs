@@ -9,6 +9,8 @@ import { Parcel } from '../entities/parcel.entity';
 import { Outbox, OutboxStatus } from '../entities/outbox.entity';
 import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
 import { ParcelState } from '../entities/parcel.enums';
+import { Payment } from '../entities/payment.entity';
+import { PaymentStatus } from '../entities/payment-status.enum';
 import { IOrderRepository, NewOrderData } from '../ports/order-repository.port';
 
 @Injectable()
@@ -58,6 +60,15 @@ export class OrderRepository implements IOrderRepository {
           recipient_id: recipient.id,
           parcel_ids: parcels.map((parcel) => parcel.id),
         },
+      });
+
+      // One PAYMENT row per order (UNIQUE shipment_order_id), Unpaid until
+      // the Stripe webhook confirms it (BR-08).
+      await manager.save(Payment, {
+        shipmentOrderId: order.id,
+        type: data.paymentType,
+        amountCents: data.priceCents,
+        status: PaymentStatus.UNPAID,
       });
 
       return order;

@@ -9,6 +9,8 @@ import { Parcel } from './entities/parcel.entity';
 import { RateCard } from './entities/rate-card.entity';
 import { Zone } from './entities/zone.entity';
 import { Outbox } from './entities/outbox.entity';
+import { Payment } from './entities/payment.entity';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
 
 @Module({
   imports: [
@@ -21,7 +23,14 @@ import { Outbox } from './entities/outbox.entity';
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'postgres',
       schema: 'shipping_order_db',
-      entities: [Customer, ShipmentOrder, Parcel, Outbox],
+      entities: [
+        Customer,
+        ShipmentOrder,
+        Parcel,
+        Outbox,
+        Payment,
+        PaymentTransaction,
+      ],
       synchronize: false,
     }),
     OrderModule,

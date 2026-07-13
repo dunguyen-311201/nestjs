@@ -3,6 +3,7 @@ import { ShipmentOrder } from '../entities/shipment-order.entity';
 import { Parcel } from '../entities/parcel.entity';
 import { ParcelState } from '../entities/parcel.enums';
 import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
+import { PaymentType } from '../entities/payment.entity';
 
 export interface NewOrderData {
   sender: Pick<Customer, 'nameEnc' | 'phoneEnc' | 'addressEnc' | 'regionCode'>;
@@ -13,6 +14,7 @@ export interface NewOrderData {
   rateCardId: string;
   priceCents: number;
   expectedDeliveryAt: Date;
+  paymentType: PaymentType;
   parcels: Pick<
     Parcel,
     'declaredWeightGrams' | 'type' | 'direction' | 'state'

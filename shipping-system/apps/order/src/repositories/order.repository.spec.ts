@@ -3,6 +3,8 @@ import { Customer } from '../entities/customer.entity';
 import { ShipmentOrder } from '../entities/shipment-order.entity';
 import { Parcel } from '../entities/parcel.entity';
 import { Outbox } from '../entities/outbox.entity';
+import { Payment, PaymentType } from '../entities/payment.entity';
+import { PaymentStatus } from '../entities/payment-status.enum';
 import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
 import {
   ParcelDirection,
@@ -30,6 +32,7 @@ describe('OrderRepository', () => {
         );
       }
       if (entity === Outbox) return Promise.resolve(data);
+      if (entity === Payment) return Promise.resolve(data);
       throw new Error(`Unexpected save target: ${String(entity)}`);
     });
     transaction = jest
@@ -40,8 +43,8 @@ describe('OrderRepository', () => {
     repository = new OrderRepository(dataSource as never);
   });
 
-  it('writes an order.created outbox row in the same transaction as the order/parcels', async () => {
-    await repository.createOrder({
+  function baseNewOrderData() {
+    return {
       sender: {
         nameEnc: 'n',
         phoneEnc: 'p',
@@ -57,6 +60,7 @@ describe('OrderRepository', () => {
       rateCardId: 'rate-1',
       priceCents: 1000,
       expectedDeliveryAt: new Date('2026-01-05T00:00:00Z'),
+      paymentType: PaymentType.PREPAID_STRIPE,
       parcels: [
         {
           declaredWeightGrams: 500,
@@ -65,7 +69,11 @@ describe('OrderRepository', () => {
           state: ParcelState.CREATED,
         },
       ],
-    });
+    };
+  }
+
+  it('writes an order.created outbox row in the same transaction as the order/parcels', async () => {
+    await repository.createOrder(baseNewOrderData());
 
     expect(transaction).toHaveBeenCalledTimes(1);
     const calls = save.mock.calls as unknown[][];
@@ -85,6 +93,24 @@ describe('OrderRepository', () => {
     // which literal the CREATED order gets (avoids asserting on a
     // duplicated magic string).
     expect(ShipmentOrderStatus.CREATED).toBe('Created');
+  });
+
+  it('writes an Unpaid PAYMENT row in the same transaction as the order/parcels', async () => {
+    await repository.createOrder(baseNewOrderData());
+
+    const calls = save.mock.calls as unknown[][];
+    const paymentCall = calls.find((call) => call[0] === Payment);
+    expect(paymentCall).toBeDefined();
+    const paymentData = (paymentCall as unknown[])[1] as Record<
+      string,
+      unknown
+    >;
+    expect(paymentData).toMatchObject({
+      shipmentOrderId: 'order-id',
+      type: PaymentType.PREPAID_STRIPE,
+      amountCents: 1000,
+      status: PaymentStatus.UNPAID,
+    });
   });
 
   it('findParcelById reads a single parcel by id', async () => {
