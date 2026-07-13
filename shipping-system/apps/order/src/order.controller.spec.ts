@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
+import { PaymentService } from './payment.service';
 import { CreateOrderDto, PaymentType } from './dto/create-order.dto';
 import { ParcelType } from './entities/parcel.enums';
 import { ShipmentOrderStatus } from './entities/shipment-order-status.enum';
@@ -28,14 +29,17 @@ function createOrderDto(): CreateOrderDto {
 describe('OrderController', () => {
   let orderService: jest.Mocked<Pick<OrderService, 'createOrder'>>;
   let pricingPort: jest.Mocked<IPricingPort>;
+  let paymentService: jest.Mocked<Pick<PaymentService, 'checkout'>>;
   let controller: OrderController;
 
   beforeEach(() => {
     orderService = { createOrder: jest.fn() };
     pricingPort = { getPrice: jest.fn() };
+    paymentService = { checkout: jest.fn() };
     controller = new OrderController(
       orderService as unknown as OrderService,
       pricingPort,
+      paymentService as unknown as PaymentService,
     );
   });
 
@@ -82,6 +86,21 @@ describe('OrderController', () => {
       await expect(
         controller.quote('HN01', 'SG01', ParcelType.PARCEL),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('POST /orders/:id/checkout', () => {
+    it('delegates to PaymentService.checkout', async () => {
+      const expected = {
+        checkout_url: 'https://checkout.stripe.com/cs_1',
+        stripe_session_id: 'cs_1',
+      };
+      paymentService.checkout.mockResolvedValue(expected);
+
+      const result = await controller.checkout('order-1');
+
+      expect(paymentService.checkout).toHaveBeenCalledWith('order-1');
+      expect(result).toEqual(expected);
     });
   });
 });

@@ -3,11 +3,13 @@ import {
   Controller,
   Get,
   NotFoundException,
+  Param,
   Post,
   Query,
 } from '@nestjs/common';
 import { IdempotencyKey } from '@app/dtos';
 import { OrderService, CreateOrderResult } from './order.service';
+import { PaymentService, CheckoutResult } from './payment.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ParcelType } from './entities/parcel.enums';
 import { IPricingPort } from './ports/pricing.port';
@@ -22,6 +24,7 @@ export class OrderController {
   constructor(
     private readonly orderService: OrderService,
     private readonly pricingPort: IPricingPort,
+    private readonly paymentService: PaymentService,
   ) {}
 
   @Post()
@@ -52,5 +55,10 @@ export class OrderController {
       price_cents: quote.priceCents,
       sla_expected_delivery: quote.slaExpectedDelivery,
     };
+  }
+
+  @Post(':id/checkout')
+  async checkout(@Param('id') id: string): Promise<CheckoutResult> {
+    return this.paymentService.checkout(id);
   }
 }
