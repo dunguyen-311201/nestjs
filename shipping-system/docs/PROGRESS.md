@@ -14,6 +14,22 @@
   events. Run `/begin-task 6.1` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
+- **Ad-hoc fix since 5.8, not a numbered task**: closed a real
+  customer-dedup gap found while prepping a supporter demo — every
+  `POST /orders` silently created brand-new `CUSTOMER` rows for sender/
+  recipient, even for a repeat phone number. Added `CUSTOMER.phone_hash`
+  (deterministic HMAC-SHA256 via `libs/crypto`'s new `hashForLookup()`,
+  since `phone_enc`'s random-IV encryption can't do equality lookups) and
+  `OrderRepository.findOrCreateCustomer` reuses the match instead of
+  inserting a duplicate. 162/162 tests, `pnpm build`/`pnpm lint` clean,
+  live-verified (2 real orders from the same phone share one real
+  `CUSTOMER.id`). Also documented (not implemented) a related gap found
+  during the same investigation: recipients have no way to discover their
+  own `tracking_id` today (only the sender gets it back), and there's no
+  auth/RBAC anywhere in this codebase despite it being listed as an NFR —
+  confirmed with the user this needs its own architecture decision, out
+  of scope to bolt on ad hoc. See `docs/lld/order-service.md`/
+  `tracking-service.md` § Known Open Items.
 - **State:** Task `5.8` (Payment: Stripe Checkout session + webhook
   handler + `PAYMENT_TRANSACTION` log + prepaid dispatch guard, BR-08)
   complete, committed as 5 logical commits (`509bea8` `stripe` dependency,

@@ -40,6 +40,14 @@ End of day, copy the "Done" bullets straight into your report.
 ### Next
 - Task **5.8** is now complete — Phase 5 (Core Backend) is done. Next: Phase 6 — task **6.1** Courier Service: pickup/delivery legs + scan events (`docs/03-phases.md`), via `/begin-task 6.1`.
 
+- **Ad-hoc fix (not a numbered task)**: found while prepping the supporter demo — every `POST /orders` call was silently inserting brand-new `CUSTOMER` rows for sender and recipient, even for a repeat customer, with no dedup key anywhere. Real gap in the original schema, matches the class of issue as `sla_days`/`event_id` schema fixes in earlier tasks.
+  - Added `libs/crypto`'s `hashForLookup()` (deterministic HMAC-SHA256, keyed by `PII_ENCRYPTION_KEY`) — `encrypt()` is deliberately non-deterministic (random IV), so it can't be used for an equality lookup; TDD, 4 new tests (deterministic, differs per input, 64-hex-char output, throws on missing key), confirmed red first.
+  - Added `CUSTOMER.phone_hash` (`db/init-db.sql`, `docs/01-ERD.md`), indexed (`idx_customer_phone_hash`), **not unique** — a hash collision degrades to "treated as the same customer," never a hard write failure. Regenerated `db/seed.sql` (`generate_seed.py` now derives a matching `phone_hash` per seeded customer).
+  - `OrderRepository.createOrder` now looks up an existing `CUSTOMER` by `phone_hash` before inserting one, reusing the match for both sender and recipient (`findOrCreateCustomer`, same DB transaction). `OrderService.createOrder` computes `hashForLookup(phone)` alongside the existing `encrypt(phone)` call. TDD: 2 new tests in `order.repository.spec.ts` (creates new rows when no match, reuses an existing row and doesn't touch it when found), confirmed red first.
+  - 162/162 total passing; `pnpm build`/`pnpm lint` clean.
+  - **Live-verified**: reseeded from scratch, created 2 real orders from the same phone number — confirmed via `psql` both `SHIPMENT_ORDER.sender_id` point at the exact same single `CUSTOMER` row, not two.
+  - **Documented, not implemented**: while investigating this, also found there's no way for a **recipient** to discover their own `tracking_id` (only the sender gets it back from `POST /orders`) — the only planned channel is the Notification consumer (task 6.6, not built, best-effort by design), and there is **no auth/RBAC anywhere in this codebase** despite `docs/06-specification.md` listing RBAC as an NFR with no task ever assigned to it. Logged as a Known Open Item in `docs/lld/order-service.md`/`tracking-service.md` — confirmed with the user this is a bigger architectural decision (needs its own ADR/task) and out of scope to bolt on ad hoc.
+
 ## 2026-07-10
 
 ### Done

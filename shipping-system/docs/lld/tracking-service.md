@@ -56,6 +56,8 @@ This service is also the **producer** side of **Diagram 8 — Order Status Proje
 
 Reads are served from the `SHIPMENT_ORDER.status` Redis cache (write-through, populated by the Order Service's projection consumer) for the `status` field; the per-parcel `timeline` array always reads from Postgres directly (not cached — high cardinality, low reuse per request).
 
+**Known open item**: this endpoint is unauthenticated — anyone holding a `tracking_id` can read it. There is no discovery mechanism for the recipient side (no "my orders" lookup, no auth/RBAC anywhere in this codebase) — see [order-service.md § Known Open Items](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/order-service.md) for the full note.
+
 ## Database Schema Detail
 
 | Entity | Indexes | Constraints |
