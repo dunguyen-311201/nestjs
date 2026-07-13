@@ -57,15 +57,21 @@ export class StatusProjectionConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ensureConsumer(jsm: JetStreamManager): Promise<string> {
-    await jsm.consumers.add('SHIPMENT_ORDER_STATUS', {
-      durable_name: DURABLE_CONSUMER_NAME,
-      ack_policy: AckPolicy.Explicit,
-    });
+    try {
+      await jsm.consumers.add('SHIPMENT_ORDER_STATUS', {
+        durable_name: DURABLE_CONSUMER_NAME,
+        ack_policy: AckPolicy.Explicit,
+      });
+    } catch (error) {
+      if (!(error as Error).message.includes('already in use')) {
+        throw error;
+      }
+    }
     return DURABLE_CONSUMER_NAME;
   }
 
   private async consumeMessages(consumer: {
-    consume: () => AsyncIterable<JsMsg>;
+    consume: () => Promise<AsyncIterable<JsMsg>>;
   }): Promise<void> {
     const messages = await consumer.consume();
     for await (const message of messages) {

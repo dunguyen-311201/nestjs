@@ -42,7 +42,7 @@ import { StatusProjectionConsumer } from './status-projection.consumer';
       },
     ]),
   ],
-  controllers: [OrderController, ParcelEventConsumer, StatusProjectionConsumer],
+  controllers: [OrderController, ParcelEventConsumer],
   providers: [
     OrderService,
     { provide: IOrderRepository, useClass: OrderRepository },
@@ -51,6 +51,7 @@ import { StatusProjectionConsumer } from './status-projection.consumer';
     { provide: IOutboxRepository, useClass: OutboxRepository },
     { provide: IEventPublisher, useClass: NatsEventPublisher },
     OutboxPollerService,
+    StatusProjectionConsumer,
     {
       provide: REDIS_CLIENT,
       useFactory: () =>

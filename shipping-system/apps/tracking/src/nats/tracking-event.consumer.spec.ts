@@ -12,11 +12,13 @@ describe('TrackingEventConsumer', () => {
       appendEvent: jest.fn().mockResolvedValue(undefined),
     };
     orderLookupPort = { findShipmentOrderIdByParcelId: jest.fn() };
-    statusTriggerPublisher = { publish: jest.fn().mockResolvedValue(undefined) };
+    statusTriggerPublisher = {
+      publish: jest.fn().mockResolvedValue(undefined),
+    };
     consumer = new TrackingEventConsumer(
       trackingEventRepository as never,
       orderLookupPort as never,
-      statusTriggerPublisher as never,
+      statusTriggerPublisher,
     );
   });
 
