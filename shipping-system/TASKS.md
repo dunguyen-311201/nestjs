@@ -3,6 +3,24 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-13
+
+### Done
+- Completed task **5.7** (Per-aggregate serialization: NATS JetStream per-order subject + event-batching, `docs/03-phases.md`), touching **ADR-001**/**ADR-005** and **BR-07**:
+  - **Real gap closed**: `shipment_orders.status.<id>` (the ADR-001 per-order recompute-trigger subject) had been running over plain `@nestjs/microservices` NATS-core pub/sub since task 5.6, not JetStream — ADR-005 explicitly says the built-in transporter can't speak JetStream, so this was a known-deferred item ("not yet built" per `docs/PROGRESS.md`), not a new feature. BR-07's event-batching (debounce) half was already done in 5.6 and is untouched here.
+  - **Tracking — publish side**: added `IStatusTriggerPublisher` port (`apps/tracking/src/ports/status-trigger-publisher.port.ts`) + `JetStreamStatusTriggerPublisher` adapter (`apps/tracking/src/adapters/jetstream-status-trigger.adapter.ts`), backed by a raw `nats` package JetStream client (`apps/tracking/src/nats/jetstream-client.provider.ts`, new direct connection — `nats` was already a direct dependency, no new package). `TrackingEventConsumer` now calls this port instead of `ClientProxy.emit(orderStatusSubject(...), {})`.
+  - **Order — consume side**: reworked `StatusProjectionConsumer` (`apps/order/src/status-projection.consumer.ts`) from an `@nestjs/microservices` `@EventPattern` controller into an `OnModuleInit`/`OnModuleDestroy` service that opens a raw JetStream connection, idempotently ensures the `SHIPMENT_ORDER_STATUS` stream (`apps/order/src/nats/ensure-shipment-order-status-stream.ts`, subjects `shipment_orders.status.>`) and a durable ordered consumer (`order-status-projection`, explicit-ack), then iterates messages via `handleMessage` (parse `shipment_order_id` from subject → `scheduleRecompute` → `ack()`). The existing debounce/recompute domain logic (`scheduleRecompute`/`recompute`, tested in 5.6) is unchanged. Moved out of `order.module.ts`'s `controllers` into `providers` accordingly.
+  - TDD: new tests for the idempotent stream-bootstrap helper (create when absent, swallow "already in use", rethrow other errors), the JetStream publisher (publishes `{}` to the per-order subject), and `StatusProjectionConsumer.handleMessage` (schedules + acks; acks-without-scheduling on an empty trailing id) — all written and confirmed red before implementation. 137/137 total passing; `pnpm build`/`pnpm lint` clean.
+  - **No `422`/BR-guard test needed**: BR-07 is a transport/concurrency mechanism, not a business-rule guard with a REST error envelope — no `BusinessRuleException` path applies here, confirmed not a coverage gap.
+  - **Live-verified end-to-end**, not just mocked: ran `order`/`tracking` for real against the dockerized NATS (`-js` already enabled). Confirmed via the NATS monitoring API (`/jsz`) that `SHIPMENT_ORDER_STATUS` and the durable `order-status-projection` consumer are real JetStream objects created at startup. Published a real `parcel.picked_up` NATS message for a real seeded `Created`-state parcel/order; confirmed the JetStream stream received and the durable consumer acked exactly one message (`ack_floor` caught up to `stream_seq: 1`), and that `PARCEL.state` flipped to `InTransit`, `SHIPMENT_ORDER.status` recomputed to `Active` in Postgres, and Redis `order:status:{id}` was set to `Active` — the same Diagram 8 loop as 5.6, now running over real JetStream instead of NATS core. Both apps shut down cleanly (graceful JetStream connection close via `onModuleDestroy`).
+
+### Decisions / open questions
+- No new dependency — `nats` was already a direct dependency (used since task 5.6's `NatsEventPublisher`); this task uses its JetStream API directly rather than through `@nestjs/microservices`, consistent with ADR-005's documented limitation.
+- Known gap, unchanged: `DELIVERY_FAILED`'s missing NATS contract (blocked on Courier Service, task 6.1); UC-15's unassigned passive lost-parcel SLA sweep; `Damaged`'s undocumented trigger; the HLD's stale `trip.departed`/`trip.arrived` Tracking-input listing.
+
+### Next
+- Task **5.8** Payment: Stripe Checkout session + webhook handler + `PAYMENT_TRANSACTION` log + prepaid dispatch guard (BR-08) (`docs/03-phases.md`), via `/begin-task 5.8`.
+
 ## 2026-07-10
 
 ### Done

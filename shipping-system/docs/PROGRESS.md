@@ -10,12 +10,41 @@
 
 - **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
   `docs/03-phases.md`.
-- **Next task:** `5.7` Per-aggregate serialization: NATS JetStream
-  per-order subject + event-batching. Run `/begin-task 5.7` to start it.
+- **Next task:** `5.8` Payment: Stripe Checkout session + webhook handler +
+  `PAYMENT_TRANSACTION` log + prepaid dispatch guard (BR-08). Run
+  `/begin-task 5.8` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.6` (Status projection (read model, <300ms) +
-  Transactional Outbox) complete, committed as 6 logical commits
+- **State:** Task `5.7` (Per-aggregate serialization: NATS JetStream
+  per-order subject + event-batching) complete, committed as 2 logical
+  commits (`cdc1b0d` Tracking's publish side onto real JetStream,
+  `9c0cdca` Order's consume side onto a real JetStream ordered consumer).
+  Closes a gap flagged since 5.6: `shipment_orders.status.<id>` (ADR-001's
+  per-order recompute trigger) had been running over plain
+  `@nestjs/microservices` NATS-core pub/sub, not JetStream — ADR-005
+  explicitly notes the built-in transporter can't speak JetStream, so this
+  was always deferred to this task, not a new feature. BR-07's
+  event-batching (debounce) half, done in 5.6, is untouched.
+  `IStatusTriggerPublisher`/`JetStreamStatusTriggerPublisher` (Tracking)
+  publish over a dedicated raw-`nats`-package JetStream client (no new
+  dependency — `nats` was already direct). `StatusProjectionConsumer`
+  (Order) is no longer an `@nestjs/microservices` `@EventPattern`
+  controller; it now opens its own JetStream connection on
+  `OnModuleInit`, idempotently ensures the `SHIPMENT_ORDER_STATUS` stream
+  (subjects `shipment_orders.status.>`) and a durable ordered consumer
+  (`order-status-projection`, explicit-ack), and feeds messages into the
+  same debounce/recompute logic built in 5.6 (unchanged). 137/137 tests
+  passing; `pnpm build`/`pnpm lint`/`pnpm test` all green. **Live-verified
+  end-to-end**: confirmed via the NATS monitoring API (`/jsz`) that the
+  stream and durable consumer are real JetStream objects; published a
+  real `parcel.picked_up` message for a real seeded parcel and confirmed
+  the stream received/acked it (`ack_floor` caught up to `stream_seq: 1`)
+  and the same Diagram 8 side effects as 5.6 (Postgres `PARCEL.state` +
+  `SHIPMENT_ORDER.status`, Redis cache) landed correctly — now over real
+  JetStream instead of NATS core. Both apps shut down cleanly (graceful
+  JetStream connection close via `onModuleDestroy`). Task `5.6` (Status
+  projection (read model, <300ms) + Transactional Outbox) complete,
+  committed as 6 logical commits
   (`265ec0a` `OUTBOX` schema + BR-05 mapping doc + Redis key doc +
   `orderStatusSubject()` fix, `fc29f4f` `pnpm build` quality-gate fix +
   `@nestjs/microservices` dependency, `c24f040` Transactional Outbox for
@@ -102,11 +131,13 @@
   appends `TRACKING_EVENT` rows and publishes a recompute trigger; Order
   independently consumes the same events to update `PARCEL.state`; Order's
   `StatusProjectionConsumer` debounces the trigger and recomputes
-  `SHIPMENT_ORDER.status` + Redis. Both Order and Tracking now run as
-  hybrid HTTP+NATS apps on `@nestjs/microservices` (core NATS transport,
-  not JetStream — per-aggregate JetStream ordering/serialization is task
-  **5.7**, not yet built, so concurrent bursts for the same order aren't
-  guaranteed in-order yet, only debounced). Courier Service's own side of
+  `SHIPMENT_ORDER.status` + Redis. Both Order and Tracking run as hybrid
+  HTTP+NATS apps; parcel-lifecycle events (`parcel.*`) and the outbox's
+  `order.created` still go over `@nestjs/microservices`' NATS-core
+  transport, but the `shipment_orders.status.<id>` per-order trigger now
+  runs over real JetStream (task **5.7**, done) per ADR-001 — a durable
+  stream + explicit-ack ordered consumer, not just debounce-only ordering.
+  Courier Service's own side of
   BR-04 (counting 3 failed `DELIVERY_FAILED` attempts and publishing
   `parcel.rts`) is task **6.1**, not yet built — so `parcel.rts`/
   `parcel.delivered`/etc. still have no real producer; both consumers can
@@ -123,6 +154,61 @@
   missing NATS contract (blocked on Courier Service, task 6.1).
 
 ## Log
+
+### 2026-07-13 — Task 5.7: JetStream per-order subject
+- **Gap closed, not a new feature**: `shipment_orders.status.<id>` had run
+  over `@nestjs/microservices` NATS-core pub/sub since 5.6, flagged in
+  this file's Notes as deferred pending this task — ADR-005 already
+  documents that the built-in NATS transporter can't speak JetStream.
+- Added `IStatusTriggerPublisher`/`JetStreamStatusTriggerPublisher`
+  (`apps/tracking/src/ports/status-trigger-publisher.port.ts`,
+  `apps/tracking/src/adapters/jetstream-status-trigger.adapter.ts`) —
+  publishes the per-order trigger over a raw `nats`-package JetStream
+  client (`apps/tracking/src/nats/jetstream-client.provider.ts`, its own
+  connection; no new dependency, `nats` already direct). Wired into
+  `TrackingEventConsumer` in place of `ClientProxy.emit(...)` (`cdc1b0d`).
+- Reworked `StatusProjectionConsumer`
+  (`apps/order/src/status-projection.consumer.ts`) off `@EventPattern`
+  onto `OnModuleInit`/`OnModuleDestroy`: opens its own JetStream
+  connection, idempotently ensures the `SHIPMENT_ORDER_STATUS` stream
+  (`apps/order/src/nats/ensure-shipment-order-status-stream.ts`, subjects
+  `shipment_orders.status.>`) and a durable ordered consumer
+  (`order-status-projection`, explicit-ack), then feeds messages through
+  `handleMessage` → the unchanged `scheduleRecompute`/`recompute` debounce
+  logic from 5.6, acking after scheduling. Moved from `order.module.ts`'s
+  `controllers` into `providers` (`9c0cdca`).
+- TDD: stream-bootstrap helper (create-if-absent, swallow "already in
+  use", rethrow other errors), JetStream publisher (publishes `{}` to the
+  per-order subject), `handleMessage` (schedules + acks; acks without
+  scheduling on an empty trailing id) — all written and confirmed red
+  first. 137/137 total passing; `pnpm build`/`pnpm lint` clean.
+- **No BR-guard/422 test needed**: BR-07 is a transport/concurrency
+  mechanism, not a business rule with a REST error envelope — confirmed
+  not a coverage gap.
+- **Live-verified end-to-end**: ran `order`/`tracking` for real against
+  the dockerized NATS (already `-js`-enabled). Confirmed via
+  `curl localhost:8222/jsz?streams=true&consumers=true` that
+  `SHIPMENT_ORDER_STATUS` and `order-status-projection` are real
+  JetStream objects created at startup. Published a real
+  `parcel.picked_up` message for a real seeded `Created`-state
+  parcel/order via `scripts/publish-event.js`; confirmed the stream
+  received and the durable consumer acked exactly one message
+  (`ack_floor` caught up to `stream_seq: 1`), and that `PARCEL.state`
+  flipped to `InTransit`, `SHIPMENT_ORDER.status` recomputed to `Active`
+  in Postgres, and Redis `order:status:{id}` was set to `Active` — same
+  Diagram 8 effects as 5.6, now over real JetStream. Both apps shut down
+  cleanly via `onModuleDestroy`'s graceful connection close.
+
+### Decisions / open questions
+- No new dependency: `nats` was already direct (used since 5.6's
+  `NatsEventPublisher`); this task calls its JetStream API directly
+  rather than through `@nestjs/microservices`, matching ADR-005's
+  documented limitation — confirmed in scope, no separate approval
+  needed since no new package was added.
+- Known gaps carried forward unchanged: `DELIVERY_FAILED`'s missing NATS
+  contract (task 6.1), UC-15's unassigned passive lost-parcel SLA sweep,
+  `Damaged`'s undocumented trigger, the HLD's stale
+  `trip.departed`/`trip.arrived` Tracking-input listing.
 
 ### 2026-07-10 — Task 5.6: Status projection + Transactional Outbox
 - **Docs written before implementing** (confirmed with user): added the
