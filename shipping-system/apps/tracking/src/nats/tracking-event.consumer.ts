@@ -1,18 +1,17 @@
-import { Controller, Inject, Logger } from '@nestjs/common';
-import { ClientProxy, EventPattern } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
-import { NATS_SUBJECTS, orderStatusSubject } from '@app/contracts';
+import { Controller, Logger } from '@nestjs/common';
+import { EventPattern } from '@nestjs/microservices';
+import { NATS_SUBJECTS } from '@app/contracts';
 import { ITrackingEventRepository } from '../ports/tracking-event-repository.port';
 import { IOrderLookupPort } from '../ports/order-lookup.port';
-import { NATS_CLIENT } from './nats-client.token';
+import { IStatusTriggerPublisher } from '../ports/status-trigger-publisher.port';
 import { mapSubjectToTrackingEvent } from './map-subject-to-tracking-event';
 import type { ParcelLifecyclePayload } from './map-subject-to-tracking-event';
 
-// Built on @nestjs/microservices' NATS transport (core NATS pub/sub, not
-// JetStream - per-aggregate JetStream ordering is task 5.7's job). After
-// appending a TRACKING_EVENT row, also publishes the per-order recompute
-// trigger (Diagram 8, docs/lld/order-service.md) so Order's projection
-// consumer (task 5.6) can recompute SHIPMENT_ORDER.status.
+// Parcel-lifecycle events stay on @nestjs/microservices' NATS-core
+// transport. Only the per-order recompute trigger it publishes after each
+// TRACKING_EVENT row (Diagram 8, docs/lld/order-service.md) goes over real
+// JetStream (ADR-001) via statusTriggerPublisher, since ADR-005 notes the
+// built-in transporter can't speak JetStream.
 @Controller()
 export class TrackingEventConsumer {
   private readonly logger = new Logger(TrackingEventConsumer.name);
@@ -20,7 +19,7 @@ export class TrackingEventConsumer {
   constructor(
     private readonly trackingEventRepository: ITrackingEventRepository,
     private readonly orderLookupPort: IOrderLookupPort,
-    @Inject(NATS_CLIENT) private readonly client: ClientProxy,
+    private readonly statusTriggerPublisher: IStatusTriggerPublisher,
   ) {}
 
   @EventPattern(NATS_SUBJECTS.PARCEL_PICKED_UP)
@@ -84,8 +83,6 @@ export class TrackingEventConsumer {
       return;
     }
 
-    await firstValueFrom(
-      this.client.emit(orderStatusSubject(shipmentOrderId), {}),
-    );
+    await this.statusTriggerPublisher.publish(shipmentOrderId);
   }
 }

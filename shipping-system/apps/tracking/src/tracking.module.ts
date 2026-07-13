@@ -18,6 +18,12 @@ import {
 } from './adapters/redis-status-cache.adapter';
 import { TrackingEventConsumer } from './nats/tracking-event.consumer';
 import { NATS_CLIENT } from './nats/nats-client.token';
+import {
+  JETSTREAM_CLIENT,
+  createJetStreamClient,
+} from './nats/jetstream-client.provider';
+import { IStatusTriggerPublisher } from './ports/status-trigger-publisher.port';
+import { JetStreamStatusTriggerPublisher } from './adapters/jetstream-status-trigger.adapter';
 
 @Module({
   imports: [
@@ -39,6 +45,11 @@ import { NATS_CLIENT } from './nats/nats-client.token';
     { provide: ITrackingEventRepository, useClass: TrackingEventRepository },
     { provide: IOrderLookupPort, useClass: OrderLookupAdapter },
     { provide: IStatusCachePort, useClass: RedisStatusCacheAdapter },
+    {
+      provide: IStatusTriggerPublisher,
+      useClass: JetStreamStatusTriggerPublisher,
+    },
+    { provide: JETSTREAM_CLIENT, useFactory: createJetStreamClient },
     {
       provide: REDIS_CLIENT,
       useFactory: () =>

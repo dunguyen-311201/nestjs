@@ -1,13 +1,10 @@
-import { of } from 'rxjs';
-import { orderStatusSubject } from '@app/contracts';
 import { TrackingEventConsumer } from './tracking-event.consumer';
 import { TrackingEventType } from '../entities/tracking-event.entity';
 
 describe('TrackingEventConsumer', () => {
   let trackingEventRepository: { appendEvent: jest.Mock };
   let orderLookupPort: { findShipmentOrderIdByParcelId: jest.Mock };
-  let emit: jest.Mock;
-  let client: { emit: jest.Mock };
+  let statusTriggerPublisher: { publish: jest.Mock };
   let consumer: TrackingEventConsumer;
 
   beforeEach(() => {
@@ -15,12 +12,11 @@ describe('TrackingEventConsumer', () => {
       appendEvent: jest.fn().mockResolvedValue(undefined),
     };
     orderLookupPort = { findShipmentOrderIdByParcelId: jest.fn() };
-    emit = jest.fn().mockReturnValue(of(undefined));
-    client = { emit };
+    statusTriggerPublisher = { publish: jest.fn().mockResolvedValue(undefined) };
     consumer = new TrackingEventConsumer(
       trackingEventRepository as never,
       orderLookupPort as never,
-      client as never,
+      statusTriggerPublisher as never,
     );
   });
 
@@ -43,7 +39,7 @@ describe('TrackingEventConsumer', () => {
     expect(orderLookupPort.findShipmentOrderIdByParcelId).toHaveBeenCalledWith(
       'parcel-1',
     );
-    expect(emit).toHaveBeenCalledWith(orderStatusSubject('order-1'), {});
+    expect(statusTriggerPublisher.publish).toHaveBeenCalledWith('order-1');
   });
 
   it('still appends the event but skips the publish when the order cannot be resolved', async () => {
@@ -52,7 +48,7 @@ describe('TrackingEventConsumer', () => {
     await consumer.onPickedUp({ event_id: 'evt-2', parcel_id: 'parcel-2' });
 
     expect(trackingEventRepository.appendEvent).toHaveBeenCalled();
-    expect(emit).not.toHaveBeenCalled();
+    expect(statusTriggerPublisher.publish).not.toHaveBeenCalled();
   });
 
   it('does nothing for a malformed/unrecognized payload', async () => {

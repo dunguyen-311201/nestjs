@@ -91,12 +91,25 @@ describe('StatusProjectionConsumer', () => {
     expect(redis.set).not.toHaveBeenCalled();
   });
 
-  it('extracts the shipment_order_id from the NATS subject and schedules a recompute', () => {
+  it('extracts the shipment_order_id from a JetStream message subject, schedules a recompute, then acks', () => {
     const scheduleSpy = jest.spyOn(consumer, 'scheduleRecompute');
-    const context = { getSubject: () => 'shipment_orders.status.order-1' };
+    const ack = jest.fn();
+    const message = { subject: 'shipment_orders.status.order-1', ack };
 
-    consumer.onTrigger(context as never);
+    consumer.handleMessage(message as never);
 
     expect(scheduleSpy).toHaveBeenCalledWith('order-1');
+    expect(ack).toHaveBeenCalledTimes(1);
+  });
+
+  it('acks without scheduling when the subject has no trailing shipment_order_id', () => {
+    const scheduleSpy = jest.spyOn(consumer, 'scheduleRecompute');
+    const ack = jest.fn();
+    const message = { subject: 'shipment_orders.status.', ack };
+
+    consumer.handleMessage(message as never);
+
+    expect(scheduleSpy).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledTimes(1);
   });
 });
