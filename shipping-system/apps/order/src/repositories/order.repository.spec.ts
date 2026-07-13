@@ -14,6 +14,7 @@ import {
 
 describe('OrderRepository', () => {
   let save: jest.Mock;
+  let findOne: jest.Mock;
   let transaction: jest.Mock;
   let getRepository: jest.Mock;
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
@@ -35,9 +36,14 @@ describe('OrderRepository', () => {
       if (entity === Payment) return Promise.resolve(data);
       throw new Error(`Unexpected save target: ${String(entity)}`);
     });
+    // No existing customer by default - createOrder falls back to saving
+    // a new Customer row.
+    findOne = jest.fn().mockResolvedValue(null);
     transaction = jest
       .fn()
-      .mockImplementation((cb: (manager: unknown) => unknown) => cb({ save }));
+      .mockImplementation((cb: (manager: unknown) => unknown) =>
+        cb({ save, findOne }),
+      );
     getRepository = jest.fn();
     dataSource = { transaction, getRepository };
     repository = new OrderRepository(dataSource as never);
@@ -48,12 +54,14 @@ describe('OrderRepository', () => {
       sender: {
         nameEnc: 'n',
         phoneEnc: 'p',
+        phoneHash: 'hash-sender',
         addressEnc: 'a',
         regionCode: 'REG-1',
       },
       recipient: {
         nameEnc: 'n2',
         phoneEnc: 'p2',
+        phoneHash: 'hash-recipient',
         addressEnc: 'a2',
         regionCode: 'REG-2',
       },
@@ -111,6 +119,45 @@ describe('OrderRepository', () => {
       amountCents: 1000,
       status: PaymentStatus.UNPAID,
     });
+  });
+
+  it('creates new CUSTOMER rows for sender/recipient when no phone_hash match exists', async () => {
+    await repository.createOrder(baseNewOrderData());
+
+    expect(findOne).toHaveBeenCalledWith(Customer, {
+      where: { phoneHash: 'hash-sender' },
+    });
+    expect(findOne).toHaveBeenCalledWith(Customer, {
+      where: { phoneHash: 'hash-recipient' },
+    });
+    const customerSaves = (save.mock.calls as unknown[][]).filter(
+      (call) => call[0] === Customer,
+    );
+    expect(customerSaves).toHaveLength(2);
+  });
+
+  it('reuses an existing CUSTOMER by phone_hash instead of creating a duplicate', async () => {
+    findOne.mockImplementation(
+      (_entity: unknown, options: { where: { phoneHash: string } }) => {
+        if (options.where.phoneHash === 'hash-sender') {
+          return Promise.resolve({ id: 'existing-sender-id' });
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await repository.createOrder(baseNewOrderData());
+
+    const customerSaves = (save.mock.calls as unknown[][]).filter(
+      (call) => call[0] === Customer,
+    );
+    // Only the recipient (no match) gets a new row - the sender is reused.
+    expect(customerSaves).toHaveLength(1);
+    const orderSave = (save.mock.calls as unknown[][]).find(
+      (call) => call[0] === ShipmentOrder,
+    );
+    const orderData = (orderSave as unknown[])[1] as Record<string, unknown>;
+    expect(orderData.senderId).toBe('existing-sender-id');
   });
 
   it('findParcelById reads a single parcel by id', async () => {

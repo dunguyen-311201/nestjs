@@ -6,10 +6,13 @@ import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
 import { PaymentType } from '../entities/payment.entity';
 
 export interface NewOrderData {
-  sender: Pick<Customer, 'nameEnc' | 'phoneEnc' | 'addressEnc' | 'regionCode'>;
+  sender: Pick<
+    Customer,
+    'nameEnc' | 'phoneEnc' | 'phoneHash' | 'addressEnc' | 'regionCode'
+  >;
   recipient: Pick<
     Customer,
-    'nameEnc' | 'phoneEnc' | 'addressEnc' | 'regionCode'
+    'nameEnc' | 'phoneEnc' | 'phoneHash' | 'addressEnc' | 'regionCode'
   >;
   rateCardId: string;
   priceCents: number;

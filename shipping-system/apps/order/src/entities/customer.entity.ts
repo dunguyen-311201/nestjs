@@ -17,6 +17,12 @@ export class Customer {
   @Column({ name: 'phone_enc', type: 'varchar', length: 500 })
   phoneEnc: string;
 
+  // Deterministic HMAC-SHA256(phone) - phone_enc's random IV makes it
+  // unusable for equality lookups, so this is kept alongside it purely to
+  // find an existing customer by phone without decrypting every row.
+  @Column({ name: 'phone_hash', type: 'varchar', length: 64 })
+  phoneHash: string;
+
   @Column({ name: 'address_enc', type: 'varchar', length: 500 })
   addressEnc: string;
 

@@ -4,7 +4,7 @@ import { IOrderRepository } from './ports/order-repository.port';
 import { IPricingPort } from './ports/pricing.port';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
 import { ParcelDirection, ParcelState } from './entities/parcel.enums';
-import { encrypt } from '@app/crypto';
+import { encrypt, hashForLookup } from '@app/crypto';
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 
@@ -65,12 +65,14 @@ export class OrderService {
       sender: {
         nameEnc: encrypt(dto.sender.name),
         phoneEnc: encrypt(dto.sender.phone),
+        phoneHash: hashForLookup(dto.sender.phone),
         addressEnc: encrypt(dto.sender.address),
         regionCode: dto.sender.region_code,
       },
       recipient: {
         nameEnc: encrypt(dto.recipient.name),
         phoneEnc: encrypt(dto.recipient.phone),
+        phoneHash: hashForLookup(dto.recipient.phone),
         addressEnc: encrypt(dto.recipient.address),
         regionCode: dto.recipient.region_code,
       },

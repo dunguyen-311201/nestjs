@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { NATS_SUBJECTS } from '@app/contracts';
 import { Customer } from '../entities/customer.entity';
 import { ShipmentOrder } from '../entities/shipment-order.entity';
@@ -19,8 +19,11 @@ export class OrderRepository implements IOrderRepository {
 
   async createOrder(data: NewOrderData): Promise<ShipmentOrder> {
     return this.dataSource.transaction(async (manager) => {
-      const sender = await manager.save(Customer, data.sender);
-      const recipient = await manager.save(Customer, data.recipient);
+      const sender = await this.findOrCreateCustomer(manager, data.sender);
+      const recipient = await this.findOrCreateCustomer(
+        manager,
+        data.recipient,
+      );
 
       const order = await manager.save(ShipmentOrder, {
         senderId: sender.id,
@@ -73,6 +76,24 @@ export class OrderRepository implements IOrderRepository {
 
       return order;
     });
+  }
+
+  // Repeat customers (same phone_hash) reuse their existing CUSTOMER row
+  // instead of getting a new one on every order - phone_enc's random IV
+  // makes it unusable for this equality lookup, hence the separate
+  // deterministic phone_hash column (see Customer entity / libs/crypto's
+  // hashForLookup).
+  private async findOrCreateCustomer(
+    manager: EntityManager,
+    data: NewOrderData['sender'],
+  ): Promise<Customer> {
+    const existing = await manager.findOne(Customer, {
+      where: { phoneHash: data.phoneHash },
+    });
+    if (existing) {
+      return existing;
+    }
+    return manager.save(Customer, data);
   }
 
   async findById(id: string): Promise<ShipmentOrder | null> {
