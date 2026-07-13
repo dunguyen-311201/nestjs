@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+} from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -52,4 +57,16 @@ export function decrypt(ciphertext: string): string {
     decipher.final(),
   ]);
   return decrypted.toString('utf8');
+}
+
+/**
+ * Deterministic HMAC-SHA256 of a PII field, keyed by PII_ENCRYPTION_KEY.
+ * Used to look up an existing CUSTOMER by phone without decrypting every
+ * row - encrypt() is deliberately non-deterministic (random IV), so it
+ * can't be used for equality lookups; this is a separate, one-way digest
+ * kept alongside the encrypted field for that purpose only.
+ */
+export function hashForLookup(plaintext: string): string {
+  const key = getKey();
+  return createHmac('sha256', key).update(plaintext, 'utf8').digest('hex');
 }

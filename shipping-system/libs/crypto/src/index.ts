@@ -1,1 +1,1 @@
-export { encrypt, decrypt } from './pii-crypto';
+export { encrypt, decrypt, hashForLookup } from './pii-crypto';

@@ -1,4 +1,4 @@
-import { encrypt, decrypt } from './pii-crypto';
+import { encrypt, decrypt, hashForLookup } from './pii-crypto';
 
 const TEST_KEY = '0'.repeat(64); // 32-byte hex key for AES-256
 
@@ -39,5 +39,28 @@ describe('pii-crypto', () => {
     delete process.env.PII_ENCRYPTION_KEY;
     expect(() => encrypt('x')).toThrow();
     process.env.PII_ENCRYPTION_KEY = TEST_KEY;
+  });
+
+  describe('hashForLookup', () => {
+    it('is deterministic - same plaintext always hashes the same', () => {
+      const phone = '+84901234567';
+      expect(hashForLookup(phone)).toBe(hashForLookup(phone));
+    });
+
+    it('produces different hashes for different plaintext', () => {
+      expect(hashForLookup('+84901234567')).not.toBe(
+        hashForLookup('+84901234568'),
+      );
+    });
+
+    it('returns a 64-character hex string (SHA-256)', () => {
+      expect(hashForLookup('+84901234567')).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('throws if PII_ENCRYPTION_KEY is missing', () => {
+      delete process.env.PII_ENCRYPTION_KEY;
+      expect(() => hashForLookup('x')).toThrow();
+      process.env.PII_ENCRYPTION_KEY = TEST_KEY;
+    });
   });
 });
