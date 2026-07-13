@@ -137,7 +137,7 @@ through slide-by-slide):
    signature verification, `PAYMENT_TRANSACTION` audit log, and BR-08 (no
    dispatch/hub-inbound before payment is confirmed).
 
-**Numbers to quote**: 156/156 tests green, `pnpm build`/`pnpm lint` clean
+**Numbers to quote**: 162/162 tests green, `pnpm build`/`pnpm lint` clean
 across every app in the monorepo (not just the default one — that itself
 was a real gap found and fixed in task 5.6).
 
@@ -155,6 +155,17 @@ asked — it reads better):
   "abandoned prepaid payment" gap (no auto-cancel yet), `DELIVERY_FAILED`
   has no NATS contract until Courier Service (task 6.1) exists, UC-15's
   passive lost-parcel SLA sweep has no assigned task yet.
+- **Same-day example of this practice**: while prepping *this* demo, found
+  that `POST /orders` was silently creating a brand-new `CUSTOMER` row for
+  sender/recipient on *every* order — even a repeat customer got a fresh
+  duplicate row with no way to reconcile it later. Fixed same day: added a
+  deterministic `phone_hash` (HMAC-SHA256, since the PII encryption itself
+  is intentionally non-deterministic) so a repeat phone number reuses the
+  existing `CUSTOMER` row. Also confirmed (and now explicitly documented,
+  not just "no guard exists") that **self-shipment is a supported use
+  case** — sender and recipient can be the same person at two different
+  addresses, which is exactly the "unaccompanied baggage before a flight"
+  scenario. Both are demoed live in Step 6 below.
 
 ---
 
@@ -210,6 +221,18 @@ the demo uses a placeholder key (`401 Invalid API Key`) — proves the
 integration is wired correctly up to the network boundary, without
 needing a real Stripe account live on camera.
 
+**Fully-real variant (optional, if you want to show an actual payment
+instead of the 401)**: put a real Stripe test-mode secret key in `.env`,
+run `~/.local/bin/stripe listen --api-key sk_test_... --forward-to
+localhost:3001/payments/webhook` in a separate terminal (copy its printed
+`whsec_...` into `.env`'s `STRIPE_WEBHOOK_SECRET`, restart `order`), open
+the real `checkout_url` this step returns, and pay with card `4242 4242
+4242 4242`. Already verified working end-to-end this way — a real Stripe
+webhook flips `PAYMENT.status`/`SHIPMENT_ORDER.status` for real, no
+simulated payload needed. Skip this if you'd rather not expose a real
+Stripe terminal on camera — the placeholder-key path above proves the
+same wiring without it.
+
 Simulate what Stripe's webhook would send on a completed checkout (a
 validly-signed test event, no real Stripe account needed):
 ```bash
@@ -253,6 +276,38 @@ at), and the status-projection consumer recomputed `SHIPMENT_ORDER.status`
 to `Active`, all served back through this one API call, with Redis
 caching the status for sub-300ms reads.
 
+### Step 6 — Repeat-customer dedup + self-shipment (the fix found while prepping this demo)
+
+**Narrative**: "A customer flying HN → HCM has one bag they can't carry on
+the plane — can they ship it to themselves?" Create an order where sender
+and recipient are the *same person* (same phone), at two different
+`region_code`s:
+```bash
+BODY='{
+    "sender": {"name":"Nguyen Van Du","phone":"0987654321","address":"1 Trang Tien, Hanoi","region_code":"REG-100"},
+    "recipient": {"name":"Nguyen Van Du","phone":"0987654321","address":"2 Nguyen Hue, HCM","region_code":"REG-101"},
+    "parcels": [{"declared_weight_grams":2000,"type":"parcel"}],
+    "payment_type": "PREPAID_STRIPE"
+  }'
+curl -s -X POST http://localhost:3001/orders \
+  -H "Content-Type: application/json" -H "Idempotency-Key: self-ship-$(date +%s)" \
+  -d "$BODY" | tee /tmp/self-ship.json
+```
+**Point out**: `201`, no special-casing needed — nothing in the DTO, the
+`SHIPMENT_ORDER` schema, or BR-01–BR-09 requires sender ≠ recipient.
+
+```bash
+SELF_ID=$(python3 -c "import json;print(json.load(open('/tmp/self-ship.json'))['shipment_order_id'])")
+docker exec shipping_postgres psql -U postgres -d postgres -t -c \
+  "select sender_id, recipient_id, (sender_id = recipient_id) as same_customer
+   from shipping_order_db.shipment_order where id='$SELF_ID';"
+```
+**Point out**: `same_customer = t` — the `phone_hash` dedup means this
+resolves to **one** `CUSTOMER` row for both roles, not two. Optionally
+repeat the "create the same sender twice with a different recipient" test
+to show a repeat customer (not just a self-ship) also dedups correctly —
+same query, two different orders, matching `sender_id`.
+
 ### Optional stretch — show JetStream is real, not just NATS pub/sub
 ```bash
 curl -s "localhost:8222/jsz?streams=true&consumers=true" | python3 -m json.tool | head -40
@@ -278,6 +333,8 @@ kill <pid1> <pid2>                    # graceful shutdown (both close their NATS
 | "How do you know a redelivered NATS event doesn't double-process?" | Two-layer idempotency: broker-level `Nats-Msg-Id` dedup on publish, and every consumer also dedups on `event_id` at the DB level (`ON CONFLICT DO NOTHING` / unique constraints) — demoed live if time allows by re-publishing the same `event_id` twice. |
 | "What's left before this is demo-able end to end for all actors?" | Phase 6 (Courier, Hub, Line-haul, Dispatcher, Notification — 3.0d), then Phase 7 (wire it all together + one integration test, 1.0d), then Phase 8 (final testing/demo/docs polish, 1.0d). |
 | "Is this production-ready?" | No — explicitly scoped as a 16-day vertical slice. Known gaps are tracked, not hidden (see the open-items list above and `docs/PROGRESS.md`'s Resume point). |
+| "Can a recipient track their own incoming parcel?" | Not fully today, and documented as such (`docs/lld/order-service.md`/`tracking-service.md` § Known Open Items): the sender gets the `tracking_id` back directly from `POST /orders`, but the recipient has no self-service way to discover it — the only planned channel is the Notification consumer (task 6.6, not built, best-effort by design). There's also no auth/RBAC anywhere in this codebase yet, despite it being a listed NFR with no task assigned. This needs its own architecture decision, not an ad-hoc fix. |
+| "What about a repeat customer, or someone shipping to themselves?" | Both handled correctly (Step 6) — `phone_hash` dedup resolves a repeat phone number to the same `CUSTOMER` row instead of creating duplicates, and self-shipment (sender = recipient at a different address) is a fully supported case, not just an absent guard. |
 
 ---
 
