@@ -8,14 +8,47 @@
 
 ## Resume point
 
-- **Current phase:** Phase 5 — Core Backend (6.0d), in progress. See
-  `docs/03-phases.md`.
-- **Next task:** `5.8` Payment: Stripe Checkout session + webhook handler +
-  `PAYMENT_TRANSACTION` log + prepaid dispatch guard (BR-08). Run
-  `/begin-task 5.8` to start it.
+- **Current phase:** Phase 5 — Core Backend (6.0d), **complete**. Next up
+  is Phase 6 — Operational Services (3.0d). See `docs/03-phases.md`.
+- **Next task:** `6.1` Courier Service: pickup/delivery legs + scan
+  events. Run `/begin-task 6.1` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
-- **State:** Task `5.7` (Per-aggregate serialization: NATS JetStream
+- **State:** Task `5.8` (Payment: Stripe Checkout session + webhook
+  handler + `PAYMENT_TRANSACTION` log + prepaid dispatch guard, BR-08)
+  complete, committed as 5 logical commits (`509bea8` `stripe` dependency,
+  `745b538` `Payment`/`PaymentTransaction` entities + closes the
+  order-creation gap where `payment_type` was accepted since task 5.1 but
+  never written to a `PAYMENT` row, `f238fbe` `IPaymentRepository`/
+  `PaymentRepository` webhook-idempotent confirmation, `9314a88`
+  `IPaymentGateway`/`StripePaymentGateway`, `676437a`
+  `POST /orders/{id}/checkout` + `POST /payments/webhook`). `stripe`
+  added as a new dependency (confirmed with user). BR-08 fully
+  tested both happy-path and `422` guard failure; `payment.succeeded` is
+  published directly with no outbox, per `docs/02-HLD.md`'s pre-existing
+  documented accepted-risk decision (not a new tradeoff this task
+  introduced). 156/156 tests passing; `pnpm build`/`pnpm lint`/`pnpm test`
+  all green. **Two real bugs caught only by live verification, invisible
+  to mocked unit tests**: (1) `PaymentService`'s first constructor param
+  was typed `Pick<IOrderRepository, 'findById'>` — a TS utility type, not
+  the actual injectable class — which erases Nest's DI metadata at
+  runtime (`UnknownDependenciesException` on boot); fixed by typing it as
+  the real `IOrderRepository`. (2) `Payment`/`PaymentTransaction` were
+  registered via `TypeOrmModule.forFeature()` in `OrderModule` but never
+  added to the connection's own `entities: [...]` array in `AppModule` —
+  TypeORM has no metadata for an entity outside that array
+  (`EntityMetadataNotFoundError`), even though `forFeature()` alone builds
+  a repository DI token that type-checks fine. Both fixed. **Live-verified
+  end-to-end**: ran `order` for real against the dockerized Postgres/NATS
+  with a fake Stripe key — `404`/`422 BR-08` guards confirmed on real
+  seeded orders, the unpaid-order checkout path reached the real Stripe
+  API (failed only on the fake key, `401`), and a validly Stripe-test-
+  signed `checkout.session.completed` webhook payload
+  (`Stripe.webhooks.generateTestHeaderString`) flipped a real order's
+  `PAYMENT.status` to `Paid` and `SHIPMENT_ORDER.status` to `Confirmed`
+  in Postgres, with a `PAYMENT_TRANSACTION` row written; replaying the
+  same event was a no-op (no duplicate row); a bad signature 400s. Task
+  `5.7` (Per-aggregate serialization: NATS JetStream
   per-order subject + event-batching) complete, committed as 2 logical
   commits (`cdc1b0d` Tracking's publish side onto real JetStream,
   `9c0cdca` Order's consume side onto a real JetStream ordered consumer).
@@ -154,6 +187,122 @@
   missing NATS contract (blocked on Courier Service, task 6.1).
 
 ## Log
+
+### 2026-07-13 — Task 5.8: Payment (Stripe Checkout + webhook, BR-08) — Phase 5 complete
+- **Real gap closed**: `CreateOrderDto.payment_type` (task 5.1) had been
+  validated and accepted but never actually used — no `PAYMENT` row was
+  written at order creation. `OrderRepository.createOrder` now writes an
+  `Unpaid` `PAYMENT` row in the same transaction as `SHIPMENT_ORDER`/
+  `PARCEL`. Added `Payment`/`PaymentTransaction` TypeORM entities — the DB
+  schema already existed (`db/init-db.sql`/`docs/01-ERD.md`), no migration
+  needed, just the missing entity mapping (`745b538`).
+- **New dependency, confirmed with user**: `stripe` — Checkout Session
+  creation and `Stripe-Signature` webhook verification have no path
+  without the official SDK (`509bea8`).
+- `IPaymentRepository`/`PaymentRepository` (`f238fbe`): `confirmPayment()`
+  inserts `PAYMENT_TRANSACTION` via `.orIgnore()` on
+  `external_transaction_id`'s UNIQUE constraint — a redelivered webhook
+  event is a no-op (`'duplicate'`), never a second write; on a new event,
+  updates `PAYMENT.status = Paid` and `SHIPMENT_ORDER.status = Confirmed`
+  (BR-08) in one transaction.
+- `IPaymentGateway`/`StripePaymentGateway` (`9314a88`): wraps the Stripe
+  SDK directly (Ports & Adapters, per `docs/lld/00-conventions.md`).
+  Checkout Sessions carry `client_reference_id = shipment_order_id` — a
+  deliberate choice not to add a `stripe_session_id` column to `PAYMENT`,
+  since the webhook can resolve the order from this field alone.
+  `constructWebhookEvent` maps only `checkout.session.completed` to the
+  service's narrow `WebhookEvent` shape; any other event type maps to a
+  null `shipmentOrderId` so the caller acks it without acting (Stripe
+  requires a 200 for event types an endpoint doesn't handle, or it
+  retries assuming the endpoint is broken).
+- `PaymentService`/`PaymentController`/`OrderController` (`676437a`):
+  `checkout(shipmentOrderId)` — `404` unknown order, `409` already
+  `Confirmed`, `BusinessRuleException('BR-08', ...)` (`422`) when a
+  `PAYMENT` row already exists in a non-`Unpaid` state (a checkout retry
+  on an in-progress/completed payment), else a real Checkout Session.
+  `handleWebhookEvent()` — verifies signature, no-ops on any event type
+  other than `checkout.session.completed`, calls `confirmPayment`,
+  publishes `payment.succeeded` directly with **no outbox** only on a
+  `'confirmed'` result (not on `'duplicate'`) — matching
+  `docs/02-HLD.md`'s pre-existing "Accepted MVP risk" note for this
+  specific webhook handler (smaller blast radius than the order-creation
+  case, since `SHIPMENT_ORDER.status` is already correct even if this
+  publish is lost). `main.ts` now boots with `rawBody: true` so the exact
+  bytes Stripe signed are available for signature verification.
+- TDD throughout, all written and confirmed red before implementation:
+  order-creation `PAYMENT` row insert, `PaymentRepository.confirmPayment`
+  (happy path + duplicate), `StripePaymentGateway` (session creation,
+  event mapping, signature-error propagation), `PaymentService.checkout`
+  (happy path, 404, 409, **422 BR-08 — both happy-path and
+  guard-failure**), `PaymentService.handleWebhookEvent` (confirm +
+  publish, duplicate → no publish, unrecognized event → no-op,
+  signature-error propagation), `PaymentController`/`OrderController`
+  (thin delegation, 400 mapping on signature failure). 156/156 total
+  passing; `pnpm build`/`pnpm lint` clean.
+- **Two real bugs, caught only by live verification** (both invisible to
+  the fully-mocked unit test suite, which was green throughout):
+  1. `PaymentService`'s first constructor parameter was typed
+     `Pick<IOrderRepository, 'findById'>` — this type-checks fine and
+     documents intent (only one method is used), but Nest's DI resolves
+     constructor parameters from `design:paramtypes` metadata emitted for
+     the actual referenced class; a TypeScript utility type like `Pick<>`
+     erases that at runtime, so Nest saw the parameter's runtime type as
+     plain `Object` and threw `UnknownDependenciesException` on boot.
+     Fixed by typing the parameter as the real `IOrderRepository` class.
+  2. `Payment`/`PaymentTransaction` were registered via
+     `TypeOrmModule.forFeature([...])` in `OrderModule` (this builds the
+     `@InjectRepository` DI tokens) but were never added to the default
+     connection's own `entities: [...]` array in `AppModule`'s
+     `TypeOrmModule.forRoot(...)` — that array is what tells the
+     `DataSource` itself which entities exist; an entity missing from it
+     has no metadata (`EntityMetadataNotFoundError`) even though
+     `forFeature()` alone happily builds an injectable repository that
+     looks correct until it's actually queried. Fixed by adding both to
+     `AppModule`'s `entities` array.
+- **Live-verified end-to-end** (not just unit tests): ran `order` for
+  real against the dockerized Postgres/NATS with a placeholder Stripe key
+  (`sk_test_fake`). Confirmed via real HTTP requests against real seeded
+  orders: unknown order id → `404`; an order with an already-`Paid`
+  `PAYMENT` row → `422` with `{"rule":"BR-08", ...}`; an order with an
+  `Unpaid` `PAYMENT` row → request correctly reached the real Stripe API
+  and failed only on the placeholder key (`401 Invalid API Key provided`,
+  proving the checkout path is wired correctly up to the network call).
+  For the webhook, built a validly Stripe-test-signed
+  `checkout.session.completed` payload locally
+  (`Stripe.webhooks.generateTestHeaderString`, no real Stripe account
+  needed) and POSTed it to the real running `/payments/webhook` endpoint:
+  confirmed via direct `psql` queries (not just the HTTP response) that
+  `PAYMENT.status` flipped to `Paid`, `SHIPMENT_ORDER.status` flipped to
+  `Confirmed`, and a `PAYMENT_TRANSACTION` row was written with the
+  event's id; replaying the identical signed payload a second time
+  produced no second row (webhook idempotency confirmed for real); a
+  request with a deliberately wrong signature correctly returned `400`.
+
+### Decisions / open questions
+- Confirmed with the user: added `stripe` as a new dependency.
+- No new ADR: the Stripe SDK choice and the no-outbox-on-webhook decision
+  were both already specified in `docs/02-HLD.md`/`docs/lld/order-
+  service.md` before this task started — implementing a pre-specified
+  decision isn't a new architectural choice requiring its own ADR.
+- Known gaps, unchanged, none newly introduced by this task:
+  `docs/lld/order-service.md`'s "abandoned prepaid payment" open item (no
+  auto-cancel for a Stripe checkout that's abandoned or permanently
+  fails — the order just stays below `Confirmed` indefinitely) still has
+  no assigned task; `DELIVERY_FAILED`'s missing NATS contract (task 6.1);
+  UC-15's unassigned passive lost-parcel SLA sweep; `Damaged`'s
+  undocumented trigger; the HLD's stale `trip.departed`/`trip.arrived`
+  Tracking-input listing.
+- **Phase 5 (Core Backend, 6.0d estimate) is now complete** — all of
+  5.1–5.8 done. Next is Phase 6 (Operational Services, 3.0d), starting
+  with task 6.1 (Courier Service).
+
+### 2026-07-13 — Docs backfill: task 5.5/5.6/5.7 walkthroughs
+- Added `docs/reference/task-5.5-walkthrough.md`,
+  `task-5.6-walkthrough.md`, `task-5.7-walkthrough.md` — never written
+  when those tasks were completed, unlike 5.1–5.4. Same convention:
+  temporary Vietnamese-language review doc per task, per-commit
+  breakdown, key code snippets with explanation, TDD summary, "how to
+  test around" section, "why split commits" rationale. No code changes.
 
 ### 2026-07-13 — Task 5.7: JetStream per-order subject
 - **Gap closed, not a new feature**: `shipment_orders.status.<id>` had run
