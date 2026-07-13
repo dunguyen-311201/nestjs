@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.CUSTOMER (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name_enc VARCHAR(500) NOT NULL,    -- PII Encrypted
     phone_enc VARCHAR(500) NOT NULL,   -- PII Encrypted
+    phone_hash VARCHAR(64) NOT NULL,   -- deterministic HMAC-SHA256(phone), for repeat-customer lookup only (phone_enc's random IV makes it unusable for equality lookups)
     address_enc VARCHAR(500) NOT NULL, -- PII Encrypted
     region_code VARCHAR(50) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -201,6 +202,8 @@ CREATE INDEX IF NOT EXISTS idx_linehaultrip_driver_id ON shipping_network_db.LIN
 CREATE INDEX IF NOT EXISTS idx_linehaultrip_truck_id ON shipping_network_db.LINEHAULTRIP(truck_id);
 
 CREATE INDEX IF NOT EXISTS idx_ratecard_origin_dest_zone ON shipping_pricing_db.RATECARD(origin_zone_id, dest_zone_id);
+
+CREATE INDEX IF NOT EXISTS idx_customer_phone_hash ON shipping_order_db.CUSTOMER(phone_hash);
 
 CREATE INDEX IF NOT EXISTS idx_shipment_order_sender_id ON shipping_order_db.SHIPMENT_ORDER(sender_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_recipient_id ON shipping_order_db.SHIPMENT_ORDER(recipient_id);

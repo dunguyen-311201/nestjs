@@ -38,6 +38,7 @@ erDiagram
 | `id` | uuid PK | Unique identifier of the customer (sender or recipient). |
 | `name_enc` | string | Full name, stored with field-level encryption (PII). |
 | `phone_enc` | string | Phone number, field-level encrypted (PII). |
+| `phone_hash` | string (64-char hex) | Deterministic HMAC-SHA256(phone), keyed by `PII_ENCRYPTION_KEY`. `phone_enc`'s random IV makes it unusable for an equality lookup, so this column exists solely so Order Service can find an existing customer by phone and reuse the row instead of creating a duplicate on every order (see `docs/lld/order-service.md` § Key Design Decisions). Indexed (`idx_customer_phone_hash`), not unique — a hash collision should degrade to "treated as the same customer," never a hard DB error. |
 | `address_enc` | string | Full street address, field-level encrypted (PII). |
 | `region_code` | string | Plaintext postal/region code kept in plaintext for sorting/routing without decrypting PII. |
 
@@ -194,7 +195,7 @@ Transactional Outbox for Order Creation only (`docs/02-HLD.md` § Idempotency an
 
 | From | To | Cardinality | Meaning |
 | :--- | :--- | :--- | :--- |
-| CUSTOMER | SHIPMENT_ORDER | 1 : N | A customer sends/receives many orders |
+| CUSTOMER | SHIPMENT_ORDER | 1 : N | A customer sends/receives many orders — enforced in code via `phone_hash` lookup-and-reuse at order creation, not just an unenforced cardinality note (see `phone_hash` above). |
 | SHIPMENT_ORDER | PARCEL | 1 : N | An order contains one or more parcels |
 | SHIPMENT_ORDER | PAYMENT | 1 : 1 | An order has one payment record |
 | PAYMENT | PAYMENT_TRANSACTION | 1 : N | Each checkout/webhook attempt writes a transaction row; `PAYMENT_TRANSACTION.payment_id` has no UNIQUE constraint (only `external_transaction_id` does, for webhook idempotency) — a retried checkout (BR-08, `PAYMENT` still `Unpaid`) can legitimately produce more than one |

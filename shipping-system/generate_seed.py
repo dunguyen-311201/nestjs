@@ -1,5 +1,6 @@
 import uuid
 import random
+import hashlib
 from datetime import datetime, timedelta
 
 def gen_uuid():
@@ -72,10 +73,11 @@ for tid in trip_ids:
 customer_ids = [gen_uuid() for _ in range(500)]
 for i, cid in enumerate(customer_ids):
     customers.append((
-        cid, 
-        f"Customer-Encrypted-Name-{i}", 
-        f"Phone-Encrypted-{i}", 
-        f"Address-Encrypted-{i}", 
+        cid,
+        f"Customer-Encrypted-Name-{i}",
+        f"Phone-Encrypted-{i}",
+        hashlib.sha256(f"Phone-{i}".encode()).hexdigest(),
+        f"Address-Encrypted-{i}",
         random.choice(region_codes)
     ))
 
@@ -331,7 +333,7 @@ with open("db/seed.sql", "w") as f:
     # 8. Insert Customers
     f.write("-- Customers\n")
     for row in customers:
-        f.write(f"INSERT INTO shipping_order_db.CUSTOMER (id, name_enc, phone_enc, address_enc, region_code) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}');\n")
+        f.write(f"INSERT INTO shipping_order_db.CUSTOMER (id, name_enc, phone_enc, phone_hash, address_enc, region_code) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}', '{row[5]}');\n")
     f.write("\n")
     
     # 9. Insert Orders (Chủ động chia nhỏ để tránh lệnh INSERT quá dài)
