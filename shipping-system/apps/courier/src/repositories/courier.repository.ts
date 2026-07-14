@@ -4,8 +4,10 @@ import { DataSource } from 'typeorm';
 import { ProofOfDelivery } from '../entities/proof-of-delivery.entity';
 import { DeliveryAttempt } from '../entities/delivery-attempt.entity';
 import { DeliveryAttemptOutcome } from '../entities/delivery-attempt-outcome.enum';
+import { Outbox } from '../entities/outbox.entity';
 import {
   ICourierRepository,
+  OutboxEventInput,
   RecordDeliveryFailureResult,
   RecordDeliverySuccessResult,
 } from '../ports/courier-repository.port';
@@ -25,10 +27,15 @@ export class CourierRepository implements ICourierRepository {
     );
   }
 
+  async recordPickup(outboxEvent: OutboxEventInput): Promise<void> {
+    await this.dataSource.manager.save(Outbox, outboxEvent);
+  }
+
   async recordDeliverySuccess(
     parcelId: string,
     signatureUrl: string | null,
     photoUrl: string | null,
+    outboxEvent: OutboxEventInput,
   ): Promise<RecordDeliverySuccessResult> {
     return this.dataSource.transaction(async (manager) => {
       const inserted = await manager.getRepository(ProofOfDelivery).insert({
@@ -36,6 +43,7 @@ export class CourierRepository implements ICourierRepository {
         signatureUrl,
         photoUrl,
       });
+      await manager.save(Outbox, outboxEvent);
       return { proofOfDeliveryId: inserted.identifiers[0].id as string };
     });
   }
@@ -44,6 +52,8 @@ export class CourierRepository implements ICourierRepository {
     parcelId: string,
     direction: string,
     failureReason: string,
+    failedOutboxEvent: OutboxEventInput,
+    rtsOutboxEvent: OutboxEventInput,
   ): Promise<RecordDeliveryFailureResult> {
     return this.dataSource.transaction(async (manager) => {
       const attemptRepo = manager.getRepository(DeliveryAttempt);
@@ -62,10 +72,17 @@ export class CourierRepository implements ICourierRepository {
         failureReason,
       });
 
+      await manager.save(Outbox, failedOutboxEvent);
+
+      const rtsTriggered = attemptNumber === 3;
+      if (rtsTriggered) {
+        await manager.save(Outbox, rtsOutboxEvent);
+      }
+
       return {
         deliveryAttemptId: inserted.identifiers[0].id as string,
         attemptNumber,
-        rtsTriggered: attemptNumber === 3,
+        rtsTriggered,
       };
     });
   }

@@ -10,7 +10,6 @@ import {
 } from '@app/contracts';
 import { IOrderLookupPort } from './ports/order-lookup.port';
 import { ICourierRepository } from './ports/courier-repository.port';
-import { IEventPublisher } from './ports/event-publisher.port';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
 import { PickupDto } from './dto/pickup.dto';
 import { DeliverDto, DeliveryOutcome } from './dto/deliver.dto';
@@ -18,26 +17,19 @@ import { DeliverDto, DeliveryOutcome } from './dto/deliver.dto';
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 
 export interface PickupResult {
-  event: 'parcel.picked_up';
-  event_id: string;
-  published_at: string;
+  status: 'recorded';
 }
 
 export interface DeliverSuccessResult {
-  event: 'parcel.delivered';
-  event_id: string;
-  published_at: string;
+  status: 'recorded';
   proof_of_delivery_id: string;
 }
 
 export interface DeliverFailureResult {
+  status: 'recorded';
   delivery_attempt_id: string;
   attempt_number: number;
-  rts?: {
-    event: 'parcel.rts';
-    event_id: string;
-    published_at: string;
-  };
+  rts_triggered: boolean;
 }
 
 export type DeliverResult = DeliverSuccessResult | DeliverFailureResult;
@@ -47,7 +39,6 @@ export class CourierService {
   constructor(
     private readonly orderLookup: IOrderLookupPort,
     private readonly courierRepository: ICourierRepository,
-    private readonly eventPublisher: IEventPublisher,
     private readonly idempotencyStore: IIdempotencyStore,
   ) {}
 
@@ -73,25 +64,19 @@ export class CourierService {
       );
     }
 
-    const eventId = randomUUID();
-    const occurredAt = new Date().toISOString();
     const payload: ParcelPickedUpEventV1 = {
-      event_id: eventId,
-      occurred_at: occurredAt,
+      event_id: randomUUID(),
+      occurred_at: new Date().toISOString(),
       parcel_id: parcelId,
       courier_id: dto.courier_id,
     };
-    await this.eventPublisher.publish(
-      NATS_SUBJECTS.PARCEL_PICKED_UP,
-      eventId,
-      payload as unknown as Record<string, unknown>,
-    );
+    await this.courierRepository.recordPickup({
+      eventId: payload.event_id,
+      eventType: NATS_SUBJECTS.PARCEL_PICKED_UP,
+      payload: payload as unknown as Record<string, unknown>,
+    });
 
-    const result: PickupResult = {
-      event: 'parcel.picked_up',
-      event_id: eventId,
-      published_at: occurredAt,
-    };
+    const result: PickupResult = { status: 'recorded' };
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);
     return result;
   }
@@ -125,35 +110,27 @@ export class CourierService {
     parcelId: string,
     dto: DeliverDto,
   ): Promise<DeliverSuccessResult> {
-    const { proofOfDeliveryId } =
-      await this.courierRepository.recordDeliverySuccess(
-        parcelId,
-        dto.signature_url ?? null,
-        dto.photo_url ?? null,
-      );
-
-    const eventId = randomUUID();
-    const occurredAt = new Date().toISOString();
     const payload: ParcelDeliveredEventV1 = {
-      event_id: eventId,
-      occurred_at: occurredAt,
+      event_id: randomUUID(),
+      occurred_at: new Date().toISOString(),
       parcel_id: parcelId,
       courier_id: dto.courier_id,
       signature_url: dto.signature_url ?? null,
       photo_url: dto.photo_url ?? null,
     };
-    await this.eventPublisher.publish(
-      NATS_SUBJECTS.PARCEL_DELIVERED,
-      eventId,
-      payload as unknown as Record<string, unknown>,
-    );
+    const { proofOfDeliveryId } =
+      await this.courierRepository.recordDeliverySuccess(
+        parcelId,
+        dto.signature_url ?? null,
+        dto.photo_url ?? null,
+        {
+          eventId: payload.event_id,
+          eventType: NATS_SUBJECTS.PARCEL_DELIVERED,
+          payload: payload as unknown as Record<string, unknown>,
+        },
+      );
 
-    return {
-      event: 'parcel.delivered',
-      event_id: eventId,
-      published_at: occurredAt,
-      proof_of_delivery_id: proofOfDeliveryId,
-    };
+    return { status: 'recorded', proof_of_delivery_id: proofOfDeliveryId };
   }
 
   private async recordFailure(
@@ -171,53 +148,46 @@ export class CourierService {
     }
 
     const failureReason = dto.failure_reason as string;
-    const { deliveryAttemptId, attemptNumber, rtsTriggered } =
-      await this.courierRepository.recordDeliveryFailure(
-        parcelId,
-        direction,
-        failureReason,
-      );
-
-    const failedEventId = randomUUID();
     const failedPayload: ParcelDeliveryFailedEventV1 = {
-      event_id: failedEventId,
+      event_id: randomUUID(),
       occurred_at: new Date().toISOString(),
       parcel_id: parcelId,
       courier_id: dto.courier_id,
       failure_reason: failureReason,
     };
-    await this.eventPublisher.publish(
-      NATS_SUBJECTS.PARCEL_DELIVERY_FAILED,
-      failedEventId,
-      failedPayload as unknown as Record<string, unknown>,
-    );
-
-    const result: DeliverFailureResult = {
-      delivery_attempt_id: deliveryAttemptId,
-      attempt_number: attemptNumber,
+    // Always built ahead of time so the repository can insert it in the
+    // same transaction as DELIVERY_ATTEMPT/OUTBOX when this insert turns
+    // out to be the 3rd consecutive failure - the repository decides
+    // whether to actually use it.
+    const rtsPayload: ParcelRtsEventV1 = {
+      event_id: randomUUID(),
+      occurred_at: new Date().toISOString(),
+      parcel_id: parcelId,
     };
 
-    if (rtsTriggered) {
-      const rtsEventId = randomUUID();
-      const rtsOccurredAt = new Date().toISOString();
-      const rtsPayload: ParcelRtsEventV1 = {
-        event_id: rtsEventId,
-        occurred_at: rtsOccurredAt,
-        parcel_id: parcelId,
-      };
-      await this.eventPublisher.publish(
-        NATS_SUBJECTS.PARCEL_RTS,
-        rtsEventId,
-        rtsPayload as unknown as Record<string, unknown>,
+    const { deliveryAttemptId, attemptNumber, rtsTriggered } =
+      await this.courierRepository.recordDeliveryFailure(
+        parcelId,
+        direction,
+        failureReason,
+        {
+          eventId: failedPayload.event_id,
+          eventType: NATS_SUBJECTS.PARCEL_DELIVERY_FAILED,
+          payload: failedPayload as unknown as Record<string, unknown>,
+        },
+        {
+          eventId: rtsPayload.event_id,
+          eventType: NATS_SUBJECTS.PARCEL_RTS,
+          payload: rtsPayload as unknown as Record<string, unknown>,
+        },
       );
-      result.rts = {
-        event: 'parcel.rts',
-        event_id: rtsEventId,
-        published_at: rtsOccurredAt,
-      };
-    }
 
-    return result;
+    return {
+      status: 'recorded',
+      delivery_attempt_id: deliveryAttemptId,
+      attempt_number: attemptNumber,
+      rts_triggered: rtsTriggered,
+    };
   }
 }
 

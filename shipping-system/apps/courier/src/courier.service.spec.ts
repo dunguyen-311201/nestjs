@@ -1,18 +1,15 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest.fn() mocks flagged as false positives */
 import { NotFoundException } from '@nestjs/common';
 import { BusinessRuleException } from '@app/dtos';
-import { NATS_SUBJECTS } from '@app/contracts';
 import { CourierService } from './courier.service';
 import { IOrderLookupPort } from './ports/order-lookup.port';
 import { ICourierRepository } from './ports/courier-repository.port';
-import { IEventPublisher } from './ports/event-publisher.port';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
 import { DeliveryOutcome } from './dto/deliver.dto';
 
 describe('CourierService', () => {
   let orderLookup: jest.Mocked<IOrderLookupPort>;
   let courierRepository: jest.Mocked<ICourierRepository>;
-  let eventPublisher: jest.Mocked<IEventPublisher>;
   let idempotencyStore: jest.Mocked<IIdempotencyStore>;
   let service: CourierService;
 
@@ -20,16 +17,15 @@ describe('CourierService', () => {
     orderLookup = { findParcelOrderContext: jest.fn() };
     courierRepository = {
       getLatestAttemptNumber: jest.fn(),
+      recordPickup: jest.fn(),
       recordDeliverySuccess: jest.fn(),
       recordDeliveryFailure: jest.fn(),
     };
-    eventPublisher = { publish: jest.fn() };
     idempotencyStore = { get: jest.fn(), set: jest.fn() };
     idempotencyStore.get.mockResolvedValue(null);
     service = new CourierService(
       orderLookup,
       courierRepository,
-      eventPublisher,
       idempotencyStore,
     );
   });
@@ -41,7 +37,7 @@ describe('CourierService', () => {
       await expect(
         service.pickup('parcel-1', { courier_id: 'courier-1' }, 'idem-1'),
       ).rejects.toThrow(NotFoundException);
-      expect(eventPublisher.publish).not.toHaveBeenCalled();
+      expect(courierRepository.recordPickup).not.toHaveBeenCalled();
     });
 
     it('throws 422 BR-08 when the parent order is not yet Confirmed+', async () => {
@@ -57,10 +53,10 @@ describe('CourierService', () => {
 
       expect(error).toBeInstanceOf(BusinessRuleException);
       expect((error as BusinessRuleException).rule).toBe('BR-08');
-      expect(eventPublisher.publish).not.toHaveBeenCalled();
+      expect(courierRepository.recordPickup).not.toHaveBeenCalled();
     });
 
-    it('publishes parcel.picked_up when the order is Confirmed', async () => {
+    it('writes an OUTBOX row for parcel.picked_up when the order is Confirmed', async () => {
       orderLookup.findParcelOrderContext.mockResolvedValue({
         shipmentOrderId: 'order-1',
         orderStatus: 'Confirmed',
@@ -73,13 +69,15 @@ describe('CourierService', () => {
         'idem-1',
       );
 
-      expect(result.event).toBe('parcel.picked_up');
-      expect(eventPublisher.publish).toHaveBeenCalledWith(
-        NATS_SUBJECTS.PARCEL_PICKED_UP,
-        expect.any(String),
+      expect(result).toEqual({ status: 'recorded' });
+      expect(courierRepository.recordPickup).toHaveBeenCalledWith(
         expect.objectContaining({
-          parcel_id: 'parcel-1',
-          courier_id: 'courier-1',
+          eventId: expect.any(String) as string,
+          eventType: 'parcel.picked_up',
+          payload: expect.objectContaining({
+            parcel_id: 'parcel-1',
+            courier_id: 'courier-1',
+          }) as unknown,
         }),
       );
       expect(idempotencyStore.set).toHaveBeenCalledWith(
@@ -90,11 +88,7 @@ describe('CourierService', () => {
     });
 
     it('replays the cached response on a repeated Idempotency-Key', async () => {
-      const cached = {
-        event: 'parcel.picked_up',
-        event_id: 'e1',
-        published_at: 'x',
-      };
+      const cached = { status: 'recorded' };
       idempotencyStore.get.mockResolvedValue(cached);
 
       const result = await service.pickup(
@@ -125,7 +119,7 @@ describe('CourierService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('records PROOF_OF_DELIVERY and publishes parcel.delivered on success', async () => {
+    it('records PROOF_OF_DELIVERY + an OUTBOX row on success', async () => {
       orderLookup.findParcelOrderContext.mockResolvedValue({
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
@@ -146,23 +140,27 @@ describe('CourierService', () => {
         'idem-1',
       );
 
-      expect(result).toMatchObject({
-        event: 'parcel.delivered',
+      expect(result).toEqual({
+        status: 'recorded',
         proof_of_delivery_id: 'pod-1',
       });
-      expect(eventPublisher.publish).toHaveBeenCalledWith(
-        NATS_SUBJECTS.PARCEL_DELIVERED,
-        expect.any(String),
+      expect(courierRepository.recordDeliverySuccess).toHaveBeenCalledWith(
+        'parcel-1',
+        'https://sig',
+        null,
         expect.objectContaining({
-          parcel_id: 'parcel-1',
-          courier_id: 'courier-1',
-          signature_url: 'https://sig',
-          photo_url: null,
+          eventType: 'parcel.delivered',
+          payload: expect.objectContaining({
+            parcel_id: 'parcel-1',
+            courier_id: 'courier-1',
+            signature_url: 'https://sig',
+            photo_url: null,
+          }) as unknown,
         }),
       );
     });
 
-    it('records a DELIVERY_ATTEMPT and publishes parcel.delivery_failed on the 1st/2nd failure', async () => {
+    it('records a DELIVERY_ATTEMPT + OUTBOX row on the 1st/2nd failure, no rts flag', async () => {
       orderLookup.findParcelOrderContext.mockResolvedValue({
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
@@ -186,26 +184,28 @@ describe('CourierService', () => {
       );
 
       expect(result).toEqual({
+        status: 'recorded',
         delivery_attempt_id: 'attempt-1',
         attempt_number: 1,
+        rts_triggered: false,
       });
-      expect(eventPublisher.publish).toHaveBeenCalledWith(
-        NATS_SUBJECTS.PARCEL_DELIVERY_FAILED,
-        expect.any(String),
-        expect.objectContaining({
+      const [, , , failedEvent, rtsEvent] =
+        courierRepository.recordDeliveryFailure.mock.calls[0];
+      expect(failedEvent).toMatchObject({
+        eventType: 'parcel.delivery_failed',
+        payload: expect.objectContaining({
           parcel_id: 'parcel-1',
           courier_id: 'courier-1',
           failure_reason: 'no answer',
-        }),
-      );
-      expect(eventPublisher.publish).not.toHaveBeenCalledWith(
-        NATS_SUBJECTS.PARCEL_RTS,
-        expect.anything(),
-        expect.anything(),
-      );
+        }) as unknown,
+      });
+      expect(rtsEvent).toMatchObject({
+        eventType: 'parcel.rts',
+        payload: expect.objectContaining({ parcel_id: 'parcel-1' }) as unknown,
+      });
     });
 
-    it('publishes both parcel.delivery_failed and parcel.rts on the 3rd failure (BR-04)', async () => {
+    it('reports rts_triggered true on the 3rd failure (BR-04)', async () => {
       orderLookup.findParcelOrderContext.mockResolvedValue({
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
@@ -228,16 +228,12 @@ describe('CourierService', () => {
         'idem-1',
       );
 
-      expect(result).toMatchObject({
+      expect(result).toEqual({
+        status: 'recorded',
         delivery_attempt_id: 'attempt-3',
         attempt_number: 3,
-        rts: { event: 'parcel.rts' },
+        rts_triggered: true,
       });
-      expect(eventPublisher.publish).toHaveBeenCalledWith(
-        NATS_SUBJECTS.PARCEL_RTS,
-        expect.any(String),
-        expect.objectContaining({ parcel_id: 'parcel-1' }),
-      );
     });
 
     it('throws 422 BR-04 when a 4th attempt is submitted after RTS already triggered', async () => {
@@ -266,7 +262,12 @@ describe('CourierService', () => {
     });
 
     it('replays the cached response on a repeated Idempotency-Key', async () => {
-      const cached = { delivery_attempt_id: 'attempt-1', attempt_number: 1 };
+      const cached = {
+        status: 'recorded',
+        delivery_attempt_id: 'attempt-1',
+        attempt_number: 1,
+        rts_triggered: false,
+      };
       idempotencyStore.get.mockResolvedValue(cached);
 
       const result = await service.deliver(

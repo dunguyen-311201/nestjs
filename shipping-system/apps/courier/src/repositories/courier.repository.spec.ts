@@ -2,21 +2,36 @@ import { CourierRepository } from './courier.repository';
 import { DeliveryAttempt } from '../entities/delivery-attempt.entity';
 import { DeliveryAttemptOutcome } from '../entities/delivery-attempt-outcome.enum';
 import { ProofOfDelivery } from '../entities/proof-of-delivery.entity';
+import { Outbox } from '../entities/outbox.entity';
 
 describe('CourierRepository', () => {
   let findMax: jest.Mock;
   let insertPod: jest.Mock;
   let insertAttempt: jest.Mock;
+  let saveOutbox: jest.Mock;
   let dataSource: {
     getRepository: jest.Mock;
     transaction: jest.Mock;
+    manager: { save: jest.Mock };
   };
   let repository: CourierRepository;
+
+  const failedOutboxEvent = {
+    eventId: 'evt-failed',
+    eventType: 'parcel.delivery_failed',
+    payload: { parcel_id: 'parcel-1' },
+  };
+  const rtsOutboxEvent = {
+    eventId: 'evt-rts',
+    eventType: 'parcel.rts',
+    payload: { parcel_id: 'parcel-1' },
+  };
 
   beforeEach(() => {
     findMax = jest.fn();
     insertPod = jest.fn();
     insertAttempt = jest.fn();
+    saveOutbox = jest.fn().mockResolvedValue(undefined);
     dataSource = {
       getRepository: jest.fn().mockImplementation((entity: unknown) => {
         if (entity === DeliveryAttempt) {
@@ -35,6 +50,7 @@ describe('CourierRepository', () => {
         throw new Error(`Unexpected repository target: ${String(entity)}`);
       }),
       transaction: jest.fn(),
+      manager: { save: saveOutbox },
     };
     repository = new CourierRepository(dataSource as never);
   });
@@ -63,8 +79,25 @@ describe('CourierRepository', () => {
     });
   });
 
+  describe('recordPickup', () => {
+    it('saves only an OUTBOX row', async () => {
+      await repository.recordPickup({
+        eventId: 'evt-pickup',
+        eventType: 'parcel.picked_up',
+        payload: { parcel_id: 'parcel-1' },
+      });
+
+      expect(saveOutbox).toHaveBeenCalledWith(Outbox, {
+        eventId: 'evt-pickup',
+        eventType: 'parcel.picked_up',
+        payload: { parcel_id: 'parcel-1' },
+      });
+    });
+  });
+
   describe('recordDeliverySuccess', () => {
-    it('inserts a PROOF_OF_DELIVERY row and returns its id', async () => {
+    it('inserts PROOF_OF_DELIVERY and saves the delivered-event OUTBOX row in one transaction', async () => {
+      const managerSave = jest.fn().mockResolvedValue(undefined);
       dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
         cb({
           getRepository: jest.fn().mockImplementation((entity: unknown) => {
@@ -73,6 +106,7 @@ describe('CourierRepository', () => {
             }
             throw new Error(`Unexpected: ${String(entity)}`);
           }),
+          save: managerSave,
         }),
       );
       insertPod.mockResolvedValue({ identifiers: [{ id: 'pod-1' }] });
@@ -81,6 +115,11 @@ describe('CourierRepository', () => {
         'parcel-1',
         'https://sig',
         null,
+        {
+          eventId: 'evt-delivered',
+          eventType: 'parcel.delivered',
+          payload: { parcel_id: 'parcel-1' },
+        },
       );
 
       expect(result).toEqual({ proofOfDeliveryId: 'pod-1' });
@@ -88,6 +127,11 @@ describe('CourierRepository', () => {
         parcelId: 'parcel-1',
         signatureUrl: 'https://sig',
         photoUrl: null,
+      });
+      expect(managerSave).toHaveBeenCalledWith(Outbox, {
+        eventId: 'evt-delivered',
+        eventType: 'parcel.delivered',
+        payload: { parcel_id: 'parcel-1' },
       });
     });
   });
@@ -107,11 +151,15 @@ describe('CourierRepository', () => {
         }
         throw new Error(`Unexpected repository target: ${String(entity)}`);
       });
-      return { manager: { getRepository: managerGetRepository } };
+      const managerSave = jest.fn().mockResolvedValue(undefined);
+      return {
+        manager: { getRepository: managerGetRepository, save: managerSave },
+        managerSave,
+      };
     }
 
-    it('records attempt_number 1 and does not trigger RTS on the first failure', async () => {
-      const { manager } = transactionManager(null);
+    it('records attempt_number 1, saves only the failed-event OUTBOX row, and does not trigger RTS on the first failure', async () => {
+      const { manager, managerSave } = transactionManager(null);
       dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
         cb(manager),
       );
@@ -121,6 +169,8 @@ describe('CourierRepository', () => {
         'parcel-1',
         'Forward',
         'no answer',
+        failedOutboxEvent,
+        rtsOutboxEvent,
       );
 
       expect(result).toEqual({
@@ -135,10 +185,12 @@ describe('CourierRepository', () => {
         outcome: DeliveryAttemptOutcome.FAILED,
         failureReason: 'no answer',
       });
+      expect(managerSave).toHaveBeenCalledTimes(1);
+      expect(managerSave).toHaveBeenCalledWith(Outbox, failedOutboxEvent);
     });
 
-    it('triggers RTS on the 3rd consecutive failure', async () => {
-      const { manager } = transactionManager('2');
+    it('saves both the failed-event and rts-event OUTBOX rows on the 3rd consecutive failure', async () => {
+      const { manager, managerSave } = transactionManager('2');
       dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
         cb(manager),
       );
@@ -148,6 +200,8 @@ describe('CourierRepository', () => {
         'parcel-1',
         'Forward',
         'no answer',
+        failedOutboxEvent,
+        rtsOutboxEvent,
       );
 
       expect(result).toEqual({
@@ -155,6 +209,9 @@ describe('CourierRepository', () => {
         attemptNumber: 3,
         rtsTriggered: true,
       });
+      expect(managerSave).toHaveBeenCalledTimes(2);
+      expect(managerSave).toHaveBeenCalledWith(Outbox, failedOutboxEvent);
+      expect(managerSave).toHaveBeenCalledWith(Outbox, rtsOutboxEvent);
     });
 
     it('scopes numbering to the reverse leg independently of the forward leg', async () => {
@@ -170,6 +227,8 @@ describe('CourierRepository', () => {
         'parcel-1',
         'Reverse_RTS',
         'no answer',
+        failedOutboxEvent,
+        rtsOutboxEvent,
       );
 
       expect(result.attemptNumber).toBe(1);
