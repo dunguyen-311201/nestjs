@@ -158,6 +158,22 @@ CREATE TABLE IF NOT EXISTS shipping_courier_db.COURIER (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Transactional Outbox for Courier's pickup/delivery scan events (added
+-- task 6.1 follow-up: publishing parcel.picked_up/parcel.delivered/
+-- parcel.delivery_failed/parcel.rts synchronously in-request had no retry
+-- on a NATS publish failure, and a client Idempotency-Key retry after such
+-- a failure could re-run the DB write. Same shape/semantics as
+-- shipping_order_db.OUTBOX.
+CREATE TABLE IF NOT EXISTS shipping_courier_db.OUTBOX (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PUBLISHED')),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS shipping_courier_db.PROOF_OF_DELIVERY (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     parcel_id UUID NOT NULL,                 -- Logical FK to PARCEL.id
@@ -220,6 +236,8 @@ CREATE INDEX IF NOT EXISTS idx_parcel_route_id ON shipping_order_db.PARCEL(route
 CREATE INDEX IF NOT EXISTS idx_payment_transaction_payment_id ON shipping_order_db.PAYMENT_TRANSACTION(payment_id);
 
 CREATE INDEX IF NOT EXISTS idx_outbox_status_created_at ON shipping_order_db.OUTBOX(status, created_at) WHERE status = 'PENDING';
+
+CREATE INDEX IF NOT EXISTS idx_courier_outbox_status_created_at ON shipping_courier_db.OUTBOX(status, created_at) WHERE status = 'PENDING';
 
 CREATE INDEX IF NOT EXISTS idx_courier_zone_id ON shipping_courier_db.COURIER(zone_id);
 
