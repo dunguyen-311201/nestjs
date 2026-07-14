@@ -8,12 +8,21 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.2`
-  complete. Next: `6.3` PII field-level encryption review. See
+- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.3`
+  reviewed (no code changes needed). Next: `6.4` Line-haul. See
   `docs/03-phases.md`.
-- **Next task:** `6.3` PII field-level encryption (shared crypto helper —
-  largely already in place from earlier phases; confirm scope at start).
-  Run `/begin-task 6.3` to start it.
+- **Next task:** `6.4` Line-haul: trip creation, depart/arrive hooks,
+  deconsolidation. Run `/begin-task 6.4` to start it.
+- **Task `6.3` (PII field-level encryption) — confirmed already satisfied,
+  no code changes**: `libs/crypto` (Phase 4) + `CUSTOMER`'s full
+  encryption (task 5.1) already meet this task's requirement for every
+  PII field in a currently-built service. Two known gaps intentionally
+  left open: `decrypt()` is never called anywhere (no recipient/admin
+  view exists — same pre-existing auth/RBAC gap noted in `docs/lld/
+  order-service.md`), and `shipping_network_db.DRIVER.name_enc` is not
+  actually encrypted (`generate_seed.py` writes plaintext) — deferred to
+  whichever of tasks 6.4/6.5 builds `DRIVER` first, since no service
+  reads/writes it yet.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
 - **State:** Task `6.2` (Hub/Sortation: `HUB_RECEIVE`, parcel inbound/

@@ -6,6 +6,18 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-14
 
 ### Done
+- Reviewed task **6.3** (PII field-level encryption, shared crypto helper, `docs/03-phases.md`) — **confirmed already satisfied, no code changes needed**, per user's call after presenting the audit findings:
+  - `libs/crypto`'s AES-256-GCM `encrypt`/`decrypt`/`hashForLookup` (built Phase 4, TDD'd) is correct: random IV per call, GCM auth-tag tamper detection, deterministic HMAC for equality lookups.
+  - `CUSTOMER.name_enc`/`phone_enc`/`address_enc`/`phone_hash` (Order Service) is the only PII-bearing column in any currently-built service, and it's been fully encrypted since task 5.1 (+ the phone_hash dedup fix).
+  - **Known gap, confirmed not in scope for this task**: `decrypt()` is never called anywhere in `apps/` — every write path encrypts, nothing decrypts. Consistent with the already-documented open item (no recipient/admin view exists to reveal plaintext; needs its own ADR per the auth/RBAC gap noted in `docs/lld/order-service.md`/`tracking-service.md` § Known Open Items).
+  - **Known gap, deferred to whichever of tasks 6.4/6.5 builds `DRIVER` first**: `shipping_network_db.DRIVER.name_enc` is not actually encrypted — `generate_seed.py` writes plaintext into it despite the column name. No service (Line-haul/Dispatcher) reads or writes this table yet, so nothing in this codebase is currently lying about its own data; fixing it now would touch a table this task doesn't otherwise need.
+
+### Decisions / open questions (6.3)
+- Confirmed with the user: log task 6.3 as satisfied by existing Phase 4/5.1 work rather than doing a speculative fix on `DRIVER.name_enc` ahead of the task that actually needs it.
+
+### Next (6.3)
+- Task **6.3** reviewed, no changes needed. Next: task **6.4** Line-haul (trip creation, depart/arrive hooks, deconsolidation), via `/begin-task 6.4`.
+
 - Completed task **6.2** (Hub/Sortation: `HUB_RECEIVE`, parcel inbound/outbound scan at hub, `docs/03-phases.md`), touching **UC-07**, **UC-12**, **BR-02**, **BR-06**, **BR-08**:
   - New app `apps/hub`: entities `Hub`, `Route`, `Outbox` (owned, `shipping_network_db`) + a read-only cross-schema `'order'` connection (`Parcel`/`ShipmentOrder`) for the BR-08 guard and misroute detection. Single endpoint `POST /hubs/{id}/receive`.
   - **Built with a Transactional Outbox from day 1**, confirmed with user — same pattern just retrofitted onto Courier in 6.1, avoiding a repeat of that exact gap: `shipping_network_db.OUTBOX`, `IOutboxRepository`/`OutboxRepository`, `OutboxPollerService` (500ms poll, 20-row batch). `HubService` never calls `IEventPublisher` directly; `IHubRepository.recordScan` writes 1 or 2 `OUTBOX` rows atomically per request.
