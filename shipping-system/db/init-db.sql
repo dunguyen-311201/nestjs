@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS shipping_network_db.LINEHAULTRIP (
     dest_hub_id UUID NOT NULL REFERENCES shipping_network_db.HUB(id),
     driver_id UUID REFERENCES shipping_network_db.DRIVER(id),
     truck_id UUID REFERENCES shipping_network_db.TRUCK(id),
+    -- Trip lifecycle (task 6.4): the LLD's /depart and /arrive 409
+    -- "already in a terminal state" guard had no column to check against
+    -- until this was added - same class of gap as PARCEL.route_id (6.2)
+    -- and DELIVERY_ATTEMPT.direction (6.1).
+    status VARCHAR(50) NOT NULL DEFAULT 'Created' CHECK (status IN ('Created', 'Departed', 'Arrived')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

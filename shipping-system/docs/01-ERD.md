@@ -118,6 +118,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | `dest_hub_id` | uuid FK | Hub where the trip arrives. |
 | `driver_id` | uuid FK | Driver assigned to the trip. |
 | `truck_id` | uuid FK | Truck asset assigned to the trip. |
+| `status` | enum | `Created`, `Departed`, or `Arrived`. Drives the `/depart`/`/arrive` 409 "already in a terminal state" guard (task 6.4). |
 
 ### HUB
 | Field | Type | Description |

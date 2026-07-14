@@ -4,14 +4,16 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.1 | 2026-07-14 | Du Nguyen | Task 6.4 implementation: **real gap found and fixed, confirmed with user first** — `LINEHAULTRIP` had no lifecycle column at all, so the `/depart`/`/arrive` 409 "already in a terminal state" guard had nothing to check against. Added `status` (`Created`\|`Departed`\|`Arrived`, default `Created`). Built with a Transactional Outbox from day 1 (same pattern as Hub, task 6.2) — responses now return `{ status: "recorded" }`, not `event`/`published_at`. **Not building "deconsolidation"** despite `docs/03-phases.md`'s task title listing it — `CLAUDE.md`'s SCOPE section explicitly cuts consolidation/deconsolidation logic; treated as a stale phrase left over from before that scope cut. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
-Owns: `LINEHAULTRIP`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including `Idempotency-Key` on all three `POST` endpoints below (especially `/depart` and `/arrive`: a retried GPS-triggered call must not double-publish `trip.departed`/`trip.arrived`). This service owns trip **creation and lifecycle** (create/depart/arrive); assigning a driver/truck to an existing trip is Dispatcher's responsibility — see [dispatcher-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/dispatcher-service.md).
+Owns: `LINEHAULTRIP`. Shares the `shipping_network_db` schema with Hub Service (task 6.2) by the original architecture (ADR-003 + `docs/02-HLD.md`'s data-ownership table) — `HUB` is read-only here (existence-check at trip creation only), and the `OUTBOX` table (physically created by Hub's migration) is reused as-is; each service still runs its own local `OutboxPollerService` instance against the shared table (harmless under this project's existing two-layer idempotency convention — `Nats-Msg-Id` broker dedup + consumer-side `event_id` dedup already absorb a row being picked up by either poller). Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including `Idempotency-Key` on all three `POST` endpoints below (especially `/depart` and `/arrive`: a retried GPS-triggered call must not double-publish `trip.departed`/`trip.arrived`). This service owns trip **creation and lifecycle** (create/depart/arrive); assigning a driver/truck to an existing trip is Dispatcher's responsibility — see [dispatcher-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/dispatcher-service.md).
 
 ## Key Design Decisions
 
+- **Transactional Outbox from day 1** (as of v1.1): `/depart`/`/arrive` write `LINEHAULTRIP.status` + an `OUTBOX` row atomically in one Postgres transaction; a background poller (`OutboxPollerService`, 500ms interval) publishes `PENDING` rows to NATS.
 - **REST endpoints are the fallback path, not the primary trigger**: `/depart` and `/arrive` exist for when GPS geofencing is unavailable — the primary trigger is automatic (see [docs/02-HLD.md § Event Triggers](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). This is why idempotency matters more here than it might look: manual fallback entry is more retry-prone (human-operated) than an automated sensor event.
-- **Creation vs. assignment split across services**: this service only ever writes `LINEHAULTRIP.origin_hub_id`/`dest_hub_id` at creation; it never writes `driver_id`/`truck_id` — that's Dispatcher's write, even though it lands in the same row.
+- **Creation vs. assignment split across services**: this service only ever writes `LINEHAULTRIP.origin_hub_id`/`dest_hub_id`/`status` at creation/lifecycle; it never writes `driver_id`/`truck_id` — that's Dispatcher's write, even though it lands in the same row.
 
 ## Use Cases
 
@@ -27,12 +29,16 @@ Owns: `LINEHAULTRIP`. Conventions in [00-conventions.md](file:///home/dunguyen/T
 ```mermaid
 sequenceDiagram
     participant Linehaul as Line-haul Service
+    participant DB as network_db (Postgres)
+    participant Poller as OutboxPollerService
     participant NATS
 
     Linehaul->>Linehaul: trip departs origin hub (GPS geofence or manual /depart fallback)
-    Linehaul--)NATS: publish trip.departed
+    Linehaul->>DB: LINEHAULTRIP.status = Departed + INSERT OUTBOX row, same transaction
+    Poller--)NATS: publish trip.departed
     Note over Linehaul: on arrival at destination hub (GPS geofence or manual /arrive fallback)
-    Linehaul--)NATS: publish trip.arrived
+    Linehaul->>DB: LINEHAULTRIP.status = Arrived + INSERT OUTBOX row, same transaction
+    Poller--)NATS: publish trip.arrived
 ```
 
 *(What happens at the destination hub after arrival — the scan + misrouted check — is owned by [hub-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/hub-service.md), Diagram 4b.)*
@@ -66,10 +72,11 @@ sequenceDiagram
 
 ### `POST /trips/{id}/depart` · `POST /trips/{id}/arrive`
 
-No body — **manual fallback only**. Primary trigger is GPS geofencing; these endpoints exist for when GPS integration is unavailable (see [docs/02-HLD.md § Event Triggers](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). **Response `200`**: `{ event: "trip.departed"\|"trip.arrived", published_at }`. **Errors**: `404` trip not found · `409` trip already in a terminal state for this transition (e.g. `/arrive` called before `/depart`).
+No body — **manual fallback only**. Primary trigger is GPS geofencing; these endpoints exist for when GPS integration is unavailable (see [docs/02-HLD.md § Event Triggers](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). **Response `201`**: `{ status: "recorded" }` — the `trip.departed`/`trip.arrived` publish is async via the Outbox/poller (v1.1), so there is no `event`/`published_at` to return synchronously. **Errors**: `404` trip not found · `409` (plain, no `BR-XX` tag — this isn't a business-rule guard) trip already in a terminal state for this transition (e.g. `/arrive` called before `/depart`, or a status already past the requested transition).
 
 ## Database Schema Detail
 
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
-| `LINEHAULTRIP` | `idx_trip_origin_hub`, `idx_trip_dest_hub`, `idx_trip_driver_id` | PK `id` |
+| `LINEHAULTRIP` | `idx_trip_origin_hub`, `idx_trip_dest_hub`, `idx_trip_driver_id` | PK `id` · `status` CHECK `IN ('Created','Departed','Arrived')`, default `Created` (added task 6.4, drives the `/depart`/`/arrive` 409 guard) |
+| `OUTBOX` | `idx_hub_outbox_status_created_at` (partial, `WHERE status = 'PENDING'`) | Shared physical table with Hub Service (task 6.2) — see the Owns note above. |

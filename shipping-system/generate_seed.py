@@ -315,7 +315,7 @@ with open("db/seed.sql", "w") as f:
     # 5. Insert Linehaul Trips
     f.write("-- Linehaul Trips\n")
     for row in trips:
-        f.write(f"INSERT INTO shipping_network_db.LINEHAULTRIP (id, origin_hub_id, dest_hub_id, driver_id, truck_id) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}');\n")
+        f.write(f"INSERT INTO shipping_network_db.LINEHAULTRIP (id, origin_hub_id, dest_hub_id, driver_id, truck_id, status) VALUES ('{row[0]}', '{row[1]}', '{row[2]}', '{row[3]}', '{row[4]}', 'Arrived');\n")
     f.write("\n")
     
     # 6. Insert Rate Cards
