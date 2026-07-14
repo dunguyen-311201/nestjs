@@ -15,6 +15,7 @@ export interface NewOrderData {
     'nameEnc' | 'phoneEnc' | 'phoneHash' | 'addressEnc' | 'regionCode'
   >;
   rateCardId: string;
+  routeId: string;
   priceCents: number;
   expectedDeliveryAt: Date;
   paymentType: PaymentType;
@@ -24,6 +25,11 @@ export interface NewOrderData {
   >[];
 }
 
+export interface ParcelWeightAndRouteUpdate {
+  actualWeightGrams?: number;
+  routeId?: string;
+}
+
 export abstract class IOrderRepository {
   abstract createOrder(data: NewOrderData): Promise<ShipmentOrder>;
   abstract findById(id: string): Promise<ShipmentOrder | null>;
@@ -31,6 +37,13 @@ export abstract class IOrderRepository {
   abstract updateParcelState(
     parcelId: string,
     state: ParcelState,
+  ): Promise<void>;
+  // Applied by ParcelEventConsumer on parcel.hub_received (BR-06 weight
+  // capture, and BR-02's corrective route_id on a misrouted-then-corrected
+  // scan) - Hub Service never writes PARCEL directly, only Order does.
+  abstract updateParcelWeightAndRoute(
+    parcelId: string,
+    update: ParcelWeightAndRouteUpdate,
   ): Promise<void>;
   abstract findParcelStatesByShipmentOrderId(
     shipmentOrderId: string,

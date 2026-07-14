@@ -11,7 +11,11 @@ import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
 import { ParcelState } from '../entities/parcel.enums';
 import { Payment } from '../entities/payment.entity';
 import { PaymentStatus } from '../entities/payment-status.enum';
-import { IOrderRepository, NewOrderData } from '../ports/order-repository.port';
+import {
+  IOrderRepository,
+  NewOrderData,
+  ParcelWeightAndRouteUpdate,
+} from '../ports/order-repository.port';
 
 @Injectable()
 export class OrderRepository implements IOrderRepository {
@@ -38,6 +42,7 @@ export class OrderRepository implements IOrderRepository {
         Parcel,
         data.parcels.map((parcel) => ({
           shipmentOrderId: order.id,
+          routeId: data.routeId,
           declaredWeightGrams: parcel.declaredWeightGrams,
           type: parcel.type,
           direction: parcel.direction,
@@ -111,6 +116,13 @@ export class OrderRepository implements IOrderRepository {
 
   async updateParcelState(parcelId: string, state: ParcelState): Promise<void> {
     await this.dataSource.getRepository(Parcel).update(parcelId, { state });
+  }
+
+  async updateParcelWeightAndRoute(
+    parcelId: string,
+    update: ParcelWeightAndRouteUpdate,
+  ): Promise<void> {
+    await this.dataSource.getRepository(Parcel).update(parcelId, update);
   }
 
   async findParcelStatesByShipmentOrderId(

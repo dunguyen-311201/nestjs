@@ -4,6 +4,7 @@ export interface PriceQuote {
   rateCardId: string;
   priceCents: number;
   slaExpectedDelivery: Date;
+  routeId: string;
 }
 
 export abstract class IPricingPort {

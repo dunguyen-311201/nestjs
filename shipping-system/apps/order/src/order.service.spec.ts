@@ -57,6 +57,7 @@ describe('OrderService', () => {
     idempotencyStore.get.mockResolvedValue(null);
     pricing.getPrice.mockResolvedValue({
       rateCardId: 'rate-card-1',
+      routeId: 'route-1',
       priceCents: 5000,
       slaExpectedDelivery: new Date('2026-07-15T00:00:00Z'),
     });
@@ -79,6 +80,7 @@ describe('OrderService', () => {
       expect.objectContaining({
         priceCents: 5000,
         rateCardId: 'rate-card-1',
+        routeId: 'route-1',
       }),
     );
     expect(result).toEqual({
@@ -119,6 +121,7 @@ describe('OrderService', () => {
     idempotencyStore.get.mockResolvedValue(null);
     pricing.getPrice.mockResolvedValue({
       rateCardId: 'rate-card-1',
+      routeId: 'route-1',
       priceCents: 5000,
       slaExpectedDelivery: new Date('2026-07-15T00:00:00Z'),
     });

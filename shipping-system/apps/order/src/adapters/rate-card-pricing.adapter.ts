@@ -5,6 +5,7 @@ import { IPricingPort, PriceQuote } from '../ports/pricing.port';
 import { ParcelType } from '../entities/parcel.enums';
 import { Zone } from '../entities/zone.entity';
 import { RateCard } from '../entities/rate-card.entity';
+import { Route } from '../entities/route.entity';
 
 @Injectable()
 export class RateCardPricingAdapter implements IPricingPort {
@@ -13,6 +14,8 @@ export class RateCardPricingAdapter implements IPricingPort {
     private readonly zoneRepository: Repository<Zone>,
     @InjectRepository(RateCard, 'pricing')
     private readonly rateCardRepository: Repository<RateCard>,
+    @InjectRepository(Route, 'network')
+    private readonly routeRepository: Repository<Route>,
   ) {}
 
   async getPrice(
@@ -53,6 +56,13 @@ export class RateCardPricingAdapter implements IPricingPort {
       return null;
     }
 
+    const route = await this.routeRepository.findOne({
+      where: { originZoneId: originZone.id, destZoneId: destZone.id },
+    });
+    if (!route) {
+      return null;
+    }
+
     const slaExpectedDelivery = new Date(now);
     slaExpectedDelivery.setUTCDate(
       slaExpectedDelivery.getUTCDate() + rateCard.slaDays,
@@ -62,6 +72,7 @@ export class RateCardPricingAdapter implements IPricingPort {
       rateCardId: rateCard.id,
       priceCents: rateCard.priceCents,
       slaExpectedDelivery,
+      routeId: route.id,
     };
   }
 }

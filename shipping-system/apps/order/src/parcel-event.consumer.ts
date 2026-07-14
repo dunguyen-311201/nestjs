@@ -7,6 +7,8 @@ import { mapSubjectToEventType } from './domain/map-subject-to-event-type';
 
 interface ParcelLifecyclePayload {
   parcel_id?: string;
+  actual_weight_grams?: number;
+  route_id?: string;
 }
 
 // Order independently consumes the same parcel-lifecycle events Tracking
@@ -72,6 +74,25 @@ export class ParcelEventConsumer {
     if (!parcel) {
       this.logger.warn(`Unknown parcel_id on ${subject}: ${payload.parcel_id}`);
       return;
+    }
+
+    // BR-06 (weight capture) and BR-02's corrective re-route both land on
+    // this same subject - Hub Service never writes PARCEL directly (only
+    // Order does), so it publishes the resolved values here instead.
+    if (subject === NATS_SUBJECTS.PARCEL_HUB_RECEIVED) {
+      const update: { actualWeightGrams?: number; routeId?: string } = {};
+      if (typeof payload.actual_weight_grams === 'number') {
+        update.actualWeightGrams = payload.actual_weight_grams;
+      }
+      if (payload.route_id) {
+        update.routeId = payload.route_id;
+      }
+      if (Object.keys(update).length > 0) {
+        await this.orderRepository.updateParcelWeightAndRoute(
+          parcel.id,
+          update,
+        );
+      }
     }
 
     try {

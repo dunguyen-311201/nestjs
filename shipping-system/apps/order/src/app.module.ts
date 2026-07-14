@@ -8,6 +8,7 @@ import { ShipmentOrder } from './entities/shipment-order.entity';
 import { Parcel } from './entities/parcel.entity';
 import { RateCard } from './entities/rate-card.entity';
 import { Zone } from './entities/zone.entity';
+import { Route } from './entities/route.entity';
 import { Outbox } from './entities/outbox.entity';
 import { Payment } from './entities/payment.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -49,10 +50,11 @@ import { PaymentTransaction } from './entities/payment-transaction.entity';
       entities: [RateCard],
       synchronize: false,
     }),
-    // Read-only mapping onto Hub/Sortation Service's ZONE table, used only
-    // to resolve region_code -> zone_id for the RateCard lookup above.
-    // Order/Pricing never writes here - Hub Service (not yet built) owns
-    // this schema.
+    // Read-only mapping onto Hub/Sortation Service's ZONE/ROUTE tables, used
+    // to resolve region_code -> zone_id and the (origin, dest) corridor for
+    // the RateCard lookup + PARCEL.route_id at order creation above.
+    // Order/Pricing never writes here - Hub Service (task 6.2) owns this
+    // schema.
     TypeOrmModule.forRoot({
       name: 'network',
       type: 'postgres',
@@ -62,7 +64,7 @@ import { PaymentTransaction } from './entities/payment-transaction.entity';
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'postgres',
       schema: 'shipping_network_db',
-      entities: [Zone],
+      entities: [Zone, Route],
       synchronize: false,
     }),
   ],

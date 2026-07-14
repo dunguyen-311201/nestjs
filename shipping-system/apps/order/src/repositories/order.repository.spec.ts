@@ -66,6 +66,7 @@ describe('OrderRepository', () => {
         regionCode: 'REG-2',
       },
       rateCardId: 'rate-1',
+      routeId: 'route-1',
       priceCents: 1000,
       expectedDeliveryAt: new Date('2026-01-05T00:00:00Z'),
       paymentType: PaymentType.PREPAID_STRIPE,
@@ -101,6 +102,19 @@ describe('OrderRepository', () => {
     // which literal the CREATED order gets (avoids asserting on a
     // duplicated magic string).
     expect(ShipmentOrderStatus.CREATED).toBe('Created');
+  });
+
+  it('writes route_id onto every parcel at creation time (BR-02 misroute detection depends on this)', async () => {
+    await repository.createOrder(baseNewOrderData());
+
+    const calls = save.mock.calls as unknown[][];
+    const parcelCall = calls.find((call) => call[0] === Parcel);
+    expect(parcelCall).toBeDefined();
+    const parcelRows = (parcelCall as unknown[])[1] as Record<
+      string,
+      unknown
+    >[];
+    expect(parcelRows[0]).toMatchObject({ routeId: 'route-1' });
   });
 
   it('writes an Unpaid PAYMENT row in the same transaction as the order/parcels', async () => {
@@ -181,6 +195,34 @@ describe('OrderRepository', () => {
 
     expect(update).toHaveBeenCalledWith('parcel-1', {
       state: ParcelState.IN_HUB,
+    });
+  });
+
+  it('updateParcelWeightAndRoute updates only the given columns', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    getRepository.mockReturnValue({ update });
+
+    await repository.updateParcelWeightAndRoute('parcel-1', {
+      actualWeightGrams: 520,
+      routeId: 'route-2',
+    });
+
+    expect(update).toHaveBeenCalledWith('parcel-1', {
+      actualWeightGrams: 520,
+      routeId: 'route-2',
+    });
+  });
+
+  it('updateParcelWeightAndRoute omits fields that were not provided', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    getRepository.mockReturnValue({ update });
+
+    await repository.updateParcelWeightAndRoute('parcel-1', {
+      actualWeightGrams: 520,
+    });
+
+    expect(update).toHaveBeenCalledWith('parcel-1', {
+      actualWeightGrams: 520,
     });
   });
 

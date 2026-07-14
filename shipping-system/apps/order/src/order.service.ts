@@ -38,6 +38,7 @@ export class OrderService {
     // its ETA is the latest (worst-case) SLA among them.
     let totalPriceCents = 0;
     let rateCardId: string | undefined;
+    let routeId: string | undefined;
     let expectedDeliveryAt: Date | undefined;
 
     for (const parcel of dto.parcels) {
@@ -53,6 +54,7 @@ export class OrderService {
       }
       totalPriceCents += quote.priceCents;
       rateCardId = quote.rateCardId;
+      routeId = quote.routeId;
       if (
         !expectedDeliveryAt ||
         quote.slaExpectedDelivery > expectedDeliveryAt
@@ -77,6 +79,7 @@ export class OrderService {
         regionCode: dto.recipient.region_code,
       },
       rateCardId: rateCardId as string,
+      routeId: routeId as string,
       priceCents: totalPriceCents,
       expectedDeliveryAt: expectedDeliveryAt as Date,
       paymentType: dto.payment_type,

@@ -13,6 +13,7 @@ import { IPricingPort } from './ports/pricing.port';
 import { RateCardPricingAdapter } from './adapters/rate-card-pricing.adapter';
 import { RateCard } from './entities/rate-card.entity';
 import { Zone } from './entities/zone.entity';
+import { Route } from './entities/route.entity';
 import { Outbox } from './entities/outbox.entity';
 import { Payment } from './entities/payment.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -44,7 +45,7 @@ import { StatusProjectionConsumer } from './status-projection.consumer';
   imports: [
     TypeOrmModule.forFeature([Outbox, Payment, PaymentTransaction]),
     TypeOrmModule.forFeature([RateCard], 'pricing'),
-    TypeOrmModule.forFeature([Zone], 'network'),
+    TypeOrmModule.forFeature([Zone, Route], 'network'),
     ClientsModule.register([
       {
         name: NATS_CLIENT,
