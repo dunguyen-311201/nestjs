@@ -15,6 +15,7 @@ export const NATS_SUBJECTS = {
   PARCEL_MISROUTED: 'parcel.misrouted',
   PARCEL_OUT_FOR_DELIVERY: 'parcel.out_for_delivery',
   PARCEL_DELIVERED: 'parcel.delivered',
+  PARCEL_DELIVERY_FAILED: 'parcel.delivery_failed',
   PARCEL_RTS: 'parcel.rts',
   PARCEL_LOST_SUSPECTED: 'parcel.lost_suspected',
 } as const;

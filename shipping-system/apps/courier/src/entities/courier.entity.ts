@@ -1,0 +1,28 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { CourierRole } from './courier-role.enum';
+
+@Entity({ name: 'courier' })
+export class Courier {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index('idx_courier_zone_id')
+  @Column({ name: 'zone_id', type: 'uuid' })
+  zoneId: string;
+
+  @Column({ type: 'varchar', length: 50 })
+  role: CourierRole;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}

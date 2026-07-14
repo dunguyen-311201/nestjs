@@ -170,11 +170,16 @@ CREATE TABLE IF NOT EXISTS shipping_courier_db.PROOF_OF_DELIVERY (
 CREATE TABLE IF NOT EXISTS shipping_courier_db.DELIVERY_ATTEMPT (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     parcel_id UUID NOT NULL, -- Logical FK to PARCEL.id
+    -- BR-04: the attempt counter resets to zero after a 3rd-failure RTS, so
+    -- the reverse leg reuses attempt_number 1-3 for the same parcel_id;
+    -- direction (mirrors PARCEL.direction) scopes uq_parcel_attempt so the
+    -- two legs' numbering never collides.
+    direction VARCHAR(50) NOT NULL DEFAULT 'Forward' CHECK (direction IN ('Forward', 'Reverse_RTS')),
     attempt_number INT NOT NULL CHECK (attempt_number BETWEEN 1 AND 3),
     outcome VARCHAR(50) NOT NULL CHECK (outcome IN ('Failed', 'Succeeded')),
     failure_reason VARCHAR(500),
-    created_at TIMESTAMP NOT NULL,
-    CONSTRAINT uq_parcel_attempt UNIQUE (parcel_id, attempt_number)
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_parcel_attempt UNIQUE (parcel_id, direction, attempt_number)
 );
 
 -- -----------------------------------------------------

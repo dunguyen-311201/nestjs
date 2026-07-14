@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.3 | 2026-07-14 | Du Nguyen | Task 6.1 implementation: added `DELIVERY_ATTEMPT.direction` — the original schema's `UNIQUE(parcel_id, attempt_number)` couldn't support BR-04's documented "counter resets to zero for the reverse leg" without colliding with the forward leg's own rows 1-3 for the same `parcel_id`. `UNIQUE` is now `(parcel_id, direction, attempt_number)`. Also added the missing `DEFAULT NOW()` on `DELIVERY_ATTEMPT.created_at` (every other table's `created_at` has it; this one didn't, caught by live verification when `TypeORM`'s `@CreateDateColumn`-backed insert relied on the DB default and got a `NOT NULL` violation instead). |
 | v1.2 | 2026-07-08 | Du Nguyen | Same root cause as v1.1, applied to API responses: `POST /pickup` and `POST /deliver` claimed to synchronously return `tracking_event_id` (and `/deliver` also `parcel_state`), but neither `TRACKING_EVENT` nor `PARCEL.state` is written by this service — both are updated asynchronously by other services after consuming the published NATS event. Responses now return only what this service knows synchronously (`event`, `event_id`, `published_at`, and its own local rows), matching the pattern already used in `linehaul-service.md`'s `/depart`/`/arrive`. |
 | v1.1 | 2026-07-08 | Du Nguyen | Removed `PROOF_OF_DELIVERY.tracking_event_id` — it could never be correctly written: this service writes the row synchronously, before Tracking (a different, async, cross-schema service) has appended the corresponding `DELIVERED` `TRACKING_EVENT` row. `parcel_id` is the sole, correct join key. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
@@ -129,4 +130,4 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | `COURIER` | `idx_courier_zone_id` | PK `id` |
 | `PROOF_OF_DELIVERY` | `idx_proof_of_delivery_parcel_id` | PK `id`. No `tracking_event_id` column: this row is written synchronously by this service, before Tracking (async, cross-schema) has appended the `DELIVERED` row, so there is no ID to reference at write time — see `docs/01-ERD.md` PARCEL↔PROOF_OF_DELIVERY note. |
-| `DELIVERY_ATTEMPT` | `idx_delivery_attempt_parcel_id` | PK `id` · UNIQUE `(parcel_id, attempt_number)` · CHECK `attempt_number BETWEEN 1 AND 3` |
+| `DELIVERY_ATTEMPT` | `idx_delivery_attempt_parcel_id` | PK `id` · UNIQUE `(parcel_id, direction, attempt_number)` · CHECK `attempt_number BETWEEN 1 AND 3` · `direction` (`Forward`\|`Reverse_RTS`, mirrors `PARCEL.direction`) scopes the counter so a reverse leg's reused 1-3 numbering never collides with the forward leg's rows (BR-04's "resets to zero") |

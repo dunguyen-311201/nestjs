@@ -380,7 +380,7 @@ with open("db/seed.sql", "w") as f:
     # 15. Insert Delivery Attempts
     f.write("-- Delivery Attempts\n")
     for row in delivery_attempts:
-        f.write(f"INSERT INTO shipping_courier_db.DELIVERY_ATTEMPT (id, parcel_id, attempt_number, outcome, failure_reason, created_at) VALUES ('{row[0]}', '{row[1]}', {row[2]}, 'Failed', '{row[3]}', '{row[4].isoformat()}');\n")
+        f.write(f"INSERT INTO shipping_courier_db.DELIVERY_ATTEMPT (id, parcel_id, direction, attempt_number, outcome, failure_reason, created_at) VALUES ('{row[0]}', '{row[1]}', 'Forward', {row[2]}, 'Failed', '{row[3]}', '{row[4].isoformat()}');\n")
     
     f.write("\nCOMMIT;\n")
 

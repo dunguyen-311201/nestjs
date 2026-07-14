@@ -11,5 +11,6 @@ export * from './events/trip-arrived.event';
 export * from './events/parcel-misrouted.event';
 export * from './events/parcel-out-for-delivery.event';
 export * from './events/parcel-delivered.event';
+export * from './events/parcel-delivery-failed.event';
 export * from './events/parcel-rts.event';
 export * from './events/parcel-lost-suspected.event';

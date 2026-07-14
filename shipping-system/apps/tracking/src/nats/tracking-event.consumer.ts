@@ -47,6 +47,11 @@ export class TrackingEventConsumer {
     return this.handle(NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY, payload);
   }
 
+  @EventPattern(NATS_SUBJECTS.PARCEL_DELIVERY_FAILED)
+  onDeliveryFailed(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_DELIVERY_FAILED, payload);
+  }
+
   @EventPattern(NATS_SUBJECTS.PARCEL_DELIVERED)
   onDelivered(payload: ParcelLifecyclePayload): Promise<void> {
     return this.handle(NATS_SUBJECTS.PARCEL_DELIVERED, payload);

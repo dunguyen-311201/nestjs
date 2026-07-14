@@ -71,7 +71,8 @@ erDiagram
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of the attempt. |
 | `parcel_id` | uuid FK | References the PARCEL being delivered. |
-| `attempt_number` | int | Delivery attempt number (1, 2, or 3). Max of 3 failed attempts triggers automatic RTS (BR-04). |
+| `direction` | enum | `Forward` or `Reverse_RTS`, mirrors `PARCEL.direction`. BR-04 resets the attempt counter to zero after a 3rd-failure RTS, so the reverse leg reuses `attempt_number` 1-3 for the same `parcel_id`; `UNIQUE(parcel_id, direction, attempt_number)` keeps the two legs' numbering from colliding. |
+| `attempt_number` | int | Delivery attempt number (1, 2, or 3) within the current `direction`. Max of 3 failed attempts triggers automatic RTS (BR-04). |
 | `outcome` | enum | `Failed` or `Succeeded`. |
 | `failure_reason` | string, nullable | Reason for delivery failure (e.g. customer absent, rejected); null when `outcome = Succeeded`. |
 | `created_at` | timestamp | Timestamp when the attempt was made. |
