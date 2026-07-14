@@ -46,6 +46,29 @@
   collision with the forward leg), and — running `courier` + `tracking`
   together — a real `parcel.delivery_failed` publish landing as an actual
   `TRACKING_EVENT` row.
+- **Same-day follow-up: Courier gained a Transactional Outbox.** A
+  supporter reviewer's question about retry/publish-failure/dedup
+  surfaced a real gap in the original "no outbox" design: a publish
+  failure permanently lost the event, and an `Idempotency-Key` retry
+  after such a failure could re-run the DB write (`PROOF_OF_DELIVERY` has
+  no uniqueness constraint, so a retry could silently duplicate it).
+  Redis-as-outbox was considered and rejected (not atomic with the
+  Postgres transaction; `CLAUDE.md` restricts Redis to read-cache-only).
+  Added `shipping_courier_db.OUTBOX` (same shape as Order Service's,
+  task 5.6) + `OutboxPollerService`; `CourierRepository` now writes each
+  business row and its `OUTBOX` row atomically, `CourierService` no
+  longer calls `IEventPublisher` directly. **API response shape changed,
+  confirmed with user first**: `pickup`/`deliver` no longer return
+  `event`/`event_id`/`published_at` (implied a synchronous publish that
+  no longer happens) — now `{ status: "recorded", ... }`.
+  `docs/lld/courier-service.md` bumped to v1.4; `docs/02-HLD.md`'s
+  Accepted MVP risk note narrowed to Hub/Sortation only. 189/189 total
+  passing; `pnpm build`/`pnpm lint` clean. **Live-verified end-to-end**:
+  a real `pickup` wrote a `PENDING` `OUTBOX` row the poller flipped to
+  `PUBLISHED` within ~500ms and Tracking appended from; a fresh 3-strike
+  RTS sequence produced 4 real `OUTBOX` rows (3 `parcel.delivery_failed`
+  + 1 `parcel.rts`), all polled and landing as real `TRACKING_EVENT`
+  rows; the 4th attempt still correctly `422 BR-04`'d.
 - **Ad-hoc fix since 5.8, not a numbered task**: closed a real
   customer-dedup gap found while prepping a supporter demo — every
   `POST /orders` silently created brand-new `CUSTOMER` rows for sender/
