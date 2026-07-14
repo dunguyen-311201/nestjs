@@ -8,11 +8,26 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.3`
-  reviewed (no code changes needed). Next: `6.4` Line-haul. See
-  `docs/03-phases.md`.
-- **Next task:** `6.4` Line-haul: trip creation, depart/arrive hooks,
-  deconsolidation. Run `/begin-task 6.4` to start it.
+- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.4`
+  complete. Next: `6.5` Dispatcher. See `docs/03-phases.md`.
+- **Next task:** `6.5` Dispatcher Service: driver/truck-to-trip +
+  courier-to-leg assignment. Run `/begin-task 6.5` to start it.
+- **Task `6.4` (Line-haul: trip creation, depart/arrive hooks) complete**:
+  new app `apps/linehaul`. **Real gap fixed, confirmed with user first**:
+  `LINEHAULTRIP` had no lifecycle column — added `status`
+  (`Created`\|`Departed`\|`Arrived`) so the LLD's `/depart`/`/arrive` 409
+  guard has something to check. **Skipped "deconsolidation"** (phase-doc
+  task title lists it, `CLAUDE.md`'s SCOPE cuts it — treated as stale).
+  Built with a Transactional Outbox from day 1; **shares
+  `shipping_network_db` with Hub Service (task 6.2) by the original
+  architecture** — Line-haul's `Outbox` entity maps onto the same
+  physical table Hub already migrated, each app runs its own poller
+  against it (harmless, absorbed by existing two-layer idempotency).
+  247/247 total passing; `pnpm build`/`pnpm lint`/`pnpm test` all green.
+  **Live-verified end-to-end**: a real trip's full lifecycle
+  (`Created → Departed → Arrived`) wrote both `OUTBOX` rows into the
+  shared table, both polled to `PUBLISHED`; all 409/404/400 guards and
+  idempotency replay confirmed via real HTTP + `psql`.
 - **Task `6.3` (PII field-level encryption) — confirmed already satisfied,
   no code changes**: `libs/crypto` (Phase 4) + `CUSTOMER`'s full
   encryption (task 5.1) already meet this task's requirement for every

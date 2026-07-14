@@ -6,6 +6,25 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-14
 
 ### Done
+- Completed task **6.4** (Line-haul: trip creation, depart/arrive hooks, `docs/03-phases.md`), touching **UC-09**, **UC-11**:
+  - New app `apps/linehaul`: `LinehaulService.createTrip`/`depart`/`arrive` (`POST /trips`, `POST /trips/{id}/depart`, `POST /trips/{id}/arrive`).
+  - **Real gap found and fixed, confirmed with user first**: `LINEHAULTRIP` had no lifecycle column at all — the LLD's `409 "already in a terminal state"` guard on `/depart`/`/arrive` had nothing to check against. Added `status` (`Created`\|`Departed`\|`Arrived`, default `Created`) to `db/init-db.sql`/`docs/01-ERD.md`, applied live via `ALTER TABLE` (existing table, `CREATE TABLE IF NOT EXISTS` doesn't retrofit columns); `generate_seed.py` sets `Arrived` for the 50 seeded trips (consistent with their already-completed shipment history).
+  - **Not building "deconsolidation"**, confirmed with user: `docs/03-phases.md`'s task title lists it, but `CLAUDE.md`'s SCOPE section explicitly cuts consolidation/deconsolidation logic — treated as a stale phrase, not a requirement.
+  - **Built with a Transactional Outbox from day 1**, consistent with task 6.2's established pattern: **Line-haul and Hub share the `shipping_network_db` schema by the original architecture** (ADR-003 + `docs/02-HLD.md`'s data-ownership table), so Line-haul's `Outbox` entity maps onto the *same physical table* Hub's task 6.2 migration already created — no new `CREATE TABLE`. Each app runs its own `OutboxPollerService` instance against the shared table; either poller may pick up either service's row, which is harmless given the project's existing two-layer idempotency convention (`Nats-Msg-Id` broker dedup + consumer-side `event_id` dedup). `HUB` is also read directly via Line-haul's own default connection (same schema, no separate named connection needed — unlike the cross-schema reads into `shipping_order_db` elsewhere).
+  - `LinehaulService.createTrip`: `400` if `origin_hub_id === dest_hub_id`, `404` unknown origin/dest hub, else inserts `LINEHAULTRIP` (`status: Created`), response `{ trip_id }` (no event — trip creation isn't published per the LLD).
+  - `depart`/`arrive`: `404` unknown trip, `409` (plain `ConflictException`, no `BR-XX` tag — matches the LLD's untagged error, same class as Payment's "already Confirmed" 409) if the trip isn't in the required prior status, else `status` transition + outbox row written atomically, response `{ status: "recorded" }`.
+  - Idempotency-Key required on all 3 endpoints per the LLD.
+  - TDD throughout, all written and confirmed red before implementation: `LinehaulRepository`/`OutboxRepository`/`OutboxPollerService` specs, `LinehaulService` specs (create happy/404×2/400/idempotent-replay, depart happy/404/409/idempotent-replay, arrive happy/404×2-variant-409/idempotent-replay), `LinehaulController`. 247/247 total passing; `pnpm build`/`pnpm lint` clean.
+  - **Live-verified end-to-end** against the real dockerized stack: a real `POST /trips` created a trip and correctly 400/404'd on same-hub/unknown-hub; a full real lifecycle (`Created → Departed → Arrived`) wrote both `OUTBOX` rows into the *shared* `shipping_network_db.outbox` table, both polled to `PUBLISHED`; all three 409 cases confirmed (`/arrive` before `/depart`, `/depart` twice, — `LINEHAULTRIP.status` verified via `psql` at each step); idempotency replay confirmed (`/depart` with the same key after the trip had already advanced past `Created` still returned the cached response instead of re-running the now-stale guard); `404` confirmed on an unknown trip id.
+
+### Decisions / open questions (6.4)
+- Confirmed with the user: add `LINEHAULTRIP.status` (real schema gap, not deferred) before implementing the guard logic.
+- Confirmed with the user: skip "deconsolidation" — out of scope per `CLAUDE.md`, despite the phase-doc task title.
+- Known gaps, unchanged: `docs/lld/order-service.md`'s "abandoned prepaid payment" open item; UC-15's unassigned passive lost-parcel SLA sweep; `Damaged`'s undocumented trigger; `DRIVER.name_enc` not actually encrypted (deferred to task 6.5, Dispatcher, which is expected to be the one that reads/writes `DRIVER`).
+
+### Next
+- Task **6.4** complete. Next: task **6.5** Dispatcher Service (driver/truck-to-trip + courier-to-leg assignment), via `/begin-task 6.5`.
+
 - Reviewed task **6.3** (PII field-level encryption, shared crypto helper, `docs/03-phases.md`) — **confirmed already satisfied, no code changes needed**, per user's call after presenting the audit findings:
   - `libs/crypto`'s AES-256-GCM `encrypt`/`decrypt`/`hashForLookup` (built Phase 4, TDD'd) is correct: random IV per call, GCM auth-tag tamper detection, deterministic HMAC for equality lookups.
   - `CUSTOMER.name_enc`/`phone_enc`/`address_enc`/`phone_hash` (Order Service) is the only PII-bearing column in any currently-built service, and it's been fully encrypted since task 5.1 (+ the phone_hash dedup fix).
