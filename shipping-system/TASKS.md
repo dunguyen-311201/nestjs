@@ -3,6 +3,32 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-14
+
+### Done
+- Completed task **6.1** (Courier Service: pickup/delivery legs + scan events, `docs/03-phases.md`), touching **UC-05**, **UC-06**, **UC-13**, **BR-04**, **BR-08**:
+  - New app `apps/courier`: entities `Courier`, `ProofOfDelivery`, `DeliveryAttempt` (owned tables, already in `db/init-db.sql`, no migration needed beyond the schema fix below) + a read-only cross-schema `'order'` connection (`ShipmentOrder`/`Parcel`, pattern copied from `apps/tracking`) for the BR-08 guard and current-leg `direction`.
+  - **Real schema gap found and fixed, confirmed with user before implementing**: `DELIVERY_ATTEMPT.UNIQUE(parcel_id, attempt_number)` couldn't support BR-04's documented "counter resets to zero for the reverse leg" — a reverse leg reusing attempt_number 1-3 for the same parcel_id would collide with the forward leg's own rows. Added `DELIVERY_ATTEMPT.direction` (`Forward`|`Reverse_RTS`, mirrors `PARCEL.direction`), `UNIQUE` is now `(parcel_id, direction, attempt_number)` (`db/init-db.sql`, `docs/01-ERD.md`, `docs/lld/courier-service.md` v1.3, `generate_seed.py`/`db/seed.sql` regenerated).
+  - `IOrderLookupPort`/`OrderLookupAdapter`, `ICourierRepository`/`CourierRepository`, `IEventPublisher`/`NatsEventPublisher`, `IIdempotencyStore`/`RedisIdempotencyAdapter` — Ports & Adapters per `docs/lld/00-conventions.md`, same shape as Order/Tracking's existing adapters.
+  - `CourierService.pickup`: 404 unknown parcel, `422 BR-08` if parent order not `Confirmed`+ (a multi-parcel order's status can already be `Active` by the time a sibling parcel is picked up — guard accepts `Confirmed`/`Active`/`Complete`/`Partially_Delivered`), else publishes `parcel.picked_up`.
+  - `CourierService.deliver`: `DELIVERED` → writes `PROOF_OF_DELIVERY`, publishes `parcel.delivered`. `FAILED` → writes `DELIVERY_ATTEMPT` (direction-scoped attempt_number 1-3), publishes `parcel.delivery_failed`; on the 3rd, additionally publishes `parcel.rts` and the reverse leg's counter starts fresh at 1 (via the `direction` scoping above). `422 BR-04` on a 4th attempt after RTS already triggered for the current leg.
+  - **Closed a standing gap flagged since task 5.5**: added `parcel.delivery_failed` to `libs/contracts` (`ParcelDeliveryFailedEventV1`, `NATS_SUBJECTS.PARCEL_DELIVERY_FAILED`) — previously had no NATS contract at all (`docs/lld/order-service.md`/`tracking-service.md`/`courier-service.md` all noted it as blocked on this task).
+  - Idempotency-Key required on both endpoints (400 if missing, Redis-cached replay), same convention as Order/Payment.
+  - TDD throughout, all written and confirmed red before implementation: `OrderLookupAdapter` (404 + happy path), `CourierRepository` (attempt-number direction-scoping, RTS-trigger detection, PROOF_OF_DELIVERY insert), `CourierService` (BR-08 happy+422, BR-04 happy+422, 1st/2nd vs 3rd failure event publishing, idempotency replay for both endpoints), `CourierController` (thin delegation). 20 new tests, 182/182 total passing; `pnpm build`/`pnpm lint` clean.
+  - **Extended scope, confirmed with user**: wired `apps/tracking`'s `TrackingEventConsumer`/`map-subject-to-tracking-event.ts` to consume the new `parcel.delivery_failed` subject (`DELIVERY_FAILED` → `TRACKING_EVENT` row) — closes the loop end-to-end rather than leaving the new contract unconsumed. 1 new test, 183/183 total passing.
+  - **Real bug caught only by live verification** (mocked unit tests stayed green throughout): `DELIVERY_ATTEMPT.created_at` had no `DEFAULT NOW()` (every other table's `created_at` does), so TypeORM's `@CreateDateColumn`-backed `.insert()` — which relies on the DB default rather than setting the value client-side — hit a `NOT NULL` violation on the very first real failed-delivery call. Fixed in `db/init-db.sql` (+ applied live via `ALTER TABLE ... SET DEFAULT NOW()`); `PROOF_OF_DELIVERY`'s insert was unaffected since its `created_at` already had the default.
+  - **Live-verified end-to-end** against the real dockerized stack (reseeded from scratch after the schema change): `pickup` — 201 + idempotent replay (same `event_id` on retry) confirmed, unknown parcel 404s, missing `Idempotency-Key` 400s, `422 BR-08` confirmed on a real `Created`-status order. `deliver` — success path wrote a real `PROOF_OF_DELIVERY` row (confirmed via `psql`); 3 real failed attempts against a fresh parcel wrote 3 real `DELIVERY_ATTEMPT` rows and the 3rd correctly returned a `parcel.rts` block; a 4th attempt correctly `422 BR-04`'d; flipping the same parcel's `direction` to `Reverse_RTS` and retrying confirmed the reverse leg's counter independently starts at 1 (no `UNIQUE` collision with the forward leg's rows). Started `tracking` alongside `courier` and confirmed, via a real `psql` query, that a live `parcel.delivery_failed` publish produced an actual `DELIVERY_FAILED` `TRACKING_EVENT` row for the first time in this codebase.
+
+### Decisions / open questions
+- Confirmed with the user: `DELIVERY_ATTEMPT.direction` schema addition (real gap, not a deferred item) before implementing the repository layer.
+- Confirmed with the user: kept "no outbox" for Courier's NATS publishes (per `docs/lld/courier-service.md`'s pre-existing accepted-MVP-risk note) after discussing the production-grade alternative (Transactional Outbox + CDC) — deferred as a possible future task, not bundled into 6.1's scope.
+- Confirmed with the user: extended scope to wire Tracking's consumption of the new `parcel.delivery_failed` subject, rather than leaving it as a follow-up.
+- The `{id}` in `POST /couriers/legs/{id}/...` is treated as the `parcel_id` itself — no `LEG`/assignment entity exists anywhere in the ERD (Dispatcher's courier-to-leg assignment is task 6.5, unbuilt), so the LLD's separate `parcel_id` body field was dropped as redundant. Also added `courier_id` to the `/deliver` request (the LLD's field table omitted it, but both `ParcelDeliveredEventV1`/`ParcelDeliveryFailedEventV1` require it and there's no persisted courier-to-parcel assignment to source it from otherwise).
+- Known gaps, unchanged: `docs/lld/order-service.md`'s "abandoned prepaid payment" open item; UC-15's unassigned passive lost-parcel SLA sweep; `Damaged`'s undocumented trigger.
+
+### Next
+- Task **6.1** complete. Next: task **6.2** Hub/Sortation Service (`HUB_RECEIVE`, parcel inbound/outbound scan at hub), via `/begin-task 6.2`.
+
 ## 2026-07-13
 
 ### Done

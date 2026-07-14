@@ -8,12 +8,44 @@
 
 ## Resume point
 
-- **Current phase:** Phase 5 — Core Backend (6.0d), **complete**. Next up
-  is Phase 6 — Operational Services (3.0d). See `docs/03-phases.md`.
-- **Next task:** `6.1` Courier Service: pickup/delivery legs + scan
-  events. Run `/begin-task 6.1` to start it.
+- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.1`
+  complete. Next: `6.2` Hub/Sortation. See `docs/03-phases.md`.
+- **Next task:** `6.2` Hub/Sortation: `HUB_RECEIVE`, parcel inbound/outbound
+  scan at hub. Run `/begin-task 6.2` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
+- **State:** Task `6.1` (Courier Service: pickup/delivery legs + scan
+  events, UC-05/UC-06/UC-13, BR-04/BR-08) complete. New app
+  `apps/courier` — `CourierService.pickup`/`deliver`, Ports & Adapters
+  (`IOrderLookupPort`, `ICourierRepository`, `IEventPublisher`,
+  `IIdempotencyStore`), Idempotency-Key on both endpoints. **Real schema
+  gap fixed, confirmed with user first**: `DELIVERY_ATTEMPT` gained a
+  `direction` column (`Forward`|`Reverse_RTS`) and its `UNIQUE` constraint
+  became `(parcel_id, direction, attempt_number)` — BR-04's "counter
+  resets to zero for the reverse leg" would otherwise collide with the
+  forward leg's own rows 1-3 under the old `UNIQUE(parcel_id,
+  attempt_number)`. **Closed a gap flagged since task 5.5**: added
+  `parcel.delivery_failed` to `libs/contracts`
+  (`ParcelDeliveryFailedEventV1`) — no NATS contract existed for it
+  before. **Extended scope, confirmed with user**: wired
+  `apps/tracking`'s consumer to the new subject too, so a real
+  `DELIVERY_FAILED` `TRACKING_EVENT` row gets appended — this is the
+  first time that event type has ever been written in this codebase.
+  20 new Courier tests + 1 new Tracking test, 183/183 total passing;
+  `pnpm build`/`pnpm lint`/`pnpm test` all green. **Real bug caught only
+  by live verification**: `DELIVERY_ATTEMPT.created_at` was missing
+  `DEFAULT NOW()` (every other table's `created_at` has it) — TypeORM's
+  `.insert()` relies on the DB default for `@CreateDateColumn`, so the
+  very first real failed-delivery call hit a `NOT NULL` violation
+  invisible to mocked tests. Fixed in `db/init-db.sql`. **Live-verified
+  end-to-end**: real `pickup`/`deliver` calls against the dockerized
+  stack — BR-08 422 on an unconfirmed order, a full 3-strike RTS sequence
+  with real `DELIVERY_ATTEMPT` rows and a `parcel.rts` publish on the
+  3rd, `422 BR-04` on a 4th attempt, the reverse leg's attempt counter
+  independently restarting at 1 (confirmed via `psql`, no `UNIQUE`
+  collision with the forward leg), and — running `courier` + `tracking`
+  together — a real `parcel.delivery_failed` publish landing as an actual
+  `TRACKING_EVENT` row.
 - **Ad-hoc fix since 5.8, not a numbered task**: closed a real
   customer-dedup gap found while prepping a supporter demo — every
   `POST /orders` silently created brand-new `CUSTOMER` rows for sender/
@@ -186,12 +218,13 @@
   transport, but the `shipment_orders.status.<id>` per-order trigger now
   runs over real JetStream (task **5.7**, done) per ADR-001 — a durable
   stream + explicit-ack ordered consumer, not just debounce-only ordering.
-  Courier Service's own side of
-  BR-04 (counting 3 failed `DELIVERY_FAILED` attempts and publishing
-  `parcel.rts`) is task **6.1**, not yet built — so `parcel.rts`/
-  `parcel.delivered`/etc. still have no real producer; both consumers can
-  only be exercised by hand-publishing test messages (see
-  `scripts/publish-event.js`) until Phase 6 lands. `pnpm build` now
+  Courier Service (task **6.1**, done) now owns BR-04's own side (counting
+  3 failed `DELIVERY_FAILED` attempts and publishing `parcel.rts`) — it is
+  the first real producer for `parcel.picked_up`/`parcel.delivered`/
+  `parcel.delivery_failed`/`parcel.rts`; Hub/Line-haul/Dispatcher (tasks
+  6.2/6.4/6.5) remain the still-unbuilt producers for the rest of the
+  `parcel.*` events, exercised only by hand-publishing test messages (see
+  `scripts/publish-event.js`) until they land. `pnpm build` now
   actually validates every app/lib in the monorepo (`nest build --all`),
   not just `api-gateway` — worth double-checking this stays true if
   `nest-cli.json`'s project list ever changes. Known open items carried
@@ -199,8 +232,9 @@
   payment" gap, `Damaged`'s complete lack of a documented trigger event,
   UC-15's passive lost-parcel SLA sweep job (unassigned to any task), the
   HLD listing `trip.departed`/`trip.arrived` as Tracking inputs despite
-  neither carrying a `parcel_id` (no task assigned), and `DELIVERY_FAILED`'s
-  missing NATS contract (blocked on Courier Service, task 6.1).
+  neither carrying a `parcel_id` (no task assigned). `DELIVERY_FAILED`'s
+  NATS contract (previously blocked on task 6.1) now exists and is
+  consumed by Tracking.
 
 ## Log
 
