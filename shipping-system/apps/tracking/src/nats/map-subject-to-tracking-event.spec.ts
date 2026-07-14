@@ -95,6 +95,16 @@ describe('mapSubjectToTrackingEvent', () => {
     expect(result?.eventType).toBe(TrackingEventType.RTS);
   });
 
+  it('maps parcel.delivery_failed to a DELIVERY_FAILED row', () => {
+    const result = mapSubjectToTrackingEvent(
+      NATS_SUBJECTS.PARCEL_DELIVERY_FAILED,
+      { event_id: 'evt-11', parcel_id: 'parcel-1', courier_id: 'courier-1' },
+    );
+
+    expect(result?.eventType).toBe(TrackingEventType.DELIVERY_FAILED);
+    expect(result?.courierId).toBe('courier-1');
+  });
+
   it('returns null for an unrecognized subject (e.g. trip.departed)', () => {
     const result = mapSubjectToTrackingEvent(NATS_SUBJECTS.TRIP_DEPARTED, {
       event_id: 'evt-9',

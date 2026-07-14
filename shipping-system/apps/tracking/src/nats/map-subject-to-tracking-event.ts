@@ -15,8 +15,7 @@ export interface ParcelLifecyclePayload {
 // per event_type the DB's CHECK constraint accepts. trip.departed/
 // trip.arrived are deliberately excluded: they carry no parcel_id (they're
 // trip-level, not parcel-level events), so there's no TRACKING_EVENT row to
-// write for them. DELIVERY_FAILED has no NATS contract yet (Courier isn't
-// built - Phase 6) so it's also absent here.
+// write for them.
 const SUBJECT_TO_EVENT_TYPE: Partial<Record<string, TrackingEventType>> = {
   [NATS_SUBJECTS.PARCEL_PICKED_UP]: TrackingEventType.PICKUP,
   [NATS_SUBJECTS.PARCEL_HUB_RECEIVED]: TrackingEventType.HUB_RECEIVE,
@@ -24,6 +23,7 @@ const SUBJECT_TO_EVENT_TYPE: Partial<Record<string, TrackingEventType>> = {
     TrackingEventType.DEPARTED_LINEHAUL,
   [NATS_SUBJECTS.PARCEL_ARRIVED_AT_HUB]: TrackingEventType.ARRIVED_AT_HUB,
   [NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY]: TrackingEventType.OUT_FOR_DELIVERY,
+  [NATS_SUBJECTS.PARCEL_DELIVERY_FAILED]: TrackingEventType.DELIVERY_FAILED,
   [NATS_SUBJECTS.PARCEL_DELIVERED]: TrackingEventType.DELIVERED,
   [NATS_SUBJECTS.PARCEL_MISROUTED]: TrackingEventType.MISROUTED,
   [NATS_SUBJECTS.PARCEL_RTS]: TrackingEventType.RTS,
