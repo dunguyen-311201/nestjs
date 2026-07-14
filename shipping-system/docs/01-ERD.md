@@ -108,7 +108,7 @@ erDiagram
 | `created_at` | timestamp | When the row was written (same transaction as the triggering write). |
 | `published_at` | timestamp, nullable | When the poller successfully published it. |
 
-Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and outbox mechanics) and, as of task 6.1, an identical `shipping_courier_db.OUTBOX` table for Courier's pickup/delivery scan events — no relationship to other entities; not a general-purpose event log. Each service's Outbox table is local to its own schema (ADR-003), never shared.
+Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and outbox mechanics), and identical `OUTBOX` tables in `shipping_courier_db` (task 6.1) and `shipping_network_db` (task 6.2, Hub Service) — no relationship to other entities; not a general-purpose event log. Each service's Outbox table is local to its own schema (ADR-003), never shared.
 
 ### LINEHAULTRIP
 | Field | Type | Description |

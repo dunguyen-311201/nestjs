@@ -32,6 +32,20 @@ CREATE TABLE IF NOT EXISTS shipping_network_db.ROUTE (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Transactional Outbox for Hub's inbound-scan events (task 6.2, built in
+-- from the start per the lesson learned retrofitting one onto Courier in
+-- task 6.1 - same shape/semantics as shipping_order_db.OUTBOX /
+-- shipping_courier_db.OUTBOX).
+CREATE TABLE IF NOT EXISTS shipping_network_db.OUTBOX (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL UNIQUE,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PUBLISHED')),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS shipping_network_db.DRIVER (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name_enc VARCHAR(500) NOT NULL, -- PII Encrypted
@@ -216,6 +230,8 @@ CREATE TABLE IF NOT EXISTS shipping_tracking_db.TRACKING_EVENT (
 -- 6. Indexes for Physical & Logical Foreign Keys
 -- -----------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_hub_zone_id ON shipping_network_db.HUB(zone_id);
+
+CREATE INDEX IF NOT EXISTS idx_hub_outbox_status_created_at ON shipping_network_db.OUTBOX(status, created_at) WHERE status = 'PENDING';
 
 CREATE INDEX IF NOT EXISTS idx_linehaultrip_origin_hub_id ON shipping_network_db.LINEHAULTRIP(origin_hub_id);
 CREATE INDEX IF NOT EXISTS idx_linehaultrip_dest_hub_id ON shipping_network_db.LINEHAULTRIP(dest_hub_id);
