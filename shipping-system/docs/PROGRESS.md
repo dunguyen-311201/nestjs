@@ -8,12 +8,40 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.1`
-  complete. Next: `6.2` Hub/Sortation. See `docs/03-phases.md`.
-- **Next task:** `6.2` Hub/Sortation: `HUB_RECEIVE`, parcel inbound/outbound
-  scan at hub. Run `/begin-task 6.2` to start it.
+- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.2`
+  complete. Next: `6.3` PII field-level encryption review. See
+  `docs/03-phases.md`.
+- **Next task:** `6.3` PII field-level encryption (shared crypto helper —
+  largely already in place from earlier phases; confirm scope at start).
+  Run `/begin-task 6.3` to start it.
 - **Branch:** `feat/shipping-system` (tracks `github/feat/shipping-system`;
   see `CLAUDE.md` § Git Remotes for the dual-remote setup).
+- **State:** Task `6.2` (Hub/Sortation: `HUB_RECEIVE`, parcel inbound/
+  outbound scan at hub, UC-07/UC-12, BR-02/BR-06/BR-08) complete. New app
+  `apps/hub` — `HubService.receive`, built with a Transactional Outbox
+  from day 1 (confirmed with user, avoiding a repeat of Courier's
+  synchronous-then-retrofit path from task 6.1). **Real gap found and
+  fixed, confirmed with user first**: `PARCEL.route_id` was never
+  populated at real order creation (only seed data had it) — this
+  task's own misroute-detection logic depended on it, so `apps/order`'s
+  `RateCardPricingAdapter`/`OrderService`/`OrderRepository` were
+  extended to resolve and persist it via a new read-only `Route` entity.
+  **Cross-schema write resolved via the established read-only
+  convention**: Hub computes the corrective route but never writes
+  `PARCEL` directly — it republishes the new `route_id` on a corrective
+  `parcel.hub_received` event, and `apps/order`'s `ParcelEventConsumer`
+  (extended this task, new `IOrderRepository.updateParcelWeightAndRoute`)
+  applies it alongside `actual_weight_grams` (BR-06). 219/219 total
+  passing; `pnpm build`/`pnpm lint`/`pnpm test` all green.
+  **Live-verified end-to-end**: a real order's `PARCEL.route_id` resolved
+  to a real `ROUTE` row for the first time; a real origin-hub scan wrote
+  a real `OUTBOX` row that polled to `PUBLISHED` and landed as both a
+  `PARCEL.actual_weight_grams` update and a `TRACKING_EVENT` row; a real
+  misrouted scan produced both `OUTBOX` rows atomically, updated
+  `PARCEL.route_id` to the real corrective route, and appended
+  `MISROUTED` + corrective `HUB_RECEIVE` `TRACKING_EVENT` rows. `docs/
+  lld/hub-service.md` bumped to v1.2; `docs/02-HLD.md`'s Accepted MVP
+  risk note removed entirely (no service has this gap anymore).
 - **State:** Task `6.1` (Courier Service: pickup/delivery legs + scan
   events, UC-05/UC-06/UC-13, BR-04/BR-08) complete. New app
   `apps/courier` — `CourierService.pickup`/`deliver`, Ports & Adapters
@@ -241,13 +269,14 @@
   transport, but the `shipment_orders.status.<id>` per-order trigger now
   runs over real JetStream (task **5.7**, done) per ADR-001 — a durable
   stream + explicit-ack ordered consumer, not just debounce-only ordering.
-  Courier Service (task **6.1**, done) now owns BR-04's own side (counting
-  3 failed `DELIVERY_FAILED` attempts and publishing `parcel.rts`) — it is
-  the first real producer for `parcel.picked_up`/`parcel.delivered`/
-  `parcel.delivery_failed`/`parcel.rts`; Hub/Line-haul/Dispatcher (tasks
-  6.2/6.4/6.5) remain the still-unbuilt producers for the rest of the
-  `parcel.*` events, exercised only by hand-publishing test messages (see
-  `scripts/publish-event.js`) until they land. `pnpm build` now
+  Courier Service (task **6.1**, done) owns BR-04's own side (counting
+  3 failed `DELIVERY_FAILED` attempts and publishing `parcel.rts`) and
+  Hub Service (task **6.2**, done) owns `parcel.hub_received`/
+  `parcel.arrived_at_hub`/`parcel.misrouted` — real producers now exist
+  for every `parcel.*` event except `parcel.loaded_for_linehaul`/
+  `trip.departed`/`trip.arrived`, still owned by the unbuilt Line-haul/
+  Dispatcher (tasks 6.4/6.5), exercised only by hand-publishing test
+  messages (see `scripts/publish-event.js`) until they land. `pnpm build` now
   actually validates every app/lib in the monorepo (`nest build --all`),
   not just `api-gateway` — worth double-checking this stays true if
   `nest-cli.json`'s project list ever changes. Known open items carried
