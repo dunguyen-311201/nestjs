@@ -22,4 +22,6 @@ RUN npm install -g pnpm && pnpm install --prod --frozen-lockfile --ignore-script
 
 COPY --from=builder /usr/src/app/dist/apps/${APP_NAME} ./dist/apps/${APP_NAME}
 
+USER node
+
 CMD node dist/apps/${APP_NAME}/main.js

@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.git
+.husky
+.env
+.env.*
+!.env.example
+*.log
+docs
+.claude
+.gemini
+TASKS.md
+db/seed.sql

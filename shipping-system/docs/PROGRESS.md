@@ -8,11 +8,30 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d) **complete**
-  (`6.1`-`6.6`, all tasks done). Next: Phase 7 — Integration & E2E (1.0d).
-  See `docs/03-phases.md`.
-- **Next task:** `7.1` Wire the full vertical slice in local
-  docker-compose. Run `/begin-task 7.1` to start it.
+- **Current phase:** Phase 7 — Integration & E2E (1.0d), task `7.1`
+  complete. See `docs/03-phases.md`.
+- **Next task:** `7.2` Document the full end-to-end workflow walkthrough.
+  Run `/begin-task 7.2` to start it.
+- **Task `7.1` (Wire the full vertical slice in local docker-compose)
+  complete**: switched `nest-cli.json` to the Webpack builder for all 8
+  apps (confirmed with user first — plain `tsc` produced an inconsistent
+  output shape once an app imports `libs/*`; webpack gives a uniform
+  `dist/apps/<app>/main.js`, needed for a predictable Docker `CMD`; no
+  new dependency, local `nest start`/`start:dev` unaffected). Added a
+  root multi-stage `Dockerfile` (parameterized by build ARG `APP_NAME`,
+  non-root `USER node`) and wired all 8 apps into `docker-compose.yml`
+  alongside the existing infra (task 4.2), with `*_SERVICE_URL`/
+  `POSTGRES_HOST`/`REDIS_HOST`/`NATS_URL` overridden to Docker-network
+  service hostnames. **Live-verified end-to-end**: `docker compose
+  build && up -d` — all 11 containers healthy, all 7 HTTP apps'
+  `/health` returned `200` through their container ports, the gateway's
+  proxy reached real downstream services through Docker hostnames (not
+  `localhost`), and a host-published NATS event was correctly consumed
+  by the containerized `notification` service. Named volumes/seed data
+  confirmed to survive a `docker compose down` (no `-v`). `pnpm build`/
+  `pnpm lint`/`pnpm test` all green (279/279). Left untouched (task
+  7.3's scope): a pre-staged, `RUN_INTEGRATION_TEST`-gated
+  `happy-path.integration.spec.ts` in `apps/api-gateway`.
 - **Task `6.6` (Notification: stateless email dispatcher) complete**: new
   app logic in `apps/notification` — pure NATS consumer (`@EventPattern`
   on all 5 lifecycle events: `order.created`, `payment.succeeded`,

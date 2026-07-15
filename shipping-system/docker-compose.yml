@@ -72,11 +72,13 @@ services:
       - "3001:3001"
     depends_on:
       - postgres
+      - redis
       - nats
     env_file:
       - .env
     environment:
       - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
       - NATS_URL=nats://nats:4222
 
   tracking:
