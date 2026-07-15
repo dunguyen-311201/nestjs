@@ -3,6 +3,13 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-15
+
+### Done
+- Added Swagger/OpenAPI docs for testing, at user request: installed `@nestjs/swagger` (approved new dep) and wired `SwaggerModule.setup('api/docs', ...)` into every app with an HTTP listener — `api-gateway` (:3000), `order` (:3001), `tracking` (:3003), `courier` (:3004), `hub` (:3005), `linehaul` (:3006), `dispatcher` (:3007). Skipped `notification` — it's a pure NATS consumer with no `app.listen()`.
+  - No controller/DTO decorators added yet (`@ApiTags`, `@ApiOperation`, `@ApiProperty`) — the docs currently render from route paths/DTO shapes only, not annotated. Follow-up if richer docs are wanted.
+  - `pnpm build`/`pnpm lint`/`pnpm test` all green (247/247); live-verified `GET /api/docs` returns 200 against a running `hub` instance.
+
 ## 2026-07-14
 
 ### Done
