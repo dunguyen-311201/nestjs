@@ -6,6 +6,8 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-15
 
 ### Done
+- Added a **circuit breaker** to `OutboxPollerService` in all 5 services (Hub, Line-haul, Dispatcher, Courier, Order): after 5 consecutive publish failures (e.g. NATS down), stops attempting entirely for a cooldown (5s, doubling to a 60s cap) instead of hammering a downed dependency every 500ms. Each service keeps its own copy of `circuit-breaker.ts`, matching the existing "no shared runtime code across services" convention. TDD: `circuit-breaker.spec.ts` (state machine) + new `outbox-poller.service.spec.ts` cases per service. 342/342 tests passing (+49 new); `pnpm build`/`pnpm lint` clean.
+- Added `docs/08-architecture-patterns.md`, linked from `CLAUDE.md`: a catalogue of the recognized architecture patterns actually implemented in this codebase (Dependency Inversion, Event Store/CQRS, Transactional Outbox, Idempotency-Key/Request Journal, Circuit Breaker, API Gateway, Database-per-Service, Saga-style compensation for BR-02, per-aggregate serialization via ADR-001), each entry pointing at the real file it lives in — written after cross-checking the project against *Scalable Application Development with NestJS* and *Become an Awesome Software Architect: Book 1*. Also flags one known gap: no formal backpressure/bulkhead pattern yet.
 - Integrated **Artillery Load Testing**:
   - Installed `artillery` as a devDependency in `package.json` and added `"test:load": "artillery run load-test.yml"`.
   - Created a load testing scenario configuration [load-test.yml](file:///home/dunguyen/Training/nestjs/shipping-system/load-test.yml) to generate traffic against the API Gateway proxy.
