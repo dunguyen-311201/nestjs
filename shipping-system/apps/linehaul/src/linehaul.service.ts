@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import {
   NATS_SUBJECTS,
+  ParcelLoadedForLinehaulEventV1,
   TripArrivedEventV1,
   TripDepartedEventV1,
 } from '@app/contracts';
@@ -62,6 +63,7 @@ export class LinehaulService {
     const trip = await this.linehaulRepository.createTrip(
       dto.origin_hub_id,
       dto.dest_hub_id,
+      dto.parcel_ids ?? [],
     );
 
     const result: CreateTripResult = { trip_id: trip.id };
@@ -89,17 +91,33 @@ export class LinehaulService {
       );
     }
 
-    const payload: TripDepartedEventV1 = {
+    const tripPayload: TripDepartedEventV1 = {
       event_id: randomUUID(),
       occurred_at: new Date().toISOString(),
       linehaul_trip_id: tripId,
       origin_hub_id: trip.originHubId,
     };
-    await this.linehaulRepository.markDeparted(tripId, {
-      eventId: payload.event_id,
-      eventType: NATS_SUBJECTS.TRIP_DEPARTED,
-      payload: payload as unknown as Record<string, unknown>,
-    });
+    const outboxEvents = [
+      {
+        eventId: tripPayload.event_id,
+        eventType: NATS_SUBJECTS.TRIP_DEPARTED,
+        payload: tripPayload as unknown as Record<string, unknown>,
+      },
+      ...trip.parcelIds.map((parcelId) => {
+        const payload: ParcelLoadedForLinehaulEventV1 = {
+          event_id: randomUUID(),
+          occurred_at: new Date().toISOString(),
+          parcel_id: parcelId,
+          linehaul_trip_id: tripId,
+        };
+        return {
+          eventId: payload.event_id,
+          eventType: NATS_SUBJECTS.PARCEL_LOADED_FOR_LINEHAUL,
+          payload: payload as unknown as Record<string, unknown>,
+        };
+      }),
+    ];
+    await this.linehaulRepository.markDeparted(tripId, outboxEvents);
 
     const result: TripActionResult = { status: 'recorded' };
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);

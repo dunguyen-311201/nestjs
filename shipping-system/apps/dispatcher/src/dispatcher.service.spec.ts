@@ -4,11 +4,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { NATS_SUBJECTS } from '@app/contracts';
 import { DispatcherService } from './dispatcher.service';
 import { IDispatcherRepository } from './ports/dispatcher-repository.port';
 import { ICourierLookupPort } from './ports/courier-lookup.port';
 import { IOrderLookupPort } from './ports/order-lookup.port';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
+import { IOutboxRepository } from './ports/outbox-repository.port';
 import { Courier } from './entities/courier.entity';
 import { Parcel } from './entities/parcel.entity';
 import { LinehaulTrip } from './entities/linehaul-trip.entity';
@@ -20,6 +22,7 @@ describe('DispatcherService', () => {
   let courierLookup: jest.Mocked<ICourierLookupPort>;
   let orderLookup: jest.Mocked<IOrderLookupPort>;
   let idempotencyStore: jest.Mocked<IIdempotencyStore>;
+  let outboxRepository: jest.Mocked<IOutboxRepository>;
   let service: DispatcherService;
 
   beforeEach(() => {
@@ -41,12 +44,18 @@ describe('DispatcherService', () => {
       set: jest.fn(),
     };
     idempotencyStore.get.mockResolvedValue(null);
+    outboxRepository = {
+      insert: jest.fn().mockResolvedValue(undefined),
+      findPendingBatch: jest.fn(),
+      markPublished: jest.fn(),
+    };
 
     service = new DispatcherService(
       dispatcherRepository,
       courierLookup,
       orderLookup,
       idempotencyStore,
+      outboxRepository,
     );
   });
 
@@ -186,6 +195,15 @@ describe('DispatcherService', () => {
         { status: 'recorded' },
         24 * 60 * 60,
       );
+      expect(outboxRepository.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY,
+          payload: expect.objectContaining({
+            parcel_id: parcelId,
+            courier_id: courierId,
+          }) as unknown,
+        }),
+      );
     });
 
     it('successfully validates and returns recorded status (verified courier)', async () => {
@@ -197,6 +215,18 @@ describe('DispatcherService', () => {
       const result = await service.assignLeg(parcelId, dto, idemKey);
 
       expect(result).toEqual({ status: 'recorded' });
+    });
+
+    it('does not publish parcel.out_for_delivery when the courier is inactive', async () => {
+      orderLookup.findParcelById.mockResolvedValueOnce({} as Parcel);
+      courierLookup.findCourierById.mockResolvedValueOnce({
+        status: 'Inactive',
+      } as Courier);
+
+      await expect(service.assignLeg(parcelId, dto, idemKey)).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      expect(outboxRepository.insert).not.toHaveBeenCalled();
     });
 
     it('returns cached result on idempotent replay', async () => {

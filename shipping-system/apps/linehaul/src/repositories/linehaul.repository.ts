@@ -22,10 +22,12 @@ export class LinehaulRepository implements ILinehaulRepository {
   async createTrip(
     originHubId: string,
     destHubId: string,
+    parcelIds: string[],
   ): Promise<{ id: string }> {
     const trip = await this.dataSource.getRepository(LinehaulTrip).save({
       originHubId,
       destHubId,
+      parcelIds,
     });
     return { id: trip.id };
   }
@@ -38,13 +40,13 @@ export class LinehaulRepository implements ILinehaulRepository {
 
   async markDeparted(
     tripId: string,
-    outboxEvent: OutboxEventInput,
+    outboxEvents: OutboxEventInput[],
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       await manager.update(LinehaulTrip, tripId, {
         status: LinehaulTripStatus.DEPARTED,
       });
-      await manager.save(Outbox, outboxEvent);
+      await manager.save(Outbox, outboxEvents);
     });
   }
 

@@ -34,6 +34,9 @@ export class LinehaulTrip {
   })
   status: LinehaulTripStatus;
 
+  @Column({ name: 'parcel_ids', type: 'uuid', array: true, default: '{}' })
+  parcelIds: string[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

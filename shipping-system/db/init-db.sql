@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS shipping_network_db.LINEHAULTRIP (
     -- until this was added - same class of gap as PARCEL.route_id (6.2)
     -- and DELIVERY_ATTEMPT.direction (6.1).
     status VARCHAR(50) NOT NULL DEFAULT 'Created' CHECK (status IN ('Created', 'Departed', 'Arrived')),
+    -- Which parcels are on this trip (task 7.3): /depart needs this to know
+    -- which parcels to publish parcel.loaded_for_linehaul for - closes a
+    -- real gap found while writing docs/07-e2e-walkthrough.md (task 7.2),
+    -- where DEPARTED_LINEHAUL had zero publishers anywhere in the system.
+    -- No FK array possible on parcel_ids (cross-schema, ADR-003) - logical
+    -- reference only, same as every other cross-service id in this schema.
+    parcel_ids UUID[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

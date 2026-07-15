@@ -240,7 +240,17 @@ too, for the same reason as the previous step:
 [ParcelEventConsumer] Dropped parcel.delivered for parcel 0f6939d9-...: No valid transition from InHub on event DELIVERED
 ```
 
-## Known gap found while writing this walkthrough
+## Known gap found while writing this walkthrough (fixed in task 7.3)
+
+> **Update (task 7.3)**: this gap is now closed. `POST /trips/{id}/depart`
+> (Line-haul) publishes `parcel.loaded_for_linehaul` per parcel, and
+> `POST /legs/{id}/assign` (Dispatcher) publishes `parcel.out_for_delivery`.
+> The full sequence below now genuinely reaches `Delivered` — verified by
+> the automated integration test at
+> `apps/api-gateway/src/happy-path.integration.spec.ts`
+> (`RUN_INTEGRATION_TEST=true`). The section below is left as originally
+> written for historical accuracy (it was true when this doc was written,
+> during task 7.2) — see `TASKS.md`'s 7.3 entry for the fix details.
 
 **`PARCEL.state` cannot currently reach `Delivered` through the full
 multi-hub flow.** The state machine requires

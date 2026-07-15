@@ -119,6 +119,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | `driver_id` | uuid FK | Driver assigned to the trip. |
 | `truck_id` | uuid FK | Truck asset assigned to the trip. |
 | `status` | enum | `Created`, `Departed`, or `Arrived`. Drives the `/depart`/`/arrive` 409 "already in a terminal state" guard (task 6.4). |
+| `parcel_ids` | uuid[], logical refs | Which parcels are on this trip (task 7.3). `/depart` publishes `parcel.loaded_for_linehaul` for each one — closes a gap found writing `docs/07-e2e-walkthrough.md` (task 7.2), where nothing published `DEPARTED_LINEHAUL`. No hard FK possible (cross-schema array, ADR-003) — same logical-reference convention as every other cross-service id. |
 
 ### HUB
 | Field | Type | Description |

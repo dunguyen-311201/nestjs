@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import Redis from 'ioredis';
 import { DispatcherController } from './dispatcher.controller';
 import { DispatcherService } from './dispatcher.service';
@@ -8,6 +9,7 @@ import { Driver } from './entities/driver.entity';
 import { Truck } from './entities/truck.entity';
 import { Courier } from './entities/courier.entity';
 import { Parcel } from './entities/parcel.entity';
+import { Outbox } from './entities/outbox.entity';
 import { IDispatcherRepository } from './ports/dispatcher-repository.port';
 import { DispatcherRepository } from './repositories/dispatcher.repository';
 import { ICourierLookupPort } from './ports/courier-lookup.port';
@@ -19,12 +21,29 @@ import {
   REDIS_CLIENT,
   RedisIdempotencyAdapter,
 } from './adapters/redis-idempotency.adapter';
+import { IOutboxRepository } from './ports/outbox-repository.port';
+import { OutboxRepository } from './repositories/outbox.repository';
+import { IEventPublisher } from './ports/event-publisher.port';
+import {
+  NATS_CLIENT,
+  NatsEventPublisher,
+} from './adapters/nats-event-publisher.adapter';
+import { OutboxPollerService } from './outbox-poller.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LinehaulTrip, Driver, Truck]),
+    TypeOrmModule.forFeature([LinehaulTrip, Driver, Truck, Outbox]),
     TypeOrmModule.forFeature([Courier], 'courier'),
     TypeOrmModule.forFeature([Parcel], 'order'),
+    ClientsModule.register([
+      {
+        name: NATS_CLIENT,
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_URL ?? 'nats://localhost:4222'],
+        },
+      },
+    ]),
   ],
   controllers: [DispatcherController],
   providers: [
@@ -33,6 +52,9 @@ import {
     { provide: ICourierLookupPort, useClass: CourierLookupAdapter },
     { provide: IOrderLookupPort, useClass: OrderLookupAdapter },
     { provide: IIdempotencyStore, useClass: RedisIdempotencyAdapter },
+    { provide: IOutboxRepository, useClass: OutboxRepository },
+    { provide: IEventPublisher, useClass: NatsEventPublisher },
+    OutboxPollerService,
     {
       provide: REDIS_CLIENT,
       useFactory: () =>

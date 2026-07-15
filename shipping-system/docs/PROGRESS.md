@@ -8,13 +8,39 @@
 
 ## Resume point
 
-- **Current phase:** Phase 7 — Integration & E2E (1.0d), task `7.2`
-  complete. See `docs/03-phases.md`.
-- **Next task:** `7.3` Automate 1 happy-path integration test. Run
-  `/begin-task 7.3` to start it. Note: `apps/api-gateway/src/
-  happy-path.integration.spec.ts` already exists pre-staged (gated
-  behind `RUN_INTEGRATION_TEST=true`) — check it against the gap noted
-  below before assuming it needs to be written from scratch.
+- **Current phase:** Phase 7 — Integration & E2E (1.0d) **complete**
+  (`7.1`-`7.3`, all tasks done). Next: Phase 8 — Testing, Demo & Docs
+  (1.0d). See `docs/03-phases.md`.
+- **Next task:** `8.1` Unit tests for rule guards & state-machine
+  transitions. Run `/begin-task 8.1` to start it.
+- **Task `7.3` (Automate 1 happy-path integration test) complete**: the
+  pre-staged `apps/api-gateway/src/happy-path.integration.spec.ts` had a
+  missing `uuid` dependency (swapped to `crypto.randomUUID()`, confirmed
+  with user) and asserted an unreachable final state (`Delivered`) — task
+  7.2 had already found this unreachable. **Confirmed with user first:
+  fixed the underlying gap rather than adjusting the test's
+  expectations.** `parcel.loaded_for_linehaul`/`parcel.out_for_delivery`
+  had consumers but zero publishers anywhere: Line-haul's `/depart` now
+  publishes the former (added `LINEHAULTRIP.parcel_ids`, real schema gap,
+  same class as `status`); Dispatcher's `/legs/{id}/assign` now publishes
+  the latter (Dispatcher gained a full Outbox, sharing the physical
+  `shipping_network_db.outbox` table with Hub/Line-haul, same precedent
+  as 6.4 — the 6.5 "no persistence" decision still stands for the
+  assignment itself, only event publication was added). Fixed two stale
+  contract docblocks misattributing the publisher (neither was ever
+  implemented anywhere). Also fixed two real bugs in the pre-staged
+  test's own script: wrong step order (leg-assign was called before
+  Line-haul even ran, and the destination hub receive was missing
+  entirely) and a race condition (leg-assign and deliver are both
+  synchronous HTTP but trigger two independently-polled async outbox
+  events with no ordering guarantee — added a poll-and-wait). 288/288
+  unit tests passing (+9 new); `pnpm build`/`pnpm lint` clean.
+  **Live-verified for real, three consecutive runs**: rebuilt the
+  affected Docker images, ran `RUN_INTEGRATION_TEST=true` against the
+  live stack — genuinely reaches `PARCEL.state = Delivered` with the
+  full timeline. `docs/07-e2e-walkthrough.md`'s "Known gap" section
+  updated with a note that it's now fixed (original write-up preserved
+  for historical accuracy). **Phase 7 (Integration & E2E) complete.**
 - **Task `7.2` (Document the full end-to-end workflow walkthrough)
   complete**: new `docs/07-e2e-walkthrough.md`, linked from `CLAUDE.md`.
   Runs the complete current vertical slice through the API Gateway

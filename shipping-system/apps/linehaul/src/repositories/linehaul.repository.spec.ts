@@ -60,11 +60,14 @@ describe('LinehaulRepository', () => {
         status: LinehaulTripStatus.CREATED,
       });
 
-      const result = await repository.createTrip('hub-1', 'hub-2');
+      const result = await repository.createTrip('hub-1', 'hub-2', [
+        'parcel-1',
+      ]);
 
       expect(saveTrip).toHaveBeenCalledWith({
         originHubId: 'hub-1',
         destHubId: 'hub-2',
+        parcelIds: ['parcel-1'],
       });
       expect(result).toEqual({ id: 'trip-1' });
     });
@@ -105,20 +108,34 @@ describe('LinehaulRepository', () => {
         }),
       );
 
-      await repository.markDeparted('trip-1', {
-        eventId: 'evt-1',
-        eventType: 'trip.departed',
-        payload: { linehaul_trip_id: 'trip-1' },
-      });
+      await repository.markDeparted('trip-1', [
+        {
+          eventId: 'evt-1',
+          eventType: 'trip.departed',
+          payload: { linehaul_trip_id: 'trip-1' },
+        },
+        {
+          eventId: 'evt-2',
+          eventType: 'parcel.loaded_for_linehaul',
+          payload: { parcel_id: 'parcel-1', linehaul_trip_id: 'trip-1' },
+        },
+      ]);
 
       expect(managerUpdate).toHaveBeenCalledWith(LinehaulTrip, 'trip-1', {
         status: LinehaulTripStatus.DEPARTED,
       });
-      expect(managerSave).toHaveBeenCalledWith(Outbox, {
-        eventId: 'evt-1',
-        eventType: 'trip.departed',
-        payload: { linehaul_trip_id: 'trip-1' },
-      });
+      expect(managerSave).toHaveBeenCalledWith(Outbox, [
+        {
+          eventId: 'evt-1',
+          eventType: 'trip.departed',
+          payload: { linehaul_trip_id: 'trip-1' },
+        },
+        {
+          eventId: 'evt-2',
+          eventType: 'parcel.loaded_for_linehaul',
+          payload: { parcel_id: 'parcel-1', linehaul_trip_id: 'trip-1' },
+        },
+      ]);
     });
   });
 

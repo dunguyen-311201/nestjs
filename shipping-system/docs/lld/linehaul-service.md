@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.2 | 2026-07-15 | Du Nguyen | Task 7.3: **real gap found and fixed, confirmed with user first** — nothing in the system ever published `parcel.loaded_for_linehaul`, so `PARCEL.state` could never advance past `InHub` on the outbound leg (found while writing `docs/07-e2e-walkthrough.md`, task 7.2). Added `LINEHAULTRIP.parcel_ids` (uuid[], logical refs, default `{}`) so `POST /trips` can record which parcels a trip carries; `/depart` now publishes one `parcel.loaded_for_linehaul` event per parcel alongside `trip.departed`, in the same Outbox transaction. `libs/contracts`'s `ParcelLoadedForLinehaulEventV1` docblock previously said "Published by Hub" — that was never implemented anywhere and predated the per-service split; fixed to say Line-haul. |
 | v1.1 | 2026-07-14 | Du Nguyen | Task 6.4 implementation: **real gap found and fixed, confirmed with user first** — `LINEHAULTRIP` had no lifecycle column at all, so the `/depart`/`/arrive` 409 "already in a terminal state" guard had nothing to check against. Added `status` (`Created`\|`Departed`\|`Arrived`, default `Created`). Built with a Transactional Outbox from day 1 (same pattern as Hub, task 6.2) — responses now return `{ status: "recorded" }`, not `event`/`published_at`. **Not building "deconsolidation"** despite `docs/03-phases.md`'s task title listing it — `CLAUDE.md`'s SCOPE section explicitly cuts consolidation/deconsolidation logic; treated as a stale phrase left over from before that scope cut. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
@@ -67,16 +68,17 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | `origin_hub_id` | uuid | required, must exist |
 | `dest_hub_id` | uuid | required, must exist, ≠ `origin_hub_id` |
+| `parcel_ids` | uuid[] | optional (task 7.3) — which parcels this trip carries; a trip can be created before parcels are assigned |
 
 **Response `201`**: `{ trip_id }`. **Errors**: `404` hub not found · `400` origin equals destination.
 
 ### `POST /trips/{id}/depart` · `POST /trips/{id}/arrive`
 
-No body — **manual fallback only**. Primary trigger is GPS geofencing; these endpoints exist for when GPS integration is unavailable (see [docs/02-HLD.md § Event Triggers](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). **Response `201`**: `{ status: "recorded" }` — the `trip.departed`/`trip.arrived` publish is async via the Outbox/poller (v1.1), so there is no `event`/`published_at` to return synchronously. **Errors**: `404` trip not found · `409` (plain, no `BR-XX` tag — this isn't a business-rule guard) trip already in a terminal state for this transition (e.g. `/arrive` called before `/depart`, or a status already past the requested transition).
+No body — **manual fallback only**. Primary trigger is GPS geofencing; these endpoints exist for when GPS integration is unavailable (see [docs/02-HLD.md § Event Triggers](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)). **Response `201`**: `{ status: "recorded" }` — the `trip.departed`/`trip.arrived` publish is async via the Outbox/poller (v1.1), so there is no `event`/`published_at` to return synchronously. `/depart` additionally publishes one `parcel.loaded_for_linehaul` event per `parcel_ids` entry on the trip (task 7.3), in the same Outbox transaction as `trip.departed`. **Errors**: `404` trip not found · `409` (plain, no `BR-XX` tag — this isn't a business-rule guard) trip already in a terminal state for this transition (e.g. `/arrive` called before `/depart`, or a status already past the requested transition).
 
 ## Database Schema Detail
 
 | Entity | Indexes | Constraints |
 | :--- | :--- | :--- |
-| `LINEHAULTRIP` | `idx_trip_origin_hub`, `idx_trip_dest_hub`, `idx_trip_driver_id` | PK `id` · `status` CHECK `IN ('Created','Departed','Arrived')`, default `Created` (added task 6.4, drives the `/depart`/`/arrive` 409 guard) |
+| `LINEHAULTRIP` | `idx_trip_origin_hub`, `idx_trip_dest_hub`, `idx_trip_driver_id` | PK `id` · `status` CHECK `IN ('Created','Departed','Arrived')`, default `Created` (added task 6.4, drives the `/depart`/`/arrive` 409 guard) · `parcel_ids` uuid[], default `{}` (added task 7.3, logical refs only — no FK possible on a cross-schema array, ADR-003) |
 | `OUTBOX` | `idx_hub_outbox_status_created_at` (partial, `WHERE status = 'PENDING'`) | Shared physical table with Hub Service (task 6.2) — see the Owns note above. |
