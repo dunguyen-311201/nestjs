@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.3 | 2026-07-15 | Du Nguyen | Post-7.3 doc audit: **UC-09 renumbered to UC-08** for "Assign Driver/Truck to Trip" — it collided with Line-haul Service's own UC-09 ("Create Line-Haul Trip"), a stale ID collision baked in since the original LLD split (`3689e45`); `UC-08` was unused across every LLD file. Not a functional change — no API/behavior touched, doc-only. |
 | v1.2 | 2026-07-15 | Du Nguyen | Task 7.3: **real gap found and fixed, confirmed with user first** — `parcel.out_for_delivery` had a registered consumer in Order/Tracking but zero publishers anywhere (found while writing `docs/07-e2e-walkthrough.md`, task 7.2), so `PARCEL.state` could never reach `OutForDelivery`/`Delivered`. `POST /legs/{id}/assign` now publishes it (courier assignment onto the final leg *is* the moment a parcel becomes ready for last-mile dispatch) via a new Outbox — Dispatcher gains one, sharing the same physical `shipping_network_db.outbox` table Hub (6.2)/Line-haul (6.4) already use, same precedent. `libs/contracts`'s `ParcelOutForDeliveryEventV1` docblock previously said "Published by Courier" — never implemented anywhere, predates the per-service split; fixed to say Dispatcher. |
 | v1.1 | 2026-07-15 | Du Nguyen | Task 6.5 implementation (this file was never updated when 6.5 shipped — backfilled here): `COURIER.status` added (real gap, same class as `LINEHAULTRIP.status`) so the `422` guard below has something to check; `/legs/{id}/assign` confirmed **validation-only, no persistence** — no `LEG` table or `PARCEL.courier_id` exists anywhere in the ERD, and Courier Service's pickup/deliver already take `courier_id` directly. Cross-schema reads (`COURIER`, `PARCEL`) use named TypeORM connections, same pattern as Courier Service's own `IOrderLookupPort`. |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
@@ -19,7 +20,7 @@ Owns: `DRIVER`, `TRUCK` (assignment), and (as of v1.2) an `OUTBOX` row per `/leg
 
 | UC | Use Case | Actor | Note | Related BR |
 | :--- | :--- | :--- | :--- | :--- |
-| UC-09 | Assign Driver/Truck to Trip | Dispatcher | Assignment part only — creation is [Line-haul Service's](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md) | — |
+| UC-08 | Assign Driver/Truck to Trip | Dispatcher | Assignment part only — creation is [Line-haul Service's](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md) UC-09. Renumbered from UC-09 (task 7.3 doc audit, confirmed with user) — it collided with Line-haul's own UC-09 ("Create Line-Haul Trip"), a stale ID collision baked in since the original LLD split (`3689e45`). `UC-08` was unused across every LLD file. | — |
 | UC-10 | Assign Courier to Leg | Dispatcher | | — |
 
 ## Sequence Diagrams
@@ -44,7 +45,7 @@ sequenceDiagram
     DispatcherSvc-->>Dispatcher: 200
 ```
 
-*(This diagram was added while writing this LLD — no sequence diagram previously covered UC-09/UC-10 at all. Trip creation, the prerequisite step, is owned by [linehaul-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md), Diagram 10a.)*
+*(This diagram was added while writing this LLD — no sequence diagram previously covered UC-08/UC-10 at all. Trip creation, the prerequisite step, is owned by [linehaul-service.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/linehaul-service.md), Diagram 10a.)*
 
 ## API Contracts
 

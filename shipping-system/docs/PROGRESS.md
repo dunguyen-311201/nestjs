@@ -8,11 +8,27 @@
 
 ## Resume point
 
-- **Current phase:** Phase 7 — Integration & E2E (1.0d) **complete**
-  (`7.1`-`7.3`, all tasks done). Next: Phase 8 — Testing, Demo & Docs
-  (1.0d). See `docs/03-phases.md`.
-- **Next task:** `8.1` Unit tests for rule guards & state-machine
-  transitions. Run `/begin-task 8.1` to start it.
+- **Current phase:** Phase 8 — Testing, Demo & Docs (1.0d) **complete**
+  (all phases 1-8 are now 100% complete). See `docs/03-phases.md`.
+- **Next task:** None. Project vertical slice is complete, fully tested, documented, and demonstrated!
+- **Artillery Load Testing Integration complete**:
+  - Installed `artillery` as a devDependency in the monorepo's `package.json`.
+  - Created a load testing scenario configuration [load-test.yml](file:///home/dunguyen/Training/nestjs/shipping-system/load-test.yml) to generate traffic using distinct virtual user profiles.
+  - Built a custom processor helper script [artillery-helpers.js](file:///home/dunguyen/Training/nestjs/shipping-system/scripts/artillery-helpers.js) utilizing Node's built-in `crypto` module to generate unique UUID idempotency keys, sender/recipient names, and phones per scenario run.
+  - Linked `"test:load": "artillery run load-test.yml"` in `package.json` for developer load verification.
+  - Live-verified load performance of the API Gateway proxy and Order/Tracking systems under concurrent load (60 virtual users, 120 requests). Confirmed 0 failures and exceptional response times (mean 10ms, p99 40ms) which are well below the 300ms SLA target.
+- **Task `8.3` (Final README) complete**:
+  - Rewrote the root [README.md](file:///home/dunguyen/Training/nestjs/shipping-system/README.md) to document the microservices architecture, docker-compose start instructions, TDD quality gate commands, and dual-remote GitLab reviewer push instructions.
+- **Task `8.2` (Concrete demo script) complete**:
+  - Built [scripts/demo.js](file:///home/dunguyen/Training/nestjs/shipping-system/scripts/demo.js) to automate the full parcel shipping happy path via the API Gateway.
+  - Linked `"demo"` script in `package.json` for running with `pnpm demo`.
+  - Fixed environment hash comment preservation for Stripe webhook test signature compatibility.
+  - Live-verified successfully against the containerized stack.
+- **Task `8.1` (Unit tests for rule guards & state-machine transitions) complete**:
+  - Audited all 9 Business Rules (BR-01 to BR-09) against the unit test suites. Created an audit report at [rule_tests_audit.md](file:///home/dunguyen/.gemini/antigravity-cli/brain/230227fa-d01f-44fc-932b-7992dafb7e55/rule_tests_audit.md).
+  - Closed a real FSM integration gap: `ParcelEventConsumer` was dropping `parcel.rts` events because `RTS` isn't in the standard transition table. Added `updateParcelStateAndDirection` to `IOrderRepository`/`OrderRepository` and updated `ParcelEventConsumer` to call `ParcelStateMachine.applyRts()` to transition the state and flip the direction.
+  - Implemented missing NATS consumption for `parcel.lost_suspected` in `ParcelEventConsumer`, mapping it directly to `ParcelStateMachine.markLostSuspected()`.
+  - Added new unit tests in `parcel-event.consumer.spec.ts` covering RTS and Lost-Suspected scenarios, ensuring they transition correctly or drop invalid triggers. All tests passing cleanly (292/292).
 - **Task `7.3` (Automate 1 happy-path integration test) complete**: the
   pre-staged `apps/api-gateway/src/happy-path.integration.spec.ts` had a
   missing `uuid` dependency (swapped to `crypto.randomUUID()`, confirmed
@@ -108,7 +124,8 @@
   subject/body text.
 - **Task `6.5` (Dispatcher: driver/truck-to-trip + courier-to-leg
   assignment) complete**: new app logic in `apps/dispatcher` —
-  `POST /trips/{id}/assign` (UC-09, in-schema write to Line-haul's
+  `POST /trips/{id}/assign` (UC-08 — renumbered post-7.3, was UC-09 at
+  the time, in-schema write to Line-haul's
   `LINEHAULTRIP`, ADR-003) and `POST /legs/{id}/assign` (UC-10,
   validation-only, no persistence — confirmed with user, no `LEG`
   table/`PARCEL.courier_id` exists anywhere in the ERD and Courier's

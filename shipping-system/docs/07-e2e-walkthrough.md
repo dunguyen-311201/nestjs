@@ -167,7 +167,7 @@ HTTP 201
 `PARCEL.state: InTransit → InHub`. No `linehaul_trip_id` in the body means
 Hub Service treats this as the origin scan (`parcel.hub_received`).
 
-## UC-09 / UC-11 — Line-haul trip + Dispatcher assignment
+## UC-09 / UC-08 / UC-11 — Line-haul trip + Dispatcher assignment
 
 ```bash
 curl -s -X POST http://localhost:3000/trips \
