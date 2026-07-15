@@ -8,10 +8,7 @@ import { ProxyModule } from './proxy/proxy.module';
 // Consul/service discovery in this project) - actual proxy logic is
 // implemented in ProxyModule.
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    ProxyModule,
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), ProxyModule],
   controllers: [HealthController],
 })
 export class AppModule {}
