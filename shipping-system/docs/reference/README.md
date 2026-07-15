@@ -16,6 +16,11 @@ numbered docs win; this folder is provenance, not the authoritative spec.
 - [`task-5.2-walkthrough.md`](task-5.2-walkthrough.md) — same format,
   for task 5.2 (BusinessRuleException + ParcelStateMachine). Temporary —
   delete once reviewed.
+- [`task-8.1-rule-tests-audit.md`](task-8.1-rule-tests-audit.md) — BR-01
+  through BR-09 traced to their implementation guard and unit test file,
+  produced for task 8.1. Kept as a point-in-time audit record — re-verify
+  against the live test suite before relying on it, since file paths/line
+  numbers drift as the code changes.
 
 When a new raw artifact shows up (an original DDL export, a client-provided
 diagram source, a requirements doc) or a planning doc is fully done and no
