@@ -8,10 +8,34 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.4`
-  complete. Next: `6.5` Dispatcher. See `docs/03-phases.md`.
-- **Next task:** `6.5` Dispatcher Service: driver/truck-to-trip +
-  courier-to-leg assignment. Run `/begin-task 6.5` to start it.
+- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.5`
+  complete (final task in Phase 6). Next: `6.6` Notification consumer.
+  See `docs/03-phases.md`.
+- **Next task:** `6.6` Notification consumer: stateless email dispatcher on
+  order/payment/delivery/RTS/lost events (BR-09). Run `/begin-task 6.6` to
+  start it.
+- **Task `6.5` (Dispatcher: driver/truck-to-trip + courier-to-leg
+  assignment) complete**: new app logic in `apps/dispatcher` —
+  `POST /trips/{id}/assign` (UC-09, in-schema write to Line-haul's
+  `LINEHAULTRIP`, ADR-003) and `POST /legs/{id}/assign` (UC-10,
+  validation-only, no persistence — confirmed with user, no `LEG`
+  table/`PARCEL.courier_id` exists anywhere in the ERD and Courier's
+  task-6.1 pickup/deliver already takes `courier_id` directly).
+  **Two real gaps fixed, both confirmed with user first**: (1) `COURIER`
+  had no `status` column — UC-10's `422` guard had nothing to check,
+  added `status` (`Active`\|`Inactive`\|`Verified`) same as 6.4's
+  `LINEHAULTRIP.status` fix; (2) API Gateway's `/trips` prefix was
+  already claimed by Line-haul (6.4) but Dispatcher needed
+  `/trips/{id}/assign` too — added a regex-pattern route checked before
+  the generic prefix so both coexist. `DRIVER.name_enc` encryption gap
+  (deferred since 6.3) stays open — neither 6.4 nor 6.5 actually creates
+  `DRIVER` rows, only `generate_seed.py` writes `name_enc`, so it's still
+  unowned by any live code path. 268/268 tests passing;
+  `pnpm build`/`pnpm lint`/`pnpm test` all green. **Live-verified
+  end-to-end**: real `psql`-confirmed `LINEHAULTRIP` write on assign,
+  404/409/422 guards, idempotency replay, and gateway routing correctly
+  disambiguating `/trips/{id}/assign` (→ Dispatcher) from
+  `/trips/{id}/depart` (→ Line-haul).
 - **Task `6.4` (Line-haul: trip creation, depart/arrive hooks) complete**:
   new app `apps/linehaul`. **Real gap fixed, confirmed with user first**:
   `LINEHAULTRIP` had no lifecycle column — added `status`

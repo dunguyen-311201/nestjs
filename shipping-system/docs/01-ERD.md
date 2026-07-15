@@ -158,6 +158,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | `id` | uuid PK | Unique identifier of a first/last-mile courier. |
 | `zone_id` | uuid FK | The zone the courier operates in. |
 | `role` | enum | RBAC role separating Courier from Hub Operator, Dispatcher, Admin. |
+| `status` | enum | `Active` or `Inactive`. Added for task 6.5 (Dispatcher): UC-10's `POST /legs/{id}/assign` 422 "courier not active/verified" guard had no column to check against until this was added — same class of gap as `LINEHAULTRIP.status` (task 6.4). |
 
 ### DRIVER
 | Field | Type | Description |

@@ -47,6 +47,12 @@ describe('ProxyService', () => {
         'http://localhost:3005',
       );
       expect(service.resolveTarget('/trips')).toBe('http://localhost:3006');
+      expect(service.resolveTarget('/trips/trip-123/depart')).toBe(
+        'http://localhost:3006',
+      );
+      expect(service.resolveTarget('/trips/trip-123/assign')).toBe(
+        'http://localhost:3007',
+      );
       expect(service.resolveTarget('/legs/1/assign')).toBe(
         'http://localhost:3007',
       );

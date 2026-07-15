@@ -20,6 +20,9 @@ export class Courier {
   @Column({ type: 'varchar', length: 50 })
   role: CourierRole;
 
+  @Column({ type: 'varchar', length: 50, default: 'Active' })
+  status: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

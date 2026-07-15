@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS shipping_courier_db.COURIER (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     zone_id UUID NOT NULL, -- Logical FK to ZONE.id
     role VARCHAR(50) NOT NULL CHECK (role IN ('Courier', 'HubOperator', 'Dispatcher', 'Admin')),
+    status VARCHAR(50) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Verified')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

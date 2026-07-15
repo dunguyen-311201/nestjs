@@ -11,9 +11,12 @@ export class ProxyService {
   constructor(private readonly configService: ConfigService) {}
 
   resolveTarget(path: string): string | null {
-    const route = PROXY_ROUTES.find(
-      (r) => path === r.prefix || path.startsWith(`${r.prefix}/`),
-    );
+    const route = PROXY_ROUTES.find((r) => {
+      if (r.pattern) {
+        return r.pattern.test(path);
+      }
+      return path === r.prefix || path.startsWith(`${r.prefix}/`);
+    });
     if (!route) return null;
     return this.configService.get<string>(route.envKey) ?? route.defaultTarget;
   }

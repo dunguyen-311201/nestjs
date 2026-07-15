@@ -2,11 +2,18 @@ export interface ProxyRoute {
   prefix: string;
   envKey: string;
   defaultTarget: string;
+  pattern?: RegExp;
 }
 
 // Order matters: matched top-to-bottom by longest-first prefix match.
 // Mirrors the REST endpoint table in docs/02-HLD.md.
 export const PROXY_ROUTES: ProxyRoute[] = [
+  {
+    prefix: '/trips-assign',
+    pattern: /^\/trips\/[^/]+\/assign$/,
+    envKey: 'DISPATCHER_SERVICE_URL',
+    defaultTarget: 'http://localhost:3007',
+  },
   {
     prefix: '/orders',
     envKey: 'ORDER_SERVICE_URL',
