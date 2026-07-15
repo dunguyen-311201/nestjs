@@ -32,6 +32,167 @@ services:
     volumes:
       - nats_data:/data
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=api-gateway
+    container_name: shipping_api_gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - order
+      - tracking
+      - courier
+      - hub
+      - linehaul
+      - dispatcher
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+      - ORDER_SERVICE_URL=http://order:3001
+      - TRACKING_SERVICE_URL=http://tracking:3003
+      - COURIER_SERVICE_URL=http://courier:3004
+      - HUB_SERVICE_URL=http://hub:3005
+      - LINEHAUL_SERVICE_URL=http://linehaul:3006
+      - DISPATCHER_SERVICE_URL=http://dispatcher:3007
+
+  order:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=order
+    container_name: shipping_order
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - NATS_URL=nats://nats:4222
+
+  tracking:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=tracking
+    container_name: shipping_tracking
+    ports:
+      - "3003:3003"
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+
+  courier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=courier
+    container_name: shipping_courier
+    ports:
+      - "3004:3004"
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=hub
+    container_name: shipping_hub
+    ports:
+      - "3005:3005"
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+
+  linehaul:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=linehaul
+    container_name: shipping_linehaul
+    ports:
+      - "3006:3006"
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+
+  dispatcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=dispatcher
+    container_name: shipping_dispatcher
+    ports:
+      - "3007:3007"
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NATS_URL=nats://nats:4222
+
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_NAME=notification
+    container_name: shipping_notification
+    depends_on:
+      - nats
+    env_file:
+      - .env
+    environment:
+      - NATS_URL=nats://nats:4222
+
 volumes:
   postgres_data:
   redis_data:
