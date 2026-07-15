@@ -1,7 +1,7 @@
 import { Customer } from '../entities/customer.entity';
 import { ShipmentOrder } from '../entities/shipment-order.entity';
 import { Parcel } from '../entities/parcel.entity';
-import { ParcelState } from '../entities/parcel.enums';
+import { ParcelDirection, ParcelState } from '../entities/parcel.enums';
 import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
 import { PaymentType } from '../entities/payment.entity';
 
@@ -37,6 +37,11 @@ export abstract class IOrderRepository {
   abstract updateParcelState(
     parcelId: string,
     state: ParcelState,
+  ): Promise<void>;
+  abstract updateParcelStateAndDirection(
+    parcelId: string,
+    state: ParcelState,
+    direction: ParcelDirection,
   ): Promise<void>;
   // Applied by ParcelEventConsumer on parcel.hub_received (BR-06 weight
   // capture, and BR-02's corrective route_id on a misrouted-then-corrected

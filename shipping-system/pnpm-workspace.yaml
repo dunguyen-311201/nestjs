@@ -1,3 +1,6 @@
 allowBuilds:
+  '@playwright/browser-chromium': true
   '@scarf/scarf': true
+  protobufjs: true
+  unix-dgram: true
   unrs-resolver: true

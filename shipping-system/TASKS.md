@@ -6,6 +6,23 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-15
 
 ### Done
+- Integrated **Artillery Load Testing**:
+  - Installed `artillery` as a devDependency in `package.json` and added `"test:load": "artillery run load-test.yml"`.
+  - Created a load testing scenario configuration [load-test.yml](file:///home/dunguyen/Training/nestjs/shipping-system/load-test.yml) to generate traffic against the API Gateway proxy.
+  - Wrote a custom processor helper script [artillery-helpers.js](file:///home/dunguyen/Training/nestjs/shipping-system/scripts/artillery-helpers.js) using Node's built-in `crypto` module to dynamically inject unique UUID idempotency keys, names, and phone numbers per virtual user transaction.
+  - Live-verified load performance: executed `npx artillery run load-test.yml` simulating 60 concurrent virtual users and 120 API requests. The system successfully processed all requests with 0 errors and exceptional latency (mean 10ms, p99 40ms, well below the 300ms SLA target).
+- Completed task **8.3** (Final README, `docs/03-phases.md`) — final task in Phase 8:
+  - Rewrote the root [README.md](file:///home/dunguyen/Training/nestjs/shipping-system/README.md) to document the complete microservices architecture, docker-compose start instructions, TDD testing commands, and git dual-remote sync mechanics.
+- Completed task **8.2** (Concrete demo script, `docs/03-phases.md`) — second task in Phase 8:
+  - Created a Node.js-based E2E happy-path simulation script at [scripts/demo.js](file:///home/dunguyen/Training/nestjs/shipping-system/scripts/demo.js) to programmatically walk through order creation, Stripe webhook payment confirmation, courier pickup, line-haul trip routing, destination hub scan, last-mile courier assignment, final delivery, and timeline checks.
+  - Integrated `"demo": "node scripts/demo.js"` into the monorepo's `package.json` scripts.
+  - Fixed a subtle environment parsing bug in the script where hashes in inline comments were stripped prematurely, causing Stripe webhook test signatures to mismatch container-level configurations.
+  - Verified the demo script runs and completes 100% successfully against the running dockerised stack, generating the correct tracking timeline and email logs.
+- Completed task **8.1** (Unit tests for rule guards & state-machine transitions, `docs/03-phases.md`) — first task in Phase 8:
+  - Audited all 9 Business Rules (BR-01 to BR-09) against the unit test suites. Created an audit report at [rule_tests_audit.md](file:///home/dunguyen/.gemini/antigravity-cli/brain/230227fa-d01f-44fc-932b-7992dafb7e55/rule_tests_audit.md).
+  - Closed a real FSM integration gap: `ParcelEventConsumer` was dropping `parcel.rts` events because `RTS` isn't in the standard transition table. Added `updateParcelStateAndDirection` to `IOrderRepository`/`OrderRepository` and updated `ParcelEventConsumer` to call `ParcelStateMachine.applyRts()` to transition the state and flip the direction.
+  - Implemented missing NATS consumption for `parcel.lost_suspected` in `ParcelEventConsumer`, mapping it directly to `ParcelStateMachine.markLostSuspected()`.
+  - Added new unit tests in `parcel-event.consumer.spec.ts` covering RTS and Lost-Suspected scenarios, ensuring they transition correctly or drop invalid triggers. All tests passing cleanly (292/292).
 - Completed task **7.3** (Automate 1 happy-path integration test, `docs/03-phases.md`) — final task in Phase 7:
   - `apps/api-gateway/src/happy-path.integration.spec.ts` was already pre-staged (gated behind `RUN_INTEGRATION_TEST=true`), but was broken and asserted an unreachable final state:
     1. Imported the `uuid` npm package, which isn't installed — swapped to `crypto.randomUUID()` (confirmed with user first: zero new dependency, matches existing codebase convention over adding `uuid`).

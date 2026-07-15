@@ -8,7 +8,7 @@ import { ShipmentOrder } from '../entities/shipment-order.entity';
 import { Parcel } from '../entities/parcel.entity';
 import { Outbox, OutboxStatus } from '../entities/outbox.entity';
 import { ShipmentOrderStatus } from '../entities/shipment-order-status.enum';
-import { ParcelState } from '../entities/parcel.enums';
+import { ParcelDirection, ParcelState } from '../entities/parcel.enums';
 import { Payment } from '../entities/payment.entity';
 import { PaymentStatus } from '../entities/payment-status.enum';
 import {
@@ -116,6 +116,16 @@ export class OrderRepository implements IOrderRepository {
 
   async updateParcelState(parcelId: string, state: ParcelState): Promise<void> {
     await this.dataSource.getRepository(Parcel).update(parcelId, { state });
+  }
+
+  async updateParcelStateAndDirection(
+    parcelId: string,
+    state: ParcelState,
+    direction: ParcelDirection,
+  ): Promise<void> {
+    await this.dataSource
+      .getRepository(Parcel)
+      .update(parcelId, { state, direction });
   }
 
   async updateParcelWeightAndRoute(

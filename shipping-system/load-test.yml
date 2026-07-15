@@ -1,0 +1,40 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 2
+      name: "Light validation load"
+  processor: "./scripts/artillery-helpers.js"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Place prepaid order and track timeline"
+    flow:
+      - function: "generateOrderData"
+      - post:
+          url: "/orders"
+          headers:
+            Idempotency-Key: "{{ idempotencyKey }}"
+          json:
+            sender:
+              name: "{{ senderName }}"
+              phone: "{{ senderPhone }}"
+              address: "123 Sender St, Hanoi, REG-100"
+              region_code: "REG-100"
+            recipient:
+              name: "{{ recipientName }}"
+              phone: "{{ recipientPhone }}"
+              address: "456 Recipient St, HCM, REG-101"
+              region_code: "REG-101"
+            parcels:
+              - declared_weight_grams: 650
+                type: "parcel"
+            payment_type: "PREPAID_STRIPE"
+          capture:
+            - json: "$.shipment_order_id"
+              as: "orderId"
+      - think: 1
+      - get:
+          url: "/tracking/{{ orderId }}"

@@ -61,12 +61,20 @@ export class ParcelEventConsumer {
     return this.handle(NATS_SUBJECTS.PARCEL_RTS, payload);
   }
 
+  @EventPattern(NATS_SUBJECTS.PARCEL_LOST_SUSPECTED)
+  onLostSuspected(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_LOST_SUSPECTED, payload);
+  }
+
   private async handle(
     subject: string,
     payload: ParcelLifecyclePayload,
   ): Promise<void> {
     const eventType = mapSubjectToEventType(subject);
-    if (!eventType || !payload?.parcel_id) {
+    if (
+      (!eventType && subject !== NATS_SUBJECTS.PARCEL_LOST_SUSPECTED) ||
+      !payload?.parcel_id
+    ) {
       return;
     }
 
@@ -96,8 +104,23 @@ export class ParcelEventConsumer {
     }
 
     try {
-      const nextState = ParcelStateMachine.transition(parcel.state, eventType);
-      await this.orderRepository.updateParcelState(parcel.id, nextState);
+      if (subject === NATS_SUBJECTS.PARCEL_LOST_SUSPECTED) {
+        const nextState = ParcelStateMachine.markLostSuspected(parcel.state);
+        await this.orderRepository.updateParcelState(parcel.id, nextState);
+      } else if (subject === NATS_SUBJECTS.PARCEL_RTS) {
+        const rtsResult = ParcelStateMachine.applyRts(parcel.state);
+        await this.orderRepository.updateParcelStateAndDirection(
+          parcel.id,
+          rtsResult.state,
+          rtsResult.direction,
+        );
+      } else {
+        const nextState = ParcelStateMachine.transition(
+          parcel.state,
+          eventType!,
+        );
+        await this.orderRepository.updateParcelState(parcel.id, nextState);
+      }
     } catch (error) {
       // A NATS event consumer has no HTTP response to return a 422 on - a
       // BusinessRuleException (BR-02) or an undefined FSM edge here means
