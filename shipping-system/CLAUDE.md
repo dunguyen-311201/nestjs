@@ -90,9 +90,10 @@ VS Code installed via snap creates a sandboxed terminal with a different `$HOME`
 - `docs/01-ERD.md` — 16 entities, relationships, design notes (scoped slice)
 - `docs/02-HLD.md` — services, NATS subject map, REST endpoints
 - `docs/03-phases.md` — estimation: timeline, actor coverage, roadmap, 16-day phase plan
-- `docs/04-business-rules.md` — the single authoritative Rule Catalogue (BR-01–BR-10); other docs link here instead of duplicating it
+- `docs/04-business-rules.md` — the single authoritative Rule Catalogue (BR-01–BR-09); other docs link here instead of duplicating it
 - `docs/05-analysis.md` — original pre-scope-cut analysis, kept for historical context only (do not build against it)
 - `docs/06-specification.md` — scoped-slice specification; also the canonical home for Non-Functional Requirements
+- `docs/07-e2e-walkthrough.md` — full end-to-end vertical-slice walkthrough (order → payment → hub → line-haul → dispatcher → courier → tracking → notification) against the dockerized stack, every command's output actually captured, not hypothetical; documents a real gap found while writing it (`PARCEL.state` can't reach `Delivered` through the full multi-hub flow yet)
 - `docs/lld/` — one self-contained file per service: Versioning, Key Design Decisions, Use Cases, Sequence Diagrams, API DTOs/validation/error codes, DB indexes/constraints. `00-conventions.md` first (shared rules), then per-service files. No separate top-level use-case/sequence-diagram doc — each service's are embedded in its own LLD file to avoid a second copy drifting out of sync.
 
 All docs are synchronized to the scoped slice. Any remaining mention of bags/manifests is an explicit "out of scope / not modeled" note, not a feature to build.

@@ -8,10 +8,37 @@
 
 ## Resume point
 
-- **Current phase:** Phase 7 — Integration & E2E (1.0d), task `7.1`
+- **Current phase:** Phase 7 — Integration & E2E (1.0d), task `7.2`
   complete. See `docs/03-phases.md`.
-- **Next task:** `7.2` Document the full end-to-end workflow walkthrough.
-  Run `/begin-task 7.2` to start it.
+- **Next task:** `7.3` Automate 1 happy-path integration test. Run
+  `/begin-task 7.3` to start it. Note: `apps/api-gateway/src/
+  happy-path.integration.spec.ts` already exists pre-staged (gated
+  behind `RUN_INTEGRATION_TEST=true`) — check it against the gap noted
+  below before assuming it needs to be written from scratch.
+- **Task `7.2` (Document the full end-to-end workflow walkthrough)
+  complete**: new `docs/07-e2e-walkthrough.md`, linked from `CLAUDE.md`.
+  Runs the complete current vertical slice through the API Gateway
+  against the dockerized stack (both from task 7.1); every command's
+  output is real, captured while actually running it, not hypothetical.
+  **Real gap found while writing it, not fixed (out of scope for a docs
+  task)**: `PARCEL.state` can never reach `Delivered` through the full
+  multi-hub flow — `parcel.loaded_for_linehaul` and
+  `parcel.out_for_delivery` have consumers in Order/Tracking but zero
+  publishers anywhere in Hub/Line-haul/Dispatcher/Courier (confirmed via
+  grep, re-verified independently). Line-haul's `/depart` has no
+  per-parcel effect (no parcel-to-trip association exists in this
+  schema); Hub's destination-scan publishes `ARRIVED_AT_HUB` directly,
+  skipping the `DEPARTED_LINEHAUL` step Order's FSM requires first, so
+  it's silently dropped — same for `DELIVERED` from Courier's
+  `/deliver`. Tracking's append-only timeline, Courier's
+  `PROOF_OF_DELIVERY` write, and Notification's email all still fire
+  correctly regardless, since none of them depend on `PARCEL.state`.
+  Flagged for a follow-up task (likely touching Hub's transit-scan event
+  choice or Line-haul's `/depart`), not silently patched mid-walkthrough.
+  Also fixed `CLAUDE.md`'s Docs list's same stale "BR-01–BR-10" →
+  "BR-01–BR-09" already-approved correction from task 6.6. No code
+  changes; `pnpm build`/`pnpm lint`/`pnpm test` unchanged from 7.1's
+  last clean run (279/279).
 - **Task `7.1` (Wire the full vertical slice in local docker-compose)
   complete**: switched `nest-cli.json` to the Webpack builder for all 8
   apps (confirmed with user first — plain `tsc` produced an inconsistent
