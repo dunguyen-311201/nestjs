@@ -8,12 +8,32 @@
 
 ## Resume point
 
-- **Current phase:** Phase 6 — Operational Services (3.0d), task `6.5`
-  complete (final task in Phase 6). Next: `6.6` Notification consumer.
+- **Current phase:** Phase 6 — Operational Services (3.0d) **complete**
+  (`6.1`-`6.6`, all tasks done). Next: Phase 7 — Integration & E2E (1.0d).
   See `docs/03-phases.md`.
-- **Next task:** `6.6` Notification consumer: stateless email dispatcher on
-  order/payment/delivery/RTS/lost events (BR-09). Run `/begin-task 6.6` to
-  start it.
+- **Next task:** `7.1` Wire the full vertical slice in local
+  docker-compose. Run `/begin-task 7.1` to start it.
+- **Task `6.6` (Notification: stateless email dispatcher) complete**: new
+  app logic in `apps/notification` — pure NATS consumer (`@EventPattern`
+  on all 5 lifecycle events: `order.created`, `payment.succeeded`,
+  `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected`), no HTTP
+  surface, no DB, no idempotency store (LLD accepts a duplicate email as
+  cheaper than deduplicating). On send failure: log and swallow, never
+  rethrow — the NATS ack still happens normally, matching BR-09's
+  "never blocks the triggering transaction." **Two things fixed, both
+  confirmed with user first**: (1) `docs/lld/notification-service.md`
+  cited stale "BR-10" in 3 places — the authoritative catalogue's BR-09
+  *is* Notifications; fixed all 3 to BR-09; (2) no event carries an email
+  address and none exists anywhere in the project (`CUSTOMER`, seed
+  script, docs) — rather than inventing a new PII field with no
+  consumer, built `IEmailProvider` + `LoggingEmailAdapter`, a stub that
+  logs using only the `order_id`/`parcel_id` already on each event, no DB
+  read at all. 279/279 tests passing; `pnpm build`/`pnpm lint`/`pnpm
+  test` all green. **Live-verified end-to-end**: booted as a real
+  `NestMicroservice` (no HTTP port), published a real `order.created` and
+  `parcel.rts` message against the dockerized NATS via a throwaway
+  script, confirmed both were consumed and logged with correct
+  subject/body text.
 - **Task `6.5` (Dispatcher: driver/truck-to-trip + courier-to-leg
   assignment) complete**: new app logic in `apps/dispatcher` —
   `POST /trips/{id}/assign` (UC-09, in-schema write to Line-haul's

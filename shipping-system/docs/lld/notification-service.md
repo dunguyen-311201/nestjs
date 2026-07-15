@@ -10,14 +10,14 @@ Owns: nothing (stateless). Conventions in [00-conventions.md](file:///home/dungu
 
 ## Key Design Decisions
 
-- **Best-effort, not idempotent by design**: unlike every other service in this system, a duplicate `payment.succeeded` delivery (within the JetStream dedup window or after redelivery) may cause a duplicate email. This is accepted — the cost of a duplicate email is far lower than the engineering cost of deduplicating a non-critical side effect (BR-10).
+- **Best-effort, not idempotent by design**: unlike every other service in this system, a duplicate `payment.succeeded` delivery (within the JetStream dedup window or after redelivery) may cause a duplicate email. This is accepted — the cost of a duplicate email is far lower than the engineering cost of deduplicating a non-critical side effect (BR-09).
 - **Never on the critical path**: no outbox, no DLQ, no retry loop. A failure here can never cause a `SCANEVENT` gap or block another service — it only means one fewer email sent.
 
 ## Use Cases
 
 | UC | Use Case | Actor | Trigger | Main Outcome | Related BR |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| UC-16 | Send Notification | System | Key lifecycle event fires | Best-effort email sent (never blocks the source transaction) | BR-10 |
+| UC-16 | Send Notification | System | Key lifecycle event fires | Best-effort email sent (never blocks the source transaction) | BR-09 |
 
 ## Sequence Diagrams
 
@@ -27,7 +27,7 @@ No dedicated diagram — this service only ever appears as a side-note consumer 
 
 None — this service has no REST surface. It is a pure NATS consumer subscribed to `order.created`, `payment.succeeded`, `parcel.delivered`, `parcel.rts`, `parcel.lost_suspected` (see [docs/02-HLD.md § NATS Subject Map](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md)).
 
-## Behavior Contract (BR-10)
+## Behavior Contract (BR-09)
 
 - On message received: call the email provider SDK synchronously within the handler.
 - On send success: ack the message, done.

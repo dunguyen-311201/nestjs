@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { NotificationModule } from './notification.module';
 
 // Notification has zero REST endpoints and owns no table - a pure NATS
-// consumer. No HTTP listener, no DataSource. The actual JetStream
-// @EventPattern consumers are later work; for now this only proves the
-// raw NATS connection works (see main.ts).
+// consumer. No HTTP listener, no DataSource.
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true })],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), NotificationModule],
 })
 export class AppModule {}
