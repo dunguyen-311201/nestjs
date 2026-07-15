@@ -6,15 +6,27 @@ import {
 } from '@nestjs/common';
 import { IOutboxRepository } from './ports/outbox-repository.port';
 import { IEventPublisher } from './ports/event-publisher.port';
+import { CircuitBreaker, CircuitState } from './circuit-breaker';
 
 const POLL_INTERVAL_MS = 500;
 const BATCH_SIZE = 20;
+
+// After 5 consecutive publish failures (e.g. NATS down), stop attempting
+// for 5s, doubling up to 60s on repeated failure - see circuit-breaker.ts.
+const CIRCUIT_FAILURE_THRESHOLD = 5;
+const CIRCUIT_INITIAL_COOLDOWN_MS = 5000;
+const CIRCUIT_MAX_COOLDOWN_MS = 60000;
 
 @Injectable()
 export class OutboxPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxPollerService.name);
   private interval: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  private readonly circuitBreaker = new CircuitBreaker({
+    failureThreshold: CIRCUIT_FAILURE_THRESHOLD,
+    initialCooldownMs: CIRCUIT_INITIAL_COOLDOWN_MS,
+    maxCooldownMs: CIRCUIT_MAX_COOLDOWN_MS,
+  });
 
   constructor(
     private readonly outboxRepository: IOutboxRepository,
@@ -32,10 +44,10 @@ export class OutboxPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async pollOnce(): Promise<void> {
-    // A previous poll tick may still be in flight (e.g. a slow NATS
-    // publish); skip this tick rather than running two batches
-    // concurrently against the same PENDING rows.
     if (this.polling) {
+      return;
+    }
+    if (!this.circuitBreaker.canAttempt()) {
       return;
     }
     this.polling = true;
@@ -49,10 +61,18 @@ export class OutboxPollerService implements OnModuleInit, OnModuleDestroy {
             row.payload,
           );
           await this.outboxRepository.markPublished(row.id);
+          this.circuitBreaker.onSuccess();
         } catch (error) {
           this.logger.error(
             `Failed to publish outbox row ${row.id}: ${(error as Error).message}`,
           );
+          this.circuitBreaker.onFailure();
+          if (this.circuitBreaker.getState() === CircuitState.OPEN) {
+            this.logger.warn(
+              'Circuit breaker open - pausing outbox publishing until the cooldown elapses',
+            );
+            break;
+          }
         }
       }
     } finally {
