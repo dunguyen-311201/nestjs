@@ -1,6 +1,11 @@
+packages:
+  - apps/web
+
 allowBuilds:
+  '@clerk/shared': true
   '@playwright/browser-chromium': true
   '@scarf/scarf': true
+  esbuild: true
   protobufjs: true
   unix-dgram: true
   unrs-resolver: true
