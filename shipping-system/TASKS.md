@@ -3,6 +3,11 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-07-16
+
+### Done
+- Added a real **SendGrid** mail provider to the Notification service behind the existing `IEmailProvider` port: new `apps/notification/src/adapters/sendgrid-email.adapter.ts` calling SendGrid's v3 `mail/send` HTTP API via built-in `fetch` (zero new dependencies). `notification.module.ts` now picks `SendGridEmailAdapter` when `SENDGRID_API_KEY` is set, otherwise falls back to `LoggingEmailAdapter`. Env vars (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_TO_EMAIL`) documented in `.env.example`. TDD: 3 new specs in `sendgrid-email.adapter.spec.ts` (endpoint/auth headers, payload shape, non-2xx rejection). 345/345 tests green; build + lint clean.
+
 ## 2026-07-15
 
 ### Done
