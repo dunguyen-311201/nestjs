@@ -5,6 +5,7 @@ import { NotificationService } from './notification.service';
 import { IEmailProvider } from './ports/email-provider.port';
 import { LoggingEmailAdapter } from './adapters/logging-email.adapter';
 import { SendGridEmailAdapter } from './adapters/sendgrid-email.adapter';
+import { ResendEmailAdapter } from './adapters/resend-email.adapter';
 
 @Module({
   controllers: [NotificationConsumer],
@@ -13,10 +14,15 @@ import { SendGridEmailAdapter } from './adapters/sendgrid-email.adapter';
     {
       provide: IEmailProvider,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService): IEmailProvider =>
-        configService.get<string>('SENDGRID_API_KEY')
-          ? new SendGridEmailAdapter(configService)
-          : new LoggingEmailAdapter(),
+      useFactory: (configService: ConfigService): IEmailProvider => {
+        if (configService.get<string>('RESEND_API_KEY')) {
+          return new ResendEmailAdapter(configService);
+        }
+        if (configService.get<string>('SENDGRID_API_KEY')) {
+          return new SendGridEmailAdapter(configService);
+        }
+        return new LoggingEmailAdapter();
+      },
     },
   ],
 })
