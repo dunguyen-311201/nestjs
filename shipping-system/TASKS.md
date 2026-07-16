@@ -6,6 +6,7 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-16
 
 ### Done
+- Cleaned the `StatusProjectionConsumer` class comment: dropped ADR-001/BR-07/ADR-005/docs-path citations (dangling on the docs-stripped GitLab remote), kept the JetStream-vs-NATS-core and debounce rationale. Sweep found 53 more such references across 35 source files — pending decision on a full cleanup pass.
 - Researched free mail providers that need no custom domain (SendGrid free tier lacks usable sender verification): Brevo (best — 300/day, Gmail sender, any recipient), Mailjet, Mailtrap sandbox, Resend (no-domain mode limited to `onboarding@resend.dev` → own account email only). User chose Resend.
 - Rewrote the email section of `docs/09-real-integrations-guide.md` to match the real implementation: fetch-based `ResendEmailAdapter`/`SendGridEmailAdapter` behind `IEmailProvider` (no SDK install), env-var adapter selection priority, `.env` keys, container rebuild step, and the actual verification commands (direct curl smoke test + gateway order + `docker logs | grep Resend`).
 - Live-verified Resend end-to-end: direct API smoke test (HTTP 200), rebuilt `shipping_notification` container, created a real order via the gateway (`POST /orders` → 201) and confirmed `[ResendEmailAdapter] Email sent via Resend for ref <order_id>` in the container logs; real email delivered to the account inbox.
