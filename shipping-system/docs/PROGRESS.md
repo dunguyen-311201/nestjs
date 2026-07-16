@@ -8,14 +8,29 @@
 
 ## Resume point
 
-- **Current phase:** Phase 9 — Auth & RBAC extension (4.0d), tasks 9.1–9.3
-  **complete**; see `docs/03-phases.md` and `docs/10-authz-plan.md`.
-- **Next task:** **9.4 — Customer ownership + E2E** (1.0d):
-  `SHIPMENT_ORDER.created_by_user_id` (nullable, no backfill), order service
-  writes it from `x-user-id` and filters `GET /orders/*` for customers
-  (admin sees all), tracking restricted to own orders (fallback: any
-  authenticated customer), per-actor E2E smoke, docs sync + docker image
-  rebuild (the `:3000` container still runs the pre-RBAC image).
+- **Current phase:** Phase 9 — Auth & RBAC extension (4.0d) **complete**
+  (9.1–9.4 all done 16 Jul); see `docs/03-phases.md` and
+  `docs/10-authz-plan.md`.
+- **Next task:** None scheduled. Candidate follow-ups (explicit Phase 9
+  cuts, pick deliberately): per-resource ownership for shipper/hub
+  (assignee columns), recipient share-link tracking, role-management UI,
+  Clerk→DB user sync. Tracking currently readable by any authenticated
+  customer (documented fallback).
+
+## 2026-07-16 — Phase 9.4: Customer ownership + per-actor E2E
+
+- `SHIPMENT_ORDER.created_by_user_id` (varchar 64, nullable, indexed):
+  written from gateway-verified `x-user-id` on create; new `GET /orders`
+  filters by it (admin sees all, null identity gets []). Legacy orders
+  (null) admin-only, no backfill. DDL + live ALTER applied.
+- Kept `created_by_user_id` (authenticated account) separate from
+  `sender_id`→CUSTOMER (physical pickup contact) — discussed and
+  reaffirmed with user; rationale in `docs/lld/order-service.md`.
+- E2E per actor via dockerized gateway: customer create+list-own+track ✅,
+  admin sees all (1003) ✅, shipper 403 ✅. Test users in Clerk:
+  `shipper.test@example.com`, `customer.test@example.com`.
+- 408 unit tests green; images `api-gateway` + `order` rebuilt (RBAC live
+  on `:3000`).
 
 ## 2026-07-16 — Phase 9.1–9.3: Clerk auth + role claim + gateway RBAC
 
