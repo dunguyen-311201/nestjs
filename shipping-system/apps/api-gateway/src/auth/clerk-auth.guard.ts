@@ -1,11 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ITokenVerifier, VerifiedToken } from './ports/token-verifier.port';
+import { ROUTE_ACCESS } from './route-access.config';
 
 interface PublicRoute {
   method: string;
@@ -42,11 +44,28 @@ export class ClerkAuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing bearer token');
     }
 
+    let auth: VerifiedToken;
     try {
-      req.auth = await this.tokenVerifier.verify(header.slice(7));
+      auth = await this.tokenVerifier.verify(header.slice(7));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
+
+    if (auth.role !== 'admin') {
+      const rule = ROUTE_ACCESS.find(
+        (r) =>
+          (!r.method || r.method === req.method) && r.pattern.test(req.path),
+      );
+      if (!rule || auth.role === null || !rule.roles.includes(auth.role)) {
+        throw new ForbiddenException(
+          rule
+            ? `Requires role: ${rule.roles.join(' | ')}`
+            : 'Requires role: admin',
+        );
+      }
+    }
+
+    req.auth = auth;
     return true;
   }
 }

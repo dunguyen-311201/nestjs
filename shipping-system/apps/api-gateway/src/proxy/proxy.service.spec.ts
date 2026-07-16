@@ -82,7 +82,7 @@ describe('ProxyService', () => {
   describe('buildForwardHeaders', () => {
     interface FakeAuthedRequest {
       headers: Record<string, string | string[] | undefined>;
-      auth?: { userId: string; sessionId: string };
+      auth?: { userId: string; sessionId: string; role: string | null };
     }
 
     function requestWith(overrides: Partial<FakeAuthedRequest>) {
@@ -94,7 +94,9 @@ describe('ProxyService', () => {
 
     it('injects verified identity headers when the request is authenticated', () => {
       const headers = service.buildForwardHeaders(
-        requestWith({ auth: { userId: 'user_1', sessionId: 'sess_1' } }),
+        requestWith({
+          auth: { userId: 'user_1', sessionId: 'sess_1', role: 'customer' },
+        }),
         'order.internal',
       );
       expect(headers['x-user-id']).toBe('user_1');
@@ -114,11 +116,32 @@ describe('ProxyService', () => {
       expect(headers['x-session-id']).toBeUndefined();
     });
 
+    it('injects x-user-role from the verified token', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({
+          auth: { userId: 'user_1', sessionId: 'sess_1', role: 'shipper' },
+        }),
+        'order.internal',
+      );
+      expect(headers['x-user-role']).toBe('shipper');
+    });
+
+    it('strips a client-sent x-user-role and omits it when the role is null', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({
+          headers: { 'x-user-role': 'admin' },
+          auth: { userId: 'user_1', sessionId: 'sess_1', role: null },
+        }),
+        'order.internal',
+      );
+      expect(headers['x-user-role']).toBeUndefined();
+    });
+
     it('overrides client-sent identity headers with the verified identity', () => {
       const headers = service.buildForwardHeaders(
         requestWith({
           headers: { 'x-user-id': 'spoofed' },
-          auth: { userId: 'user_1', sessionId: 'sess_1' },
+          auth: { userId: 'user_1', sessionId: 'sess_1', role: 'customer' },
         }),
         'order.internal',
       );

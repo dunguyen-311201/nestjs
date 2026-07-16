@@ -1,4 +1,8 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ClerkAuthGuard } from './clerk-auth.guard';
 import { ITokenVerifier, VerifiedToken } from './ports/token-verifier.port';
 
@@ -52,16 +56,69 @@ describe('ClerkAuthGuard', () => {
     expect(req.auth?.role).toBe('customer');
   });
 
-  it('attaches a null role for a user with no role assigned', async () => {
-    const req: FakeRequest = {
-      method: 'GET',
-      path: '/orders',
-      headers: { authorization: 'Bearer good-token' },
-    };
-    await expect(
-      guardWith({ ...verified, role: null }).canActivate(contextFor(req)),
-    ).resolves.toBe(true);
-    expect(req.auth?.role).toBeNull();
+  describe('role enforcement (RBAC)', () => {
+    function reqFor(method: string, path: string): FakeRequest {
+      return { method, path, headers: { authorization: 'Bearer t' } };
+    }
+
+    it.each([
+      ['customer', 'GET', '/orders'],
+      ['customer', 'POST', '/orders'],
+      ['customer', 'POST', '/orders/o-1/checkout'],
+      ['customer', 'GET', '/payments/p-1'],
+      ['customer', 'GET', '/tracking/o-1'],
+      ['shipper', 'POST', '/couriers/legs/l-1/pickup'],
+      ['shipper', 'POST', '/couriers/legs/l-1/deliver'],
+      ['hub_staff', 'POST', '/hubs/h-1/receive'],
+      ['dispatcher', 'POST', '/trips'],
+      ['dispatcher', 'POST', '/trips/t-1/assign'],
+      ['dispatcher', 'POST', '/legs/l-1/assign'],
+      ['admin', 'GET', '/orders'],
+      ['admin', 'POST', '/hubs/h-1/receive'],
+      ['admin', 'POST', '/legs/l-1/assign'],
+      ['admin', 'GET', '/some-future-route'],
+    ] as const)('allows %s to %s %s', async (role, method, path) => {
+      const req = reqFor(method, path);
+      await expect(
+        guardWith({ ...verified, role }).canActivate(contextFor(req)),
+      ).resolves.toBe(true);
+      expect(req.auth?.role).toBe(role);
+    });
+
+    it.each([
+      ['customer', 'POST', '/hubs/h-1/receive'],
+      ['customer', 'POST', '/legs/l-1/assign'],
+      ['shipper', 'GET', '/orders'],
+      ['shipper', 'POST', '/trips'],
+      ['hub_staff', 'POST', '/couriers/legs/l-1/pickup'],
+      ['dispatcher', 'GET', '/tracking/o-1'],
+      ['customer', 'GET', '/some-future-route'],
+    ] as const)(
+      'forbids %s from %s %s with 403',
+      async (role, method, path) => {
+        await expect(
+          guardWith({ ...verified, role }).canActivate(
+            contextFor(reqFor(method, path)),
+          ),
+        ).rejects.toThrow(ForbiddenException);
+      },
+    );
+
+    it('forbids an authenticated user with no role (403, not 401)', async () => {
+      await expect(
+        guardWith({ ...verified, role: null }).canActivate(
+          contextFor(reqFor('GET', '/orders')),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('still returns 401, not 403, when the token itself is invalid', async () => {
+      await expect(
+        guardWith(new Error('bad token')).canActivate(
+          contextFor(reqFor('GET', '/orders')),
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
   });
 
   it('rejects a request with no Authorization header', async () => {
