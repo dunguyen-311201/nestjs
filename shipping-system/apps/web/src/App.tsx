@@ -11,6 +11,44 @@ const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   'http://localhost:3000';
 
+function TokenPanel() {
+  const { getToken } = useAuth();
+  const [token, setToken] = useState<string>('');
+  const [copied, setCopied] = useState(false);
+
+  async function showToken() {
+    const t = await getToken();
+    setToken(t ?? 'No session token available');
+    setCopied(false);
+  }
+
+  async function copyToken() {
+    await navigator.clipboard.writeText(token);
+    setCopied(true);
+  }
+
+  return (
+    <section>
+      <button onClick={() => void showToken()}>Get session token</button>{' '}
+      {token && (
+        <button onClick={() => void copyToken()}>
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      )}
+      <pre
+        style={{
+          background: '#f4f4f4',
+          padding: '1rem',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
+        {token || 'Token expires ~60s after minting — re-fetch as needed'}
+      </pre>
+    </section>
+  );
+}
+
 function OrdersPanel() {
   const { getToken, userId } = useAuth();
   const [result, setResult] = useState<string>('');
@@ -76,6 +114,7 @@ export function App() {
         <SignInButton mode="modal" />
       </SignedOut>
       <SignedIn>
+        <TokenPanel />
         <OrdersPanel />
       </SignedIn>
     </main>
