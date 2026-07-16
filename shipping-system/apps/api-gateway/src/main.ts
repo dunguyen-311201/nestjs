@@ -18,7 +18,20 @@ async function bootstrap() {
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api/docs', app, document, {
+      explorer: true,
+      swaggerOptions: {
+        urls: [
+          { name: 'API Gateway', url: '/api/docs-json' },
+          { name: 'Order Service', url: '/api/docs/order/json' },
+          { name: 'Tracking Service', url: '/api/docs/tracking/json' },
+          { name: 'Courier Service', url: '/api/docs/courier/json' },
+          { name: 'Hub Service', url: '/api/docs/hub/json' },
+          { name: 'Linehaul Service', url: '/api/docs/linehaul/json' },
+          { name: 'Dispatcher Service', url: '/api/docs/dispatcher/json' },
+        ],
+      },
+    });
   }
 
   await app.listen(process.env.PORT ?? 3000);
