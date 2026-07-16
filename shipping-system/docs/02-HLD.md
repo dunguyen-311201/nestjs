@@ -174,6 +174,10 @@ Each event has: a name, a version, a payload schema (fields + types), a producer
 ### REST Endpoints
 The gateway handles authentication, RBAC, request routing, and validation; OpenAPI is generated from DTOs. Endpoints are grouped by actor. All write endpoints validate against business-rule guards before emitting events.
 
+**Authentication (implemented):** every route below requires a Clerk session JWT (`Authorization: Bearer`), verified at the gateway by a global `ClerkAuthGuard` behind an `ITokenVerifier` port (`@clerk/backend` adapter, `CLERK_SECRET_KEY`). Public exceptions: `GET /health`, Swagger docs, and `POST /payments/webhook` (authenticated by `Stripe-Signature` instead). The proxy strips any client-sent `x-user-id`/`x-session-id` and injects the gateway-verified identity, so downstream services trust these headers without re-verifying the JWT. A minimal React app (`apps/web`, Vite + `@clerk/clerk-react`) provides sign-in and session-token retrieval.
+
+**Authorization (planned):** role-to-endpoint enforcement (`customer`, `shipper`, `hub_staff`, `dispatcher`, `admin` from Clerk `publicMetadata.role`) via a gateway `ROUTE_ACCESS` map — see [docs/10-authz-plan.md](./10-authz-plan.md) for the permission matrix and 3-day plan. The actor column below maps to those roles (Sender → `customer`, Courier → `shipper`, Hub Operator → `hub_staff`, Dispatcher → `dispatcher`). **Recipient** is the open case: the tracking timeline is currently planned as customer-owned (`GET /tracking/*` restricted to the order's creator + admin per the plan's matrix), which drops the original "shared tracking link" idea — the plan's documented fallback is any authenticated `customer`; a true recipient share-link would be a later extension.
+
 | Actor | Endpoint | Purpose |
 | :--- | :--- | :--- |
 | **Sender** | `POST` `/orders` | Create an order; returns order + locked price |
@@ -291,7 +295,7 @@ When a consumer fails due to system-level errors:
 
 ## Cross-cutting Concerns
 
-- **Auth & RBAC**: Roles include Sender/Customer, Courier, Hub Operator, Dispatcher, Admin. The gateway enforces role-to-endpoint access; services re-check on sensitive operations.
+- **Auth & RBAC**: Authentication is implemented — Clerk session JWTs verified by a global guard at the gateway; verified identity propagated downstream as spoof-proof `x-user-id`/`x-session-id` headers. RBAC (roles `customer`, `shipper`, `hub_staff`, `dispatcher`, `admin` stored in Clerk `publicMetadata` and embedded in the JWT) is planned per [docs/10-authz-plan.md](./10-authz-plan.md): the gateway enforces role-to-endpoint access via a `ROUTE_ACCESS` map (401 unauthenticated vs 403 insufficient role); services re-check ownership on sensitive operations (customer sees only own orders via `ORDER.created_by_user_id` — the table 02-HLD names `ORDER`, called `SHIPMENT_ORDER` in the ERD/spec).
 - **Security & PII**: Recipient PII (name, phone, address) is field-level encrypted at rest; region/postal code is stored in plaintext as routing metadata so sortation never decrypts PII.
 - **Observability**: A correlation/trace id follows a parcel across services and events; health endpoints per service.
 - **Error handling**: Retries with backoff; a dead-letter subject; idempotent consumers; a reconciliation job.

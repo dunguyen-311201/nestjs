@@ -67,6 +67,7 @@ Rules are grouped by operational area (Order & Parcel, Tracking & Scan Events, D
 
 ## Functional Requirements
 
+- Authentication & Authorization: All actors authenticate via Clerk (session JWT verified at the API gateway; implemented). Role-based access — `customer` places/tracks own orders, `shipper` picks up/delivers, `hub_staff` runs warehouse scans, `dispatcher` assigns trips/legs, `admin` unrestricted — enforced at the gateway per [docs/10-authz-plan.md](./10-authz-plan.md).
 - Order Management: Capture order payloads containing sender/recipient profiles, multi-parcel details, and locked pricing/ETA.
 - Stripe Online Checkout: Process prepaid orders using Stripe Checkout sessions and handle webhook callbacks (BR-08).
 - First/Last-Mile Dispatch: Route pickup and delivery tasks to local couriers.
@@ -85,4 +86,4 @@ Rules are grouped by operational area (Order & Parcel, Tracking & Scan Events, D
 | Throughput | The system must handle a peak sustained throughput of 2,500 scans/second without performance degradation. |
 | Latency | End-consumer order status queries must return responses in under 300 ms at P99 (served from Redis). |
 | Consistency | Strong transactional consistency (ACID) within single service boundaries. Eventual consistency across services via NATS JetStream. |
-| Security | Field-level encryption (AES-256-GCM) for PII data; Role-Based Access Control (RBAC). |
+| Security | Field-level encryption (AES-256-GCM) for PII data; Clerk JWT authentication at the gateway (implemented) with spoof-proof identity header propagation; Role-Based Access Control (RBAC) per [docs/10-authz-plan.md](./10-authz-plan.md). |

@@ -4,8 +4,8 @@
 A domestic parcel shipping system built on a hub-and-spoke network with NestJS microservices and a NATS event backbone. This estimation covers one end-to-end vertical slice with full workflow coverage for every actor: Sender, Recipient, Courier, Hub Operator, Dispatcher, and System.
 
 ## Timeline
-- Estimated time: 16 days
-- Actual time: *(track as work progresses)*
+- Estimated time: 16 days (original slice) + 4 days Auth & RBAC extension (Phase 9) = 20 days
+- Actual time: *(track as work progresses; Phase 9.1 done 16 Jul)*
 
 ## Actor Coverage
 | Actor | Operational Workflow | Covered Component |
@@ -24,6 +24,7 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 | **Week 1** | HLD finalized, ADRs written, project scaffolded (local Docker), core backend event chain working |
 | **Week 2** | Exception states + state machine; operational services (Courier, Hub, Line-haul, Dispatcher); Payment (Stripe) + PII |
 | **Week 3** | Slice wired end to end; full workflow documented; critical-path tests; unit tests, demo (all actors via API), defer-list |
+| **14–17 Jul (ext.)** | Auth & RBAC extension: Clerk authentication at the gateway (done 16 Jul) + 3-day role-based authorization ([docs/10-authz-plan.md](./10-authz-plan.md)) |
 
 ## Details Estimation
 
@@ -44,7 +45,9 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 | 6 | Operational Services | 3.0 |
 | 7 | Integration & E2E | 1.0 |
 | 8 | Testing, Demo & Docs | 1.0 |
-| — | **Total** | **16.0** |
+| — | **Subtotal (original slice)** | **16.0** |
+| 9 | Auth & RBAC (extension) | 4.0 |
+| — | **Total** | **20.0** |
 
 ### Phase 1 — Analysis (1.0d)
 - **1.1** Domain research & actor mapping
@@ -75,11 +78,11 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 - **5.7** Per-aggregate serialization: NATS JetStream per-order subject + event-batching
 - **5.8** Payment: Stripe Checkout session + webhook handler + `PAYMENT_TRANSACTION` log + prepaid dispatch guard (BR-08)
 
-### Phase 6 — Operational Services (2.5d)
+### Phase 6 — Operational Services (3.0d)
 - **6.1** Courier Service: pickup/delivery legs + scan events
 - **6.2** Hub/Sortation: HUB_RECEIVE, parcel inbound/outbound scan at hub
 - **6.3** PII field-level encryption (shared crypto helper)
-- **6.4** Line-haul: trip creation, depart/arrive hooks, deconsolidation
+- **6.4** Line-haul: trip creation, depart/arrive hooks (consolidation/deconsolidation stays cut — physical-only, not modeled)
 - **6.5** Dispatcher Service: driver/truck-to-trip + courier-to-leg assignment
 - **6.6** Notification consumer: stateless email dispatcher on order/payment/delivery/RTS/lost events (BR-09)
 
@@ -92,4 +95,30 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 - **8.1** Unit tests for rule guards & state-machine transitions
 - **8.2** Concrete demo script (Order -> Track simulation, single happy path)
 - **8.3** Final README
+
+### Phase 9 — Auth & RBAC extension (4.0d)
+
+Added after the original 16-day slice. Goal: every main actor authenticates
+(Clerk) and operates within their role — customer places/tracks own orders and
+receives notifications; shipper picks up/delivers; hub staff runs warehouse
+scans; dispatcher assigns; admin sees all. Full design + permission matrix in
+[docs/10-authz-plan.md](./10-authz-plan.md).
+
+- **9.1** ✅ Authentication at the gateway (1.0d, done 16 Jul): global
+  `ClerkAuthGuard` (Clerk session JWT, `ITokenVerifier` port +
+  `@clerk/backend` adapter), public exceptions (health/docs/Stripe webhook),
+  spoof-proof `x-user-id`/`x-session-id` propagation, gateway CORS,
+  Turborepo + `apps/web` React sign-in/token app.
+- **9.2** Role in the token (1.0d): `Role` contract, `VerifiedToken.role`
+  from Clerk `publicMetadata` session claim, per-role test users, token
+  panel shows role.
+- **9.3** Gateway RBAC (1.0d): `ROUTE_ACCESS` map (401 vs 403),
+  `x-user-role` injection/strip, per-role smoke tests.
+- **9.4** Customer ownership + E2E (1.0d):
+  `SHIPMENT_ORDER.created_by_user_id` (nullable, no backfill — legacy orders
+  admin-only), `GET /orders` filtering, tracking restricted to own orders
+  (fallback: any authenticated customer), per-actor E2E, docs sync.
+
+Out of scope (explicit cuts): per-resource ownership for shipper/hub
+(assignee columns), role-management UI, Clerk→DB user sync, multi-role users.
 
