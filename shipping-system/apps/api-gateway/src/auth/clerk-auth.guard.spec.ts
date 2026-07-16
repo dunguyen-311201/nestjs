@@ -29,7 +29,11 @@ function contextFor(req: FakeRequest): ExecutionContext {
 }
 
 describe('ClerkAuthGuard', () => {
-  const verified: VerifiedToken = { userId: 'user_123', sessionId: 'sess_1' };
+  const verified: VerifiedToken = {
+    userId: 'user_123',
+    sessionId: 'sess_1',
+    role: 'customer',
+  };
 
   function guardWith(result: VerifiedToken | Error): ClerkAuthGuard {
     return new ClerkAuthGuard(new FakeTokenVerifier(result));
@@ -45,6 +49,19 @@ describe('ClerkAuthGuard', () => {
       guardWith(verified).canActivate(contextFor(req)),
     ).resolves.toBe(true);
     expect(req.auth).toEqual(verified);
+    expect(req.auth?.role).toBe('customer');
+  });
+
+  it('attaches a null role for a user with no role assigned', async () => {
+    const req: FakeRequest = {
+      method: 'GET',
+      path: '/orders',
+      headers: { authorization: 'Bearer good-token' },
+    };
+    await expect(
+      guardWith({ ...verified, role: null }).canActivate(contextFor(req)),
+    ).resolves.toBe(true);
+    expect(req.auth?.role).toBeNull();
   });
 
   it('rejects a request with no Authorization header', async () => {

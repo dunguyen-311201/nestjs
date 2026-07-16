@@ -1,3 +1,4 @@
+export * from './auth/role';
 export * from './base-event';
 export * from './subjects';
 export * from './events/order-created.event';
