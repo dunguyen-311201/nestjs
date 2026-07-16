@@ -2,13 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   NotFoundException,
   Param,
   Post,
   Query,
 } from '@nestjs/common';
 import { IdempotencyKey } from '@app/dtos';
-import { OrderService, CreateOrderResult } from './order.service';
+import { OrderService, CreateOrderResult, OrderSummary } from './order.service';
 import { PaymentService, CheckoutResult } from './payment.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ParcelType } from './entities/parcel.enums';
@@ -27,12 +28,23 @@ export class OrderController {
     private readonly paymentService: PaymentService,
   ) {}
 
+  // x-user-id / x-user-role always carry the gateway-verified identity -
+  // the gateway strips client-sent values before proxying.
+  @Get()
+  async list(
+    @Headers('x-user-id') userId: string | undefined,
+    @Headers('x-user-role') role: string | undefined,
+  ): Promise<OrderSummary[]> {
+    return this.orderService.listOrders(userId ?? null, role ?? null);
+  }
+
   @Post()
   async create(
     @Body() dto: CreateOrderDto,
     @IdempotencyKey() idempotencyKey: string,
+    @Headers('x-user-id') userId?: string,
   ): Promise<CreateOrderResult> {
-    return this.orderService.createOrder(dto, idempotencyKey);
+    return this.orderService.createOrder(dto, idempotencyKey, userId ?? null);
   }
 
   @Get(':id/quote')

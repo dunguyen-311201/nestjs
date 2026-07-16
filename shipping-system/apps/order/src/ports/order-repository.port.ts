@@ -19,6 +19,7 @@ export interface NewOrderData {
   priceCents: number;
   expectedDeliveryAt: Date;
   paymentType: PaymentType;
+  createdByUserId: string | null;
   parcels: Pick<
     Parcel,
     'declaredWeightGrams' | 'type' | 'direction' | 'state'
@@ -33,6 +34,8 @@ export interface ParcelWeightAndRouteUpdate {
 export abstract class IOrderRepository {
   abstract createOrder(data: NewOrderData): Promise<ShipmentOrder>;
   abstract findById(id: string): Promise<ShipmentOrder | null>;
+  abstract findByCreatedByUserId(userId: string): Promise<ShipmentOrder[]>;
+  abstract findAll(): Promise<ShipmentOrder[]>;
   abstract findParcelById(parcelId: string): Promise<Parcel | null>;
   abstract updateParcelState(
     parcelId: string,

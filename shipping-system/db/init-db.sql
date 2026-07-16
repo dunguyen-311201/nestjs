@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.SHIPMENT_ORDER (
     recipient_id UUID NOT NULL REFERENCES shipping_order_db.CUSTOMER(id),
     rate_card_id UUID NOT NULL, -- Logical FK to RATECARD.id
     price_cents INT NOT NULL,
+    -- Clerk user id of the authenticated creator (gateway-verified x-user-id).
+    -- NULL = created before auth existed; visible to admins only.
+    created_by_user_id VARCHAR(64),
     expected_delivery_at TIMESTAMP NOT NULL,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Draft', 'Created', 'Confirmed', 'Active', 'Complete', 'Partially_Delivered', 'Lost', 'Damaged', 'Cancelled')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -255,6 +258,7 @@ CREATE INDEX IF NOT EXISTS idx_ratecard_origin_dest_zone ON shipping_pricing_db.
 
 CREATE INDEX IF NOT EXISTS idx_customer_phone_hash ON shipping_order_db.CUSTOMER(phone_hash);
 
+CREATE INDEX IF NOT EXISTS idx_shipment_order_created_by_user_id ON shipping_order_db.SHIPMENT_ORDER(created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_sender_id ON shipping_order_db.SHIPMENT_ORDER(sender_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_recipient_id ON shipping_order_db.SHIPMENT_ORDER(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_rate_card_id ON shipping_order_db.SHIPMENT_ORDER(rate_card_id);

@@ -41,6 +41,18 @@ export class ShipmentOrder {
   @Column({ name: 'price_cents', type: 'int' })
   priceCents: number;
 
+  // Clerk user id of the authenticated creator (from the gateway-verified
+  // x-user-id header). Null for orders created before auth existed - those
+  // are visible to admins only.
+  @Index('idx_shipment_order_created_by_user_id')
+  @Column({
+    name: 'created_by_user_id',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  createdByUserId: string | null;
+
   @Column({ name: 'expected_delivery_at', type: 'timestamp' })
   expectedDeliveryAt: Date;
 

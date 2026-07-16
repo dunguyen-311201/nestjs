@@ -36,6 +36,7 @@ export class OrderRepository implements IOrderRepository {
         priceCents: data.priceCents,
         expectedDeliveryAt: data.expectedDeliveryAt,
         status: ShipmentOrderStatus.CREATED,
+        createdByUserId: data.createdByUserId,
       });
 
       const parcels = await manager.save(
@@ -105,6 +106,19 @@ export class OrderRepository implements IOrderRepository {
     return this.dataSource.getRepository(ShipmentOrder).findOne({
       where: { id },
       relations: ['parcels'],
+    });
+  }
+
+  async findByCreatedByUserId(userId: string): Promise<ShipmentOrder[]> {
+    return this.dataSource.getRepository(ShipmentOrder).find({
+      where: { createdByUserId: userId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findAll(): Promise<ShipmentOrder[]> {
+    return this.dataSource.getRepository(ShipmentOrder).find({
+      order: { createdAt: 'DESC' },
     });
   }
 

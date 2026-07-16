@@ -27,13 +27,15 @@ function createOrderDto(): CreateOrderDto {
 }
 
 describe('OrderController', () => {
-  let orderService: jest.Mocked<Pick<OrderService, 'createOrder'>>;
+  let orderService: jest.Mocked<
+    Pick<OrderService, 'createOrder' | 'listOrders'>
+  >;
   let pricingPort: jest.Mocked<IPricingPort>;
   let paymentService: jest.Mocked<Pick<PaymentService, 'checkout'>>;
   let controller: OrderController;
 
   beforeEach(() => {
-    orderService = { createOrder: jest.fn() };
+    orderService = { createOrder: jest.fn(), listOrders: jest.fn() };
     pricingPort = { getPrice: jest.fn() };
     paymentService = { checkout: jest.fn() };
     controller = new OrderController(
@@ -43,7 +45,46 @@ describe('OrderController', () => {
     );
   });
 
+  describe('GET /orders', () => {
+    it('lists orders for the gateway-verified identity headers', async () => {
+      orderService.listOrders.mockResolvedValue([]);
+
+      const result = await controller.list('user-a', 'customer');
+
+      expect(orderService.listOrders).toHaveBeenCalledWith(
+        'user-a',
+        'customer',
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('passes null identity when headers are absent', async () => {
+      orderService.listOrders.mockResolvedValue([]);
+
+      await controller.list(undefined, undefined);
+
+      expect(orderService.listOrders).toHaveBeenCalledWith(null, null);
+    });
+  });
+
   describe('POST /orders', () => {
+    it('forwards the gateway-verified x-user-id as the order creator', async () => {
+      orderService.createOrder.mockResolvedValue({
+        shipment_order_id: 'order-1',
+        price_cents: 5000,
+        expected_delivery_at: new Date('2026-07-15T00:00:00Z'),
+        status: ShipmentOrderStatus.CREATED,
+      });
+
+      await controller.create(createOrderDto(), 'idem-key-2', 'user_abc');
+
+      expect(orderService.createOrder).toHaveBeenCalledWith(
+        createOrderDto(),
+        'idem-key-2',
+        'user_abc',
+      );
+    });
+
     it('delegates to OrderService.createOrder with the Idempotency-Key', async () => {
       const expected = {
         shipment_order_id: 'order-1',
@@ -58,6 +99,7 @@ describe('OrderController', () => {
       expect(orderService.createOrder).toHaveBeenCalledWith(
         createOrderDto(),
         'idem-key-1',
+        null,
       );
       expect(result).toEqual(expected);
     });

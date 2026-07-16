@@ -42,6 +42,8 @@ describe('OrderService', () => {
     repository = {
       createOrder: jest.fn(),
       findById: jest.fn(),
+      findByCreatedByUserId: jest.fn(),
+      findAll: jest.fn(),
     };
     pricing = {
       getPrice: jest.fn(),
@@ -88,6 +90,94 @@ describe('OrderService', () => {
       price_cents: 5000,
       expected_delivery_at: createdOrder.expectedDeliveryAt,
       status: ShipmentOrderStatus.CREATED,
+    });
+  });
+
+  it('stores the authenticated creator on the new order', async () => {
+    idempotencyStore.get.mockResolvedValue(null);
+    pricing.getPrice.mockResolvedValue({
+      rateCardId: 'rate-card-1',
+      routeId: 'route-1',
+      priceCents: 5000,
+      slaExpectedDelivery: new Date('2026-07-15T00:00:00Z'),
+    });
+    repository.createOrder.mockResolvedValue({
+      id: 'order-1',
+      priceCents: 5000,
+      expectedDeliveryAt: new Date('2026-07-15T00:00:00Z'),
+      status: ShipmentOrderStatus.CREATED,
+    } as ShipmentOrder);
+
+    await service.createOrder(createOrderDto(), 'idem-key-9', 'user_abc');
+
+    expect(repository.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ createdByUserId: 'user_abc' }),
+    );
+  });
+
+  it('stores a null creator when no identity header is present', async () => {
+    idempotencyStore.get.mockResolvedValue(null);
+    pricing.getPrice.mockResolvedValue({
+      rateCardId: 'rate-card-1',
+      routeId: 'route-1',
+      priceCents: 5000,
+      slaExpectedDelivery: new Date('2026-07-15T00:00:00Z'),
+    });
+    repository.createOrder.mockResolvedValue({
+      id: 'order-1',
+      priceCents: 5000,
+      expectedDeliveryAt: new Date('2026-07-15T00:00:00Z'),
+      status: ShipmentOrderStatus.CREATED,
+    } as ShipmentOrder);
+
+    await service.createOrder(createOrderDto(), 'idem-key-10', null);
+
+    expect(repository.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ createdByUserId: null }),
+    );
+  });
+
+  describe('listOrders (ownership)', () => {
+    const orderOfA = {
+      id: 'order-a',
+      priceCents: 5000,
+      expectedDeliveryAt: new Date('2026-07-15T00:00:00Z'),
+      status: ShipmentOrderStatus.CREATED,
+      createdAt: new Date('2026-07-14T00:00:00Z'),
+    } as ShipmentOrder;
+
+    it('returns only the orders created by the requesting customer', async () => {
+      repository.findByCreatedByUserId.mockResolvedValue([orderOfA]);
+
+      const result = await service.listOrders('user-a', 'customer');
+
+      expect(repository.findByCreatedByUserId).toHaveBeenCalledWith('user-a');
+      expect(result).toEqual([
+        {
+          shipment_order_id: 'order-a',
+          price_cents: 5000,
+          expected_delivery_at: orderOfA.expectedDeliveryAt,
+          status: ShipmentOrderStatus.CREATED,
+          created_at: orderOfA.createdAt,
+        },
+      ]);
+    });
+
+    it('returns all orders for an admin', async () => {
+      repository.findAll.mockResolvedValue([orderOfA]);
+
+      await service.listOrders('admin-user', 'admin');
+
+      expect(repository.findAll).toHaveBeenCalled();
+      expect(repository.findByCreatedByUserId).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty list when the caller has no user id', async () => {
+      const result = await service.listOrders(null, 'customer');
+
+      expect(result).toEqual([]);
+      expect(repository.findByCreatedByUserId).not.toHaveBeenCalled();
+      expect(repository.findAll).not.toHaveBeenCalled();
     });
   });
 
