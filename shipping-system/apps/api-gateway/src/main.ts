@@ -15,6 +15,7 @@ async function bootstrap() {
       .setTitle('API Gateway')
       .setDescription('Shipping System - API Gateway')
       .setVersion('1.0')
+      .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
