@@ -1,6 +1,6 @@
-# Real Integrations Guide: Stripe Payments & Resend Emails
+# Real Integrations Guide: Stripe, Resend & Clerk Authentication
 
-This guide details how to transition the shipping system from local simulation mode to real integrations using **Stripe (Test Mode)** for payment processing and **Resend (Free Tier)** for real-time customer email notifications.
+This guide details how to transition the shipping system from local simulation mode to real integrations using **Stripe (Test Mode)** for payment processing, **Resend (Free Tier)** for real-time customer email notifications, and **Clerk** for user authentication at the API Gateway.
 
 ---
 
@@ -115,3 +115,63 @@ docker compose up -d --build notification
 4. Check your inbox (including spam — mail from `onboarding@resend.dev` is often flagged) for the `Order Created: ...` email.
 
 Mind the free-tier limits (100 emails/day, 2 requests/second): a full `pnpm demo` run fires one real email per notification event.
+
+---
+
+## 3. Clerk Authentication Integration
+
+To secure the API Gateway endpoints using **Clerk** and enable JWT session token verification:
+
+### Step 1: Obtain Clerk API Keys
+1. Sign up for a free developer account at [Clerk](https://clerk.com).
+2. Create an application in the Clerk Dashboard.
+3. Under **API Keys** in the navigation sidebar, copy your **Secret Key** (`sk_test_...`) and **Publishable Key** (`pk_test_...`).
+
+### Step 2: Update `.env` Configuration
+Open your `.env` file and append the Clerk credentials (also documented in your local `.env` and `.env.example` templates):
+```ini
+# Clerk Authentication (task: API Gateway session verification)
+CLERK_SECRET_KEY=sk_test_your_real_clerk_secret_key_here
+CLERK_PUBLISHABLE_KEY=pk_test_your_real_clerk_publishable_key_here
+```
+> [!NOTE]
+> The API Gateway uses `CLERK_SECRET_KEY` to retrieve Clerk's JSON Web Key Set (JWKS) and verify the signature of incoming session tokens.
+
+### Step 3: Fetch a Session Token from Clerk (Client-Side)
+To call any protected gateway route, your client application must fetch a short-lived JWT session token from the Clerk Frontend SDK.
+*   **Javascript / React Example**:
+    ```javascript
+    // Retrieve the session token from the Clerk client
+    const token = await window.Clerk.session.getToken();
+    ```
+
+### Step 4: Make Authenticated Requests
+All requests to the API Gateway must include this session token in the `Authorization` header, except for designated public routes.
+
+*   **Public Routes (Bypass Clerk Auth)**:
+    *   `GET /health` (Gateway healthcheck probe)
+    *   `GET /api/docs*` (Swagger API Documentation)
+    *   `POST /payments/webhook` (Stripe webhook, authenticated using `Stripe-Signature` validation in the Order Service)
+*   **Protected Routes** (e.g. `/orders`, `/tracking`, `/couriers`, `/hubs`, `/trips`, `/legs`):
+    *   Include the header `Authorization: Bearer <CLERK_JWT_SESSION_TOKEN>`.
+    
+Example request to create an order:
+```bash
+curl -s -X POST http://localhost:3000/orders \
+  -H "Authorization: Bearer cl_jwt_session_token_here" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: auth-test-1" \
+  -d '{
+    "sender": {"name":"Alice","phone":"+84900000001","address":"1 Alice St","region_code":"REG-100"},
+    "recipient": {"name":"Bob","phone":"+84911111112","address":"2 Bob St","region_code":"REG-101"},
+    "parcels": [{"declared_weight_grams":500,"type":"parcel"}],
+    "payment_type": "PREPAID_STRIPE"
+  }'
+```
+
+### Step 5: Consume Auth Context in Downstream Microservices
+The API Gateway's [ProxyService](file:///home/dunguyen/Training/nestjs/shipping-system/apps/api-gateway/src/proxy/proxy.service.ts) acts as a trusted proxy. Once it verifies the Clerk token, it forwards the verified user identity to downstream microservices using custom HTTP headers:
+*   `x-user-id` (The Clerk `userId`/`sub` claim)
+*   `x-session-id` (The Clerk `sessionId`/`sid` claim)
+
+Backend microservices can read these headers directly (e.g. `req.headers['x-user-id']`) to check roles or log user actions, without needing to integrate Clerk SDKs or parse JWTs themselves.
