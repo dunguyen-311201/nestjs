@@ -6,6 +6,7 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-16
 
 ### Done
+- Wrote `docs/10-authz-plan.md` — RBAC plan for the 5 actors (customer/shipper/hub_staff/dispatcher/admin): Clerk `publicMetadata.role` claim, gateway `ROUTE_ACCESS` map (401 vs 403), `x-user-role` propagation, `SHIPMENT_ORDER.created_by_user_id` ownership. Estimation: fits 3 days with cuts (no per-resource ownership for shipper/hub, no role-admin UI, no Clerk→DB sync). Linked from CLAUDE.md.
 - Added a session-token panel to `apps/web` (`b86bcce`): "Get session token" + copy button for pasting the Clerk JWT into curl/Swagger. Decision: no react-router/protected routes — the web app's only job is sign-in → token (user confirmed).
 - Pushed `feat/shipping-system` to GitHub (`822bd4a..1caf6b2`) and synced GitLab (`208624a..41e229d` on `feat/shipping-system` via `supporter-review`). New recipe footgun found + fixed in CLAUDE.md: `git rm` without `--ignore-unmatch` exits fatal when a listed path (`.claude`) has nothing to remove, silently skipping the whole strip — the `ls-files` guard caught it.
 - Fixed browser CORS failure against the dockerized gateway: container was running the pre-CORS build, and rebuilding revealed the `packageManager pnpm@11.5.2` pin breaks `node:20-alpine` (pnpm 11 needs Node 22's `node:sqlite`) — bumped Dockerfile to `node:22-alpine` (`5a0e85e`), rebuilt `shipping_api_gateway`, verified preflight 204 + 401 with CORS headers on `:3000`.
