@@ -71,12 +71,17 @@ Why: GitLab is the supporter-review remote — reviewers there should see code o
 **Keeping `supporter-review` in sync** (do this before the force-push above, whenever `feat/shipping-system` has new commits):
 ```
 git checkout supporter-review
-git merge feat/shipping-system --no-commit
-git rm -r --quiet shipping-system/docs shipping-system/.claude shipping-system/.gemini 2>/dev/null
-git commit -m "chore: sync + strip docs/.claude/.gemini for GitLab"
+git merge feat/shipping-system --no-commit   # modify/delete conflicts under docs/ are expected; the rm below resolves them
+git -C "$(git rev-parse --show-toplevel)" rm -rf --quiet shipping-system/docs shipping-system/.claude shipping-system/.gemini
+git ls-files | grep -E "docs/|\.claude|\.gemini" && echo "STOP: strip incomplete" || git commit -m "chore: sync + strip docs/.claude/.gemini for GitLab"
 git push origin supporter-review:feat/shipping-system --force
 git checkout feat/shipping-system
 ```
+
+Recipe footguns (each bit above exists because it went wrong once):
+- The `git -C <repo-root>` prefix is required: the paths are repo-root-relative, and running the plain `git rm shipping-system/...` from inside `shipping-system/` silently matches nothing (the old `2>/dev/null` hid exactly that failure, leaking docs to GitLab).
+- `-rf` (not `-r`): a file both deleted on `supporter-review` and modified on `feat/shipping-system` is left unmerged by the merge, and plain `-r` refuses to remove it.
+- The `git ls-files | grep` guard verifies zero stripped-pattern paths remain tracked before committing — never skip it.
 Not automated — do this by hand (or when asked) each time before pushing to GitLab.
 
 **Footgun already fixed once, don't reintroduce it:** local `feat/shipping-system` must track `github`, not `origin` — its upstream was originally `origin` (from before the dual-remote split) and got corrected via `git branch --set-upstream-to=github/feat/shipping-system feat/shipping-system`. If a plain `git push`/`git pull` on this branch ever shows `origin` as the upstream again, re-fix it — pushing full content to GitLab's code-only branch name would silently undo the split.
