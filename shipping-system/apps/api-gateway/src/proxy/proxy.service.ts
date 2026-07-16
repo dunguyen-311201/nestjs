@@ -21,6 +21,26 @@ export class ProxyService {
     return this.configService.get<string>(route.envKey) ?? route.defaultTarget;
   }
 
+  // x-user-id / x-session-id must only ever carry the gateway-verified
+  // identity: client-sent values are stripped unconditionally so downstream
+  // services can trust them without re-verifying the Clerk JWT.
+  buildForwardHeaders(
+    req: Request & { auth?: { userId: string; sessionId: string } },
+    host: string,
+  ): Record<string, string | string[] | undefined> {
+    const headers: Record<string, string | string[] | undefined> = {
+      ...req.headers,
+      host,
+    };
+    delete headers['x-user-id'];
+    delete headers['x-session-id'];
+    if (req.auth) {
+      headers['x-user-id'] = req.auth.userId;
+      headers['x-session-id'] = req.auth.sessionId;
+    }
+    return headers;
+  }
+
   forward(req: Request, res: Response, next: NextFunction): void {
     const target = this.resolveTarget(req.path);
     if (!target) {
@@ -31,7 +51,10 @@ export class ProxyService {
     const targetUrl = new URL(req.originalUrl, target);
     const proxyReq = http.request(
       targetUrl,
-      { method: req.method, headers: { ...req.headers, host: targetUrl.host } },
+      {
+        method: req.method,
+        headers: this.buildForwardHeaders(req, targetUrl.host),
+      },
       (proxyRes) => {
         res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
         proxyRes.pipe(res);

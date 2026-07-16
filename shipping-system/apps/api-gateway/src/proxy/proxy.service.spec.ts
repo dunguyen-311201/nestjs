@@ -78,4 +78,51 @@ describe('ProxyService', () => {
       expect(service.resolveTarget('/ordersxyz')).toBeNull();
     });
   });
+
+  describe('buildForwardHeaders', () => {
+    interface FakeAuthedRequest {
+      headers: Record<string, string | string[] | undefined>;
+      auth?: { userId: string; sessionId: string };
+    }
+
+    function requestWith(overrides: Partial<FakeAuthedRequest>) {
+      return {
+        headers: { accept: 'application/json' },
+        ...overrides,
+      } as Parameters<ProxyService['buildForwardHeaders']>[0];
+    }
+
+    it('injects verified identity headers when the request is authenticated', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({ auth: { userId: 'user_1', sessionId: 'sess_1' } }),
+        'order.internal',
+      );
+      expect(headers['x-user-id']).toBe('user_1');
+      expect(headers['x-session-id']).toBe('sess_1');
+      expect(headers.host).toBe('order.internal');
+      expect(headers.accept).toBe('application/json');
+    });
+
+    it('strips client-sent identity headers on unauthenticated requests', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({
+          headers: { 'x-user-id': 'spoofed', 'x-session-id': 'spoofed' },
+        }),
+        'order.internal',
+      );
+      expect(headers['x-user-id']).toBeUndefined();
+      expect(headers['x-session-id']).toBeUndefined();
+    });
+
+    it('overrides client-sent identity headers with the verified identity', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({
+          headers: { 'x-user-id': 'spoofed' },
+          auth: { userId: 'user_1', sessionId: 'sess_1' },
+        }),
+        'order.internal',
+      );
+      expect(headers['x-user-id']).toBe('user_1');
+    });
+  });
 });
