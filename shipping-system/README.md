@@ -117,4 +117,8 @@ git push origin supporter-review:feat/shipping-system --force
 git checkout feat/shipping-system
 ```
 
-For more architectural decisions and specifications, consult the documents inside [docs/](file:///home/dunguyen/Training/nestjs/shipping-system/docs/).
+For a detailed review of system design decisions, consult the following documents inside the [docs/](file:///home/dunguyen/Training/nestjs/shipping-system/docs/) folder:
+* [02-HLD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md) — High-Level Architecture, NATS subjects, REST routes.
+* [04-business-rules.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/04-business-rules.md) — Business Rule Catalogue (BR-01 to BR-09).
+* [08-architecture-patterns.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/08-architecture-patterns.md) — Deep-dive into design patterns, implementation rationales, and trade-offs.
+* [09-real-integrations-guide.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/09-real-integrations-guide.md) — Step-by-step guide to configure real Stripe Payments and Resend Emails.
