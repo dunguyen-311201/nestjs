@@ -6,6 +6,7 @@ End of day, copy the "Done" bullets straight into your report.
 ## 2026-07-16
 
 ### Done
+- Added a session-token panel to `apps/web` (`b86bcce`): "Get session token" + copy button for pasting the Clerk JWT into curl/Swagger. Decision: no react-router/protected routes — the web app's only job is sign-in → token (user confirmed).
 - Pushed `feat/shipping-system` to GitHub (`822bd4a..1caf6b2`) and synced GitLab (`208624a..41e229d` on `feat/shipping-system` via `supporter-review`). New recipe footgun found + fixed in CLAUDE.md: `git rm` without `--ignore-unmatch` exits fatal when a listed path (`.claude`) has nothing to remove, silently skipping the whole strip — the `ls-files` guard caught it.
 - Fixed browser CORS failure against the dockerized gateway: container was running the pre-CORS build, and rebuilding revealed the `packageManager pnpm@11.5.2` pin breaks `node:20-alpine` (pnpm 11 needs Node 22's `node:sqlite`) — bumped Dockerfile to `node:22-alpine` (`5a0e85e`), rebuilt `shipping_api_gateway`, verified preflight 204 + 401 with CORS headers on `:3000`.
 - Converted the repo to a **Turborepo pnpm workspace** (`12fec4c`) and added `apps/web` (`7e306d8`): Vite + React SPA with `@clerk/clerk-react` — modal sign-in, orders panel calling `GET /orders` with/without the session JWT to demo the gateway guard. eslint/jest scoped to exclude `apps/web`; `turbo build --filter=web` green.
