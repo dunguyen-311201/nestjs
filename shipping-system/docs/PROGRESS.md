@@ -8,9 +8,33 @@
 
 ## Resume point
 
-- **Current phase:** Phase 8 — Testing, Demo & Docs (1.0d) **complete**
-  (all phases 1-8 are now 100% complete). See `docs/03-phases.md`.
-- **Next task:** None. Project vertical slice is complete, fully tested, documented, and demonstrated!
+- **Current phase:** Phase 9 — Auth & RBAC extension (4.0d), tasks 9.1–9.3
+  **complete**; see `docs/03-phases.md` and `docs/10-authz-plan.md`.
+- **Next task:** **9.4 — Customer ownership + E2E** (1.0d):
+  `SHIPMENT_ORDER.created_by_user_id` (nullable, no backfill), order service
+  writes it from `x-user-id` and filters `GET /orders/*` for customers
+  (admin sees all), tracking restricted to own orders (fallback: any
+  authenticated customer), per-actor E2E smoke, docs sync + docker image
+  rebuild (the `:3000` container still runs the pre-RBAC image).
+
+## 2026-07-16 — Phase 9.1–9.3: Clerk auth + role claim + gateway RBAC
+
+- **Auth (9.1):** global `ClerkAuthGuard` (session JWT via `ITokenVerifier`
+  port + `@clerk/backend` adapter); public: health, docs, Stripe webhook;
+  spoof-proof `x-user-id`/`x-session-id`; CORS for `apps/web` (Turborepo,
+  Vite + `@clerk/clerk-react` sign-in/token app); Dockerfile → node:22.
+- **Role claim (9.2):** `Role`/`isRole` in `libs/contracts`;
+  `VerifiedToken.role` from the JWT `role` claim (Clerk
+  `publicMetadata.role`, Dashboard session-token customization — configured);
+  `scripts/clerk-set-role.js` provisioning; web panel shows the role.
+- **RBAC (9.3):** `ROUTE_ACCESS` matrix (route-access.config.ts) enforced in
+  the guard — admin bypass, fail-closed default (unmatched = admin-only),
+  403 vs 401 distinction; `x-user-role` propagated. 400 unit tests green.
+  Live smoke with real Clerk tokens (admin + `shipper.test@example.com`).
+- **Known gaps / follow-ups:** ownership not yet enforced (9.4); docker
+  gateway image predates RBAC; recipient share-link tracking dropped to
+  customer-owned (see HLD note); no per-resource ownership for
+  shipper/hub (explicit Phase 9 cut).
 - **Artillery Load Testing Integration complete**:
   - Installed `artillery` as a devDependency in the monorepo's `package.json`.
   - Created a load testing scenario configuration [load-test.yml](file:///home/dunguyen/Training/nestjs/shipping-system/load-test.yml) to generate traffic using distinct virtual user profiles.
