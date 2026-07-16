@@ -9,6 +9,10 @@ async function bootstrap() {
   // stream before the proxy ever sees it, leaving the upstream request
   // waiting for a body that never arrives.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.enableCors({
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+  });
 
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
