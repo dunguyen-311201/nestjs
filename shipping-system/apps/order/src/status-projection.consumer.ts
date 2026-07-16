@@ -21,11 +21,10 @@ function statusCacheKey(shipmentOrderId: string): string {
   return `order:status:${shipmentOrderId}`;
 }
 
-// ADR-001/BR-07: the shipment_orders.status.<id> trigger runs over real
-// JetStream (durable, ordered per-subject consumer with explicit ack), not
-// @nestjs/microservices' NATS-core transport - ADR-005 notes the built-in
-// transporter can't speak JetStream. Diagram 8 (docs/lld/order-service.md):
-// debounces bursts of recompute triggers (published by Tracking after each
+// The shipment_orders.status.<id> trigger runs over real JetStream (durable,
+// ordered per-subject consumer with explicit ack), not @nestjs/microservices'
+// NATS-core transport - the built-in transporter can't speak JetStream.
+// Debounces bursts of recompute triggers (published by Tracking after each
 // scan) per shipment_order_id, so a hub processing hundreds of parcels in
 // one order doesn't recompute the same order's projection hundreds of times.
 @Injectable()
