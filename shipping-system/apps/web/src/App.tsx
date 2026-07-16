@@ -16,10 +16,22 @@ function TokenPanel() {
   const [token, setToken] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
+  const [role, setRole] = useState<string>('');
+
   async function showToken() {
     const t = await getToken();
     setToken(t ?? 'No session token available');
     setCopied(false);
+    if (t) {
+      try {
+        const payload = JSON.parse(atob(t.split('.')[1])) as {
+          role?: unknown;
+        };
+        setRole(typeof payload.role === 'string' ? payload.role : '(none)');
+      } catch {
+        setRole('(unreadable)');
+      }
+    }
   }
 
   async function copyToken() {
@@ -30,6 +42,11 @@ function TokenPanel() {
   return (
     <section>
       <button onClick={() => void showToken()}>Get session token</button>{' '}
+      {role && (
+        <span>
+          role: <strong>{role}</strong>
+        </span>
+      )}{' '}
       {token && (
         <button onClick={() => void copyToken()}>
           {copied ? 'Copied!' : 'Copy'}
