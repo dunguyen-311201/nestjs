@@ -13,7 +13,7 @@ export interface NewTrackingEvent {
 }
 
 export abstract class ITrackingEventRepository {
-  // Idempotent on eventId (BR-03 append-only + consumer-side dedup): a
+  // Idempotent on eventId (append-only store + consumer-side dedup): a
   // redelivered event is a no-op, never a second row.
   abstract appendEvent(data: NewTrackingEvent): Promise<void>;
 

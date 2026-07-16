@@ -84,9 +84,9 @@ export class PaymentService {
       event.shipmentOrderId,
     );
 
-    // No outbox here (docs/02-HLD.md § Accepted MVP risk): SHIPMENT_ORDER.status
-    // is already correct even if this publish is lost, so the blast radius
-    // is smaller than the outbox-backed order.created case.
+    // No outbox here (accepted MVP risk): SHIPMENT_ORDER.status is already
+    // correct even if this publish is lost, so the blast radius is smaller
+    // than the outbox-backed order.created case.
     const payload: PaymentSucceededEventV1 = {
       event_id: event.id,
       occurred_at: new Date().toISOString(),

@@ -18,7 +18,7 @@ export enum TrackingEventType {
 }
 
 // Append-only: this service never issues an UPDATE/DELETE against this
-// table (BR-03), enforced at the DB role level, not just by omitting those
+// table, enforced at the DB role level, not just by omitting those
 // TypeORM methods here.
 @Entity({ name: 'tracking_event' })
 export class TrackingEvent {

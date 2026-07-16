@@ -24,8 +24,8 @@ import { ShipmentOrder } from './entities/shipment-order.entity';
       synchronize: false,
     }),
     // Read-only mapping onto Order Service's SHIPMENT_ORDER/PARCEL tables,
-    // used only for the BR-08 hub-inbound guard and to resolve a parcel's
-    // current route for misroute detection (BR-02). Hub never writes here.
+    // used only for the paid-order hub-inbound guard and to resolve a
+    // parcel's current route for misroute detection. Hub never writes here.
     TypeOrmModule.forRoot({
       name: 'order',
       type: 'postgres',

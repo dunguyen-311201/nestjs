@@ -111,7 +111,7 @@ export class ParcelStateMachine {
   }
 
   // Triggered by Courier Service after the 3rd consecutive DELIVERY_FAILED
-  // scan for this parcel (BR-04). Courier already validated the 3-strike
+  // scan for this parcel. Courier already validated the 3-strike
   // count itself - this only re-asserts the parcel was actually out for
   // delivery, flips direction, and re-enters it into the forward flow
   // (InTransit) headed back toward the original sender's zone.

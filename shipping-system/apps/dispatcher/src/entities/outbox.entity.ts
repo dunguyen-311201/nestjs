@@ -11,9 +11,9 @@ export enum OutboxStatus {
 }
 
 // Maps onto the same physical shipping_network_db.outbox table Hub Service
-// (task 6.2) already created - Dispatcher shares this schema with Hub and
-// Line-haul by the original architecture (ADR-003), same precedent as
-// Line-haul's own Outbox entity (task 6.4).
+// already created - Dispatcher shares this schema with Hub and Line-haul
+// by the original data-ownership split, same precedent as Line-haul's own
+// Outbox entity.
 @Entity({ name: 'outbox' })
 export class Outbox {
   @PrimaryGeneratedColumn('uuid')

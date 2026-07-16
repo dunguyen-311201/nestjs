@@ -21,8 +21,8 @@ export const NATS_SUBJECTS = {
 } as const;
 
 // Per-order projection-write subject - a recompute trigger, not a domain
-// event. `shipment_orders` (not `orders`) to match ADR-001 and
-// order-service.md's Diagram 8 exactly.
+// event. `shipment_orders` (not `orders`) to match the agreed per-aggregate
+// serialization subject naming exactly.
 export const SHIPMENT_ORDER_STATUS_WILDCARD = 'shipment_orders.status.>';
 
 export function orderStatusSubject(shipmentOrderId: string): string {

@@ -7,10 +7,10 @@ const TERMINAL_STATES: ReadonlySet<ParcelState> = new Set([
   ParcelState.DAMAGED,
 ]);
 
-// BR-05: SHIPMENT_ORDER.status is a materialized projection of the
-// least-advanced status among its parcels. The mapping table this
-// implements is documented in docs/04-business-rules.md § BR-05 Status
-// Projection Mapping - not derivable from BR-05's one-line principle alone.
+// SHIPMENT_ORDER.status is a materialized projection of the least-advanced
+// status among its parcels. The mapping table implemented here is the
+// agreed status-projection mapping - not derivable from that one-line
+// principle alone.
 export function computeOrderStatus(
   parcelStates: ParcelState[],
 ): ShipmentOrderStatus {

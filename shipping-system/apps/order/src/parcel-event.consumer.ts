@@ -12,9 +12,8 @@ interface ParcelLifecyclePayload {
 }
 
 // Order independently consumes the same parcel-lifecycle events Tracking
-// appends to TRACKING_EVENT (docs/02-HLD.md's subject table lists Order as
-// a consumer of each), to keep its own PARCEL.state in sync via
-// ParcelStateMachine (built in tasks 5.2/5.3, unwired until now).
+// appends to TRACKING_EVENT, to keep its own PARCEL.state in sync via
+// ParcelStateMachine.
 @Controller()
 export class ParcelEventConsumer {
   private readonly logger = new Logger(ParcelEventConsumer.name);
@@ -84,9 +83,9 @@ export class ParcelEventConsumer {
       return;
     }
 
-    // BR-06 (weight capture) and BR-02's corrective re-route both land on
-    // this same subject - Hub Service never writes PARCEL directly (only
-    // Order does), so it publishes the resolved values here instead.
+    // Hub weight capture and the corrective re-route after a misroute both
+    // land on this same subject - Hub Service never writes PARCEL directly
+    // (only Order does), so it publishes the resolved values here instead.
     if (subject === NATS_SUBJECTS.PARCEL_HUB_RECEIVED) {
       const update: { actualWeightGrams?: number; routeId?: string } = {};
       if (typeof payload.actual_weight_grams === 'number') {
@@ -123,7 +122,7 @@ export class ParcelEventConsumer {
       }
     } catch (error) {
       // A NATS event consumer has no HTTP response to return a 422 on - a
-      // BusinessRuleException (BR-02) or an undefined FSM edge here means
+      // BusinessRuleException or an undefined FSM edge here means
       // an out-of-order/duplicate/misrouted-adjacent event; log and drop
       // rather than crash the consumer.
       this.logger.warn(

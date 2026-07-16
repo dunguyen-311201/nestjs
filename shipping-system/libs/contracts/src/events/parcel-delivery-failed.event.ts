@@ -2,7 +2,7 @@ import { BaseEventV1 } from '../base-event';
 
 /**
  * Published by Courier on `parcel.delivery_failed` for each failed delivery
- * attempt (1st and 2nd; the 3rd also triggers `parcel.rts`, BR-04).
+ * attempt (1st and 2nd; the 3rd also triggers `parcel.rts`).
  * Consumed by Tracking (appends a `DELIVERY_FAILED` scan event).
  */
 export interface ParcelDeliveryFailedEventV1 extends BaseEventV1 {

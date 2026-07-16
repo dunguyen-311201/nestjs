@@ -191,9 +191,10 @@ export class CourierService {
   }
 }
 
-// BR-08 literally says "= Confirmed", but a multi-parcel order's status
-// projection advances to Active as soon as its first parcel is picked up
-// (BR-05), so a sibling parcel's later pickup must still pass this guard.
+// The paid-order pickup guard rule literally says "= Confirmed", but a
+// multi-parcel order's status projection advances to Active as soon as its
+// first parcel is picked up, so a sibling parcel's later pickup must still
+// pass this guard.
 const CONFIRMED_OR_LATER = new Set([
   'Confirmed',
   'Active',

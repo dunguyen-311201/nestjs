@@ -43,8 +43,8 @@ export abstract class IOrderRepository {
     state: ParcelState,
     direction: ParcelDirection,
   ): Promise<void>;
-  // Applied by ParcelEventConsumer on parcel.hub_received (BR-06 weight
-  // capture, and BR-02's corrective route_id on a misrouted-then-corrected
+  // Applied by ParcelEventConsumer on parcel.hub_received (hub weight
+  // capture, and the corrective route_id on a misrouted-then-corrected
   // scan) - Hub Service never writes PARCEL directly, only Order does.
   abstract updateParcelWeightAndRoute(
     parcelId: string,

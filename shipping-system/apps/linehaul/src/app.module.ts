@@ -10,10 +10,9 @@ import { Outbox } from './entities/outbox.entity';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // Shares shipping_network_db with Hub Service (task 6.2) by the
-    // original architecture (ADR-003 + docs/02-HLD.md's data-ownership
-    // table) - Hub/Route/Zone/Outbox are read-only or already-migrated
-    // here; this app only ever writes LINEHAULTRIP.
+    // Shares shipping_network_db with Hub Service by the original
+    // data-ownership split - Hub/Route/Zone/Outbox are read-only or
+    // already-migrated here; this app only ever writes LINEHAULTRIP.
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.POSTGRES_HOST ?? 'localhost',

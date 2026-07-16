@@ -16,7 +16,7 @@ export interface RecordDeliveryFailureResult {
 
 export abstract class ICourierRepository {
   // Highest attempt_number recorded for this parcel within the given
-  // direction (BR-04: the counter restarts at 1 for the reverse leg, scoped
+  // direction (the counter restarts at 1 for the reverse leg, scoped
   // by DELIVERY_ATTEMPT.direction). 0 when no attempt has been recorded yet
   // for this direction.
   abstract getLatestAttemptNumber(

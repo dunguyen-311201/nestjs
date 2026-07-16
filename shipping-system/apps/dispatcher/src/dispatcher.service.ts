@@ -112,9 +112,9 @@ export class DispatcherService {
     // No LEG/assignment row to persist (task 6.5, confirmed with user) -
     // but assigning a courier to the final leg is the moment a parcel
     // becomes ready for last-mile dispatch, so this does publish
-    // parcel.out_for_delivery (task 7.3 - closes a real gap found while
-    // writing docs/07-e2e-walkthrough.md: nothing published this event
-    // anywhere, so PARCEL.state could never leave InHub).
+    // parcel.out_for_delivery (closes a real gap found while writing the
+    // e2e walkthrough: nothing published this event anywhere, so
+    // PARCEL.state could never leave InHub).
     const payload: ParcelOutForDeliveryEventV1 = {
       event_id: randomUUID(),
       occurred_at: new Date().toISOString(),

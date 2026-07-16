@@ -18,10 +18,10 @@ export interface ReceiveResult {
   status: 'recorded';
 }
 
-// BR-08 literally says "= Confirmed", but a multi-parcel order's status
-// projection advances to Active as soon as its first parcel is picked up
-// (BR-05), so a later hub scan for a sibling parcel must still pass this
-// guard. Same set as Courier's CourierService.
+// The hub-inbound guard rule literally says "= Confirmed", but a
+// multi-parcel order's status projection advances to Active as soon as its
+// first parcel is picked up, so a later hub scan for a sibling parcel must
+// still pass this guard. Same set as Courier's CourierService.
 const CONFIRMED_OR_LATER = new Set([
   'Confirmed',
   'Active',
@@ -121,7 +121,7 @@ export class HubService {
       ];
     }
 
-    // Misrouted (BR-02): publish the misrouted scan, then recompute the
+    // Misrouted: publish the misrouted scan, then recompute the
     // corridor from the actual scanning zone to the parcel's original
     // destination zone and republish a corrective parcel.hub_received
     // carrying the new route_id - Order's ParcelEventConsumer applies it

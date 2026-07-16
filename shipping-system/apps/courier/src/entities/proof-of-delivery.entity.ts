@@ -10,7 +10,7 @@ import {
 // No tracking_event_id column: this row is written synchronously by this
 // service, before Tracking (async, cross-schema) has appended the
 // corresponding DELIVERED TRACKING_EVENT row - parcel_id is the sole join
-// key (see docs/lld/courier-service.md v1.1).
+// key.
 @Entity({ name: 'proof_of_delivery' })
 export class ProofOfDelivery {
   @PrimaryGeneratedColumn('uuid')

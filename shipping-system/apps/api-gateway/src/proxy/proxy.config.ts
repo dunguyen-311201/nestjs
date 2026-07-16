@@ -6,7 +6,7 @@ export interface ProxyRoute {
 }
 
 // Order matters: matched top-to-bottom by longest-first prefix match.
-// Mirrors the REST endpoint table in docs/02-HLD.md.
+// One entry per downstream service's public REST surface.
 export const PROXY_ROUTES: ProxyRoute[] = [
   {
     prefix: '/trips-assign',

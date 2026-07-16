@@ -54,10 +54,10 @@ export class OrderRepository implements IOrderRepository {
       order.recipient = recipient;
       order.parcels = parcels;
 
-      // Transactional Outbox (Order Creation only, docs/02-HLD.md § Idempotency
-      // and outbox mechanics): the order.created row is written in the same
-      // transaction as ORDER/PARCEL, so a background poller can never publish
-      // an event for a write that didn't actually commit.
+      // Transactional Outbox (Order Creation only): the order.created row
+      // is written in the same transaction as ORDER/PARCEL, so a background
+      // poller can never publish an event for a write that didn't actually
+      // commit.
       await manager.save(Outbox, {
         eventId: randomUUID(),
         eventType: NATS_SUBJECTS.ORDER_CREATED,
@@ -71,7 +71,7 @@ export class OrderRepository implements IOrderRepository {
       });
 
       // One PAYMENT row per order (UNIQUE shipment_order_id), Unpaid until
-      // the Stripe webhook confirms it (BR-08).
+      // the Stripe webhook confirms it.
       await manager.save(Payment, {
         shipmentOrderId: order.id,
         type: data.paymentType,

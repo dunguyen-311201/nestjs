@@ -4,10 +4,10 @@ import { orderStatusSubject } from '@app/contracts';
 import { IStatusTriggerPublisher } from '../ports/status-trigger-publisher.port';
 import { JETSTREAM_CLIENT } from '../nats/jetstream-client.provider';
 
-// ADR-001: the shipment_orders.status.<id> trigger is published over real
-// JetStream (not @nestjs/microservices' NATS-core transport - ADR-005 notes
-// the built-in transporter can't speak JetStream), so it is persisted and
-// durably delivered to Order's ordered per-subject consumer.
+// The shipment_orders.status.<id> trigger is published over real JetStream
+// (not @nestjs/microservices' NATS-core transport - the built-in
+// transporter can't speak JetStream), so it is persisted and durably
+// delivered to Order's ordered per-subject consumer.
 @Injectable()
 export class JetStreamStatusTriggerPublisher implements IStatusTriggerPublisher {
   constructor(@Inject(JETSTREAM_CLIENT) private readonly js: JetStreamClient) {}

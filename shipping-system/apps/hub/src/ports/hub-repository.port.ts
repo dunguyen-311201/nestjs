@@ -24,7 +24,7 @@ export abstract class IHubRepository {
   ): Promise<RouteRecord | null>;
 
   // Writes 1 or 2 OUTBOX rows atomically (2 only for the misrouted +
-  // corrective-republish case, BR-02) - this endpoint owns no other
+  // corrective-republish case) - this endpoint owns no other
   // business row, so recording a scan is purely an Outbox write.
   abstract recordScan(events: OutboxEventInput[]): Promise<void>;
 }

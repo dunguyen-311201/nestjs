@@ -24,8 +24,8 @@ import { Parcel } from './entities/parcel.entity';
       synchronize: false,
     }),
     // Read-only mapping onto Order Service's SHIPMENT_ORDER/PARCEL tables,
-    // used only for the BR-08 pickup guard and to resolve a parcel's
-    // current leg direction (BR-04). Courier never writes here.
+    // used only for the paid-order pickup guard and to resolve a parcel's
+    // current leg direction. Courier never writes here.
     TypeOrmModule.forRoot({
       name: 'order',
       type: 'postgres',

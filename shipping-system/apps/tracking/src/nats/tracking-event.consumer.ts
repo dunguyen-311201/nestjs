@@ -9,9 +9,8 @@ import type { ParcelLifecyclePayload } from './map-subject-to-tracking-event';
 
 // Parcel-lifecycle events stay on @nestjs/microservices' NATS-core
 // transport. Only the per-order recompute trigger it publishes after each
-// TRACKING_EVENT row (Diagram 8, docs/lld/order-service.md) goes over real
-// JetStream (ADR-001) via statusTriggerPublisher, since ADR-005 notes the
-// built-in transporter can't speak JetStream.
+// TRACKING_EVENT row goes over real JetStream via statusTriggerPublisher,
+// since the built-in transporter can't speak JetStream.
 @Controller()
 export class TrackingEventConsumer {
   private readonly logger = new Logger(TrackingEventConsumer.name);

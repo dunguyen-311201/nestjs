@@ -15,7 +15,7 @@ export class TrackingEventRepository implements ITrackingEventRepository {
   ) {}
 
   async appendEvent(data: NewTrackingEvent): Promise<void> {
-    // ON CONFLICT (event_id) DO NOTHING: BR-03 append-only + consumer-side
+    // ON CONFLICT (event_id) DO NOTHING: append-only store + consumer-side
     // dedup (2nd idempotency layer) - a redelivered event is a no-op.
     await this.repository
       .createQueryBuilder()

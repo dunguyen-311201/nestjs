@@ -2,7 +2,7 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 // Read-only mapping onto Order Service's PARCEL table (shipping_order_db).
 // Hub reads this to resolve a parcel's parent order + current route for the
-// BR-08 guard and misrouted detection; never writes to it - the actual
+// hub-inbound guard and misrouted detection; never writes to it - the actual
 // PARCEL.route_id/actual_weight_grams updates are applied by Order's own
 // ParcelEventConsumer after consuming this service's published events.
 @Entity({ name: 'parcel' })
