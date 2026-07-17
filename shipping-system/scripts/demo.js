@@ -13,6 +13,14 @@ const cyan = (text) => `\x1b[36m${text}\x1b[0m`;
 
 const gatewayUrl = 'http://localhost:3000';
 
+function getAuthHeaders(demoToken, extraHeaders = {}) {
+  const headers = { ...extraHeaders };
+  if (demoToken) {
+    headers['Authorization'] = `Bearer ${demoToken}`;
+  }
+  return headers;
+}
+
 function loadEnv() {
   const envPath = path.join(__dirname, '../.env');
   if (!fs.existsSync(envPath)) {
@@ -56,6 +64,12 @@ async function main() {
   console.log(blue('========================================================'));
 
   const env = loadEnv();
+  const demoToken = process.env.DEMO_TOKEN || env.DEMO_TOKEN;
+  if (!demoToken) {
+    console.warn(yellow('Warning: DEMO_TOKEN environment variable not found in process.env or .env. Running calls without Authorization header (which may fail with 401 if auth is enabled).'));
+  } else {
+    console.log(green('✔ DEMO_TOKEN loaded successfully. Authorized requests will include the Bearer token.'));
+  }
 
   // Initialize DB connection
   const pgUser = env.POSTGRES_USER || 'postgres';
@@ -132,10 +146,10 @@ async function main() {
 
   const createOrderRes = await fetch(`${gatewayUrl}/orders`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
-    },
+    }),
     body: JSON.stringify(createOrderPayload),
   });
 
@@ -220,10 +234,10 @@ async function main() {
   
   const pickupRes = await fetch(`${gatewayUrl}/couriers/legs/${parcelId}/pickup`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({ courier_id: courierId }),
   });
 
@@ -250,10 +264,10 @@ async function main() {
   
   const hubReceiveRes = await fetch(`${gatewayUrl}/hubs/${originHubId}/receive`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({ parcel_id: parcelId }), // actual weight is measured by scan station scales
   });
 
@@ -280,10 +294,10 @@ async function main() {
 
   const tripRes = await fetch(`${gatewayUrl}/trips`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({
       origin_hub_id: originHubId,
       dest_hub_id: destHubId,
@@ -308,10 +322,10 @@ async function main() {
 
   const assignTripRes = await fetch(`${gatewayUrl}/trips/${tripId}/assign`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({
       driver_id: driverId,
       truck_id: truckId,
@@ -329,10 +343,10 @@ async function main() {
   console.log('\n' + yellow('--- Step 7: Departing Line-haul Trip ---'));
   const departRes = await fetch(`${gatewayUrl}/trips/${tripId}/depart`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
   });
 
   if (!departRes.ok) {
@@ -356,10 +370,10 @@ async function main() {
   console.log('\n' + yellow('--- Step 8: Arriving Line-haul Trip ---'));
   const arriveRes = await fetch(`${gatewayUrl}/trips/${tripId}/arrive`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
   });
 
   if (!arriveRes.ok) {
@@ -373,10 +387,10 @@ async function main() {
   console.log('\n' + yellow('--- Step 9: Destination Hub Receive Scan ---'));
   const destHubReceiveRes = await fetch(`${gatewayUrl}/hubs/${destHubId}/receive`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({
       parcel_id: parcelId,
       linehaul_trip_id: tripId,
@@ -406,10 +420,10 @@ async function main() {
 
   const legAssignRes = await fetch(`${gatewayUrl}/legs/${parcelId}/assign`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({ courier_id: destCourierId }),
   });
 
@@ -435,10 +449,10 @@ async function main() {
   
   const deliverRes = await fetch(`${gatewayUrl}/couriers/legs/${parcelId}/deliver`, {
     method: 'POST',
-    headers: {
+    headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
       'Idempotency-Key': crypto.randomUUID(),
-    },
+    }),
     body: JSON.stringify({
       courier_id: destCourierId,
       outcome: 'DELIVERED',
@@ -476,7 +490,9 @@ async function main() {
 
   // Fetch final tracking result
   console.log('\n' + yellow('--- Step 12: Querying Final Tracking Timeline (UC-04) ---'));
-  const trackingRes = await fetch(`${gatewayUrl}/tracking/${orderId}`);
+  const trackingRes = await fetch(`${gatewayUrl}/tracking/${orderId}`, {
+    headers: getAuthHeaders(demoToken)
+  });
   if (trackingRes.ok) {
     const trackingData = await trackingRes.json();
     console.log(green('✔ Final Tracking Timeline fetched successfully:'));
@@ -505,10 +521,14 @@ async function main() {
     );
     const logs = allLogs
       .split('\n')
-      .filter((line) => line.includes('EMAIL EMULATOR') && line.includes(orderIdPrefix))
+      .filter(
+        (line) =>
+          (line.includes('EMAIL EMULATOR') || line.includes('Email sent via')) &&
+          line.includes(orderIdPrefix),
+      )
       .join('\n');
     if (logs.trim()) {
-      console.log(green('✔ Simulated Customer Emails Sent:'));
+      console.log(green('✔ Customer notification emails sent:'));
       console.log(logs.trim());
     } else {
       console.log(yellow('No emails found in logs. Check if notification service is running.'));
