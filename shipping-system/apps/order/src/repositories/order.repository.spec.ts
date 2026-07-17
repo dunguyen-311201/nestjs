@@ -198,6 +198,17 @@ describe('OrderRepository', () => {
     });
   });
 
+  it('updateParcelAssignedCourier updates only the assigned courier column', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    getRepository.mockReturnValue({ update });
+
+    await repository.updateParcelAssignedCourier('parcel-1', 'courier-9');
+
+    expect(update).toHaveBeenCalledWith('parcel-1', {
+      assignedCourierId: 'courier-9',
+    });
+  });
+
   it('updateParcelWeightAndRoute updates only the given columns', async () => {
     const update = jest.fn().mockResolvedValue(undefined);
     getRepository.mockReturnValue({ update });

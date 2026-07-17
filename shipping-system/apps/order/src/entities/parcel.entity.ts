@@ -28,6 +28,10 @@ export class Parcel {
   @Column({ name: 'route_id', type: 'uuid', nullable: true })
   routeId: string | null;
 
+  @Index('idx_parcel_assigned_courier_id')
+  @Column({ name: 'assigned_courier_id', type: 'uuid', nullable: true })
+  assignedCourierId: string | null;
+
   @Column({ name: 'declared_weight_grams', type: 'int' })
   declaredWeightGrams: number;
 

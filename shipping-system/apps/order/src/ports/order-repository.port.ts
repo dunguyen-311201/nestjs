@@ -53,6 +53,12 @@ export abstract class IOrderRepository {
     parcelId: string,
     update: ParcelWeightAndRouteUpdate,
   ): Promise<void>;
+  // Written when Dispatcher's leg-assign publishes parcel.out_for_delivery -
+  // Dispatcher never writes PARCEL directly, only Order does.
+  abstract updateParcelAssignedCourier(
+    parcelId: string,
+    courierId: string,
+  ): Promise<void>;
   abstract findParcelStatesByShipmentOrderId(
     shipmentOrderId: string,
   ): Promise<ParcelState[] | null>;

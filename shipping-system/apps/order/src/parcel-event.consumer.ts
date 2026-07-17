@@ -9,6 +9,7 @@ interface ParcelLifecyclePayload {
   parcel_id?: string;
   actual_weight_grams?: number;
   route_id?: string;
+  courier_id?: string;
 }
 
 // Order independently consumes the same parcel-lifecycle events Tracking
@@ -100,6 +101,20 @@ export class ParcelEventConsumer {
           update,
         );
       }
+    }
+
+    // Last-mile assignment: Dispatcher's leg-assign publishes courier_id on
+    // this subject but never writes PARCEL itself (only Order does). Persisted
+    // independently of the FSM outcome - an out-of-order event may fail the
+    // transition below, but the assignment is still real.
+    if (
+      subject === NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY &&
+      payload.courier_id
+    ) {
+      await this.orderRepository.updateParcelAssignedCourier(
+        parcel.id,
+        payload.courier_id,
+      );
     }
 
     try {

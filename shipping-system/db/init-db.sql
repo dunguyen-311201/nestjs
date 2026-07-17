@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.PARCEL (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     shipment_order_id UUID NOT NULL REFERENCES shipping_order_db.SHIPMENT_ORDER(id),
     route_id UUID, -- Logical FK to ROUTE.id
+    assigned_courier_id UUID, -- Logical FK to COURIER.id; written by Order on parcel.out_for_delivery (last-mile assignment)
     declared_weight_grams INT NOT NULL CHECK (declared_weight_grams > 0),
     actual_weight_grams INT CHECK (actual_weight_grams > 0),
     type VARCHAR(50) NOT NULL CHECK (type IN ('parcel', 'pallet')),
@@ -182,6 +183,7 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.OUTBOX (
 CREATE TABLE IF NOT EXISTS shipping_courier_db.COURIER (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     zone_id UUID NOT NULL, -- Logical FK to ZONE.id
+    user_id VARCHAR(64), -- Clerk user id of the shipper account operating as this courier
     role VARCHAR(50) NOT NULL CHECK (role IN ('Courier', 'HubOperator', 'Dispatcher', 'Admin')),
     status VARCHAR(50) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Verified')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -265,6 +267,7 @@ CREATE INDEX IF NOT EXISTS idx_shipment_order_rate_card_id ON shipping_order_db.
 
 CREATE INDEX IF NOT EXISTS idx_parcel_shipment_order_id ON shipping_order_db.PARCEL(shipment_order_id);
 CREATE INDEX IF NOT EXISTS idx_parcel_route_id ON shipping_order_db.PARCEL(route_id);
+CREATE INDEX IF NOT EXISTS idx_parcel_assigned_courier_id ON shipping_order_db.PARCEL(assigned_courier_id);
 
 CREATE INDEX IF NOT EXISTS idx_payment_transaction_payment_id ON shipping_order_db.PAYMENT_TRANSACTION(payment_id);
 
@@ -273,6 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_status_created_at ON shipping_order_db.OUT
 CREATE INDEX IF NOT EXISTS idx_courier_outbox_status_created_at ON shipping_courier_db.OUTBOX(status, created_at) WHERE status = 'PENDING';
 
 CREATE INDEX IF NOT EXISTS idx_courier_zone_id ON shipping_courier_db.COURIER(zone_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_courier_user_id ON shipping_courier_db.COURIER(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_proof_of_delivery_parcel_id ON shipping_courier_db.PROOF_OF_DELIVERY(parcel_id);
 

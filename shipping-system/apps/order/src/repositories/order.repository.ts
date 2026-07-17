@@ -149,6 +149,15 @@ export class OrderRepository implements IOrderRepository {
     await this.dataSource.getRepository(Parcel).update(parcelId, update);
   }
 
+  async updateParcelAssignedCourier(
+    parcelId: string,
+    courierId: string,
+  ): Promise<void> {
+    await this.dataSource
+      .getRepository(Parcel)
+      .update(parcelId, { assignedCourierId: courierId });
+  }
+
   async findParcelStatesByShipmentOrderId(
     shipmentOrderId: string,
   ): Promise<ParcelState[] | null> {

@@ -7,6 +7,7 @@ describe('ParcelEventConsumer', () => {
     updateParcelState: jest.Mock;
     updateParcelStateAndDirection: jest.Mock;
     updateParcelWeightAndRoute: jest.Mock;
+    updateParcelAssignedCourier: jest.Mock;
   };
   let consumer: ParcelEventConsumer;
 
@@ -16,6 +17,7 @@ describe('ParcelEventConsumer', () => {
       updateParcelState: jest.fn().mockResolvedValue(undefined),
       updateParcelStateAndDirection: jest.fn().mockResolvedValue(undefined),
       updateParcelWeightAndRoute: jest.fn().mockResolvedValue(undefined),
+      updateParcelAssignedCourier: jest.fn().mockResolvedValue(undefined),
     };
     consumer = new ParcelEventConsumer(orderRepository as never);
   });
@@ -98,6 +100,68 @@ describe('ParcelEventConsumer', () => {
     await consumer.onOutForDelivery({ parcel_id: 'parcel-1' });
 
     expect(orderRepository.updateParcelWeightAndRoute).not.toHaveBeenCalled();
+  });
+
+  it('persists the courier assignment on parcel.out_for_delivery alongside the state transition', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.IN_HUB,
+    });
+
+    await consumer.onOutForDelivery({
+      parcel_id: 'parcel-1',
+      courier_id: 'courier-9',
+    });
+
+    expect(orderRepository.updateParcelAssignedCourier).toHaveBeenCalledWith(
+      'parcel-1',
+      'courier-9',
+    );
+    expect(orderRepository.updateParcelState).toHaveBeenCalledWith(
+      'parcel-1',
+      ParcelState.OUT_FOR_DELIVERY,
+    );
+  });
+
+  it('skips the assignment write when parcel.out_for_delivery carries no courier_id', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.IN_HUB,
+    });
+
+    await consumer.onOutForDelivery({ parcel_id: 'parcel-1' });
+
+    expect(orderRepository.updateParcelAssignedCourier).not.toHaveBeenCalled();
+    expect(orderRepository.updateParcelState).toHaveBeenCalled();
+  });
+
+  it('persists the assignment even when the state transition is dropped as invalid', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.IN_TRANSIT,
+    });
+
+    await consumer.onOutForDelivery({
+      parcel_id: 'parcel-1',
+      courier_id: 'courier-9',
+    });
+
+    expect(orderRepository.updateParcelAssignedCourier).toHaveBeenCalledWith(
+      'parcel-1',
+      'courier-9',
+    );
+    expect(orderRepository.updateParcelState).not.toHaveBeenCalled();
+  });
+
+  it('does not persist an assignment for other subjects', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.CREATED,
+    });
+
+    await consumer.onPickedUp({ parcel_id: 'parcel-1' });
+
+    expect(orderRepository.updateParcelAssignedCourier).not.toHaveBeenCalled();
   });
 
   it('does nothing when the payload is missing parcel_id', async () => {
