@@ -11,15 +11,15 @@
 - **Current phase:** Phase 9 — Auth & RBAC extension (4.0d) **complete**
   (9.1–9.4 all done 16 Jul); see `docs/03-phases.md` and
   `docs/10-authz-plan.md`.
-- **Next task:** **Per-resource ownership for shipper** (first Phase 9
-  follow-up, ~1.5–2d, needs its own plan + estimation in
-  `docs/03-phases.md` before starting — was an explicit Phase 9 cut):
-  shipper sees/acts on only legs assigned to them — assignee
-  (`courier user id`) column on the leg, dispatcher assignment writes it,
-  courier endpoints filter by `x-user-id`. Remaining follow-ups after
-  that, in rough priority order: recipient share-link tracking (tracking
-  currently readable by any authenticated customer — documented
-  fallback), role-management UI, Clerk→DB user sync.
+- **Next task:** **10.1 — Identity link + assignment persistence** (Phase 10
+  — Shipper per-resource ownership, 2.0d, planned 17 Jul in
+  `docs/03-phases.md`): `COURIER.user_id` Clerk link, then
+  `PARCEL.assigned_courier_id` written by Order's `ParcelEventConsumer` on
+  `parcel.out_for_delivery`; 10.2 Courier-endpoint enforcement; 10.3
+  per-actor E2E. Remaining follow-ups after Phase 10, in rough priority
+  order: recipient share-link tracking (tracking currently readable by any
+  authenticated customer — documented fallback), role-management UI,
+  Clerk→DB user sync.
 
 ## 2026-07-16 — Phase 9.4: Customer ownership + per-actor E2E
 
