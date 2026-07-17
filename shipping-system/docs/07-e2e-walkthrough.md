@@ -30,6 +30,16 @@ All seven should return `{"status":"ok"}`. `notification` (task 6.6) has no
 HTTP port — it's a pure NATS consumer; check it's alive via `docker compose
 logs notification` for a `Nest microservice successfully started` line.
 
+**Authentication (added in Phase 9, after this walkthrough was captured):**
+every gateway route except `/health`, the Swagger docs, and
+`POST /payments/webhook` now requires a Clerk session JWT
+(`Authorization: Bearer <token>`) — the curl commands below were captured
+before that and omit the header; add it when re-running them. Get a 1h test
+token per role from the `apps/web` panel (`http://localhost:5173`,
+"Get 1h test token"). RBAC (403 per role) and per-actor ownership are
+demonstrated in [Per-actor authorization matrix](#per-actor-authorization-matrix-phase-10)
+below.
+
 Seed data (`db/init-db.sql`'s `docker-entrypoint-initdb.d` mount, populated by
 `generate_seed.py`) already provides zones, hubs, routes, drivers, trucks,
 and couriers. This walkthrough uses `Hub-REG-100` (origin) and `Hub-REG-101`
@@ -345,6 +355,43 @@ built each guard:
   Tracking for in-transit parcels past their SLA with no further scans,
   emitting `parcel.lost_suspected`. Verified during task 5.5/5.6 (Tracking
   event store / status projection).
+
+## Per-actor authorization matrix (Phase 10)
+
+Captured 2026-07-17 (task 10.3), all through the gateway (`:3000`) with real
+Clerk 1h test tokens. Setup: two fresh orders were staged through the full
+flow above (create → webhook payment → pickup → origin hub → trip
+depart → destination hub → dispatcher `POST /legs/{id}/assign`), leaving two
+`OutForDelivery` parcels with persisted assignments (task 10.1):
+
+- parcel `411ecaac` — `assigned_courier_id = b578dcfe`, the courier row
+  linked to `shipper.test@example.com` via `COURIER.user_id`
+- parcel `ac983258` — `assigned_courier_id = a354903c`, an unlinked courier
+
+The shipper's pickup scan itself was also made with the shipper token
+(courier-identity check passes on their own `courier_id` → 201) — pickup
+enforces identity only, since assignment doesn't exist yet at pickup time.
+
+`POST /couriers/legs/{parcel_id}/deliver` matrix (task 10.2's guards):
+
+| # | Caller | Body `courier_id` | Parcel | Result |
+| - | :--- | :--- | :--- | :--- |
+| 1 | no token | own | `411ecaac` | `401 Missing bearer token` |
+| 2 | shipper | `a354903c` (not own) | `ac983258` | `403 A shipper can only act as their own courier` |
+| 3 | shipper | `b578dcfe` (own) | `ac983258` (another courier's) | `403 This parcel is not assigned to the calling courier` |
+| 4 | shipper | `b578dcfe` (own) | `411ecaac` (own assignment) | `201 {"status":"recorded","proof_of_delivery_id":"f394eff0-..."}` |
+| 5 | admin | `a354903c` | `ac983258` | `201` (admin bypass) `{"proof_of_delivery_id":"2fdcaad4-..."}` |
+
+Confirmed in Postgres after the run: both parcels `state = Delivered` (the
+first time the full multi-hub flow has been driven per-actor end-to-end),
+and both `PROOF_OF_DELIVERY` rows exist in `shipping_courier_db`. The 403s
+are deliberately plain `Forbidden` responses, distinct from the `422 BR-XX`
+business-rule envelope — ownership is an authorization concern, not a
+business rule.
+
+Customer ownership (`GET /orders` filtered by `created_by_user_id`, admin
+sees all, shipper → 403 on `/orders`) was captured during task 9.4 and is
+not re-run here.
 
 ## Cleanup
 

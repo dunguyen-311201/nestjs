@@ -77,8 +77,12 @@ Authentication already exists (ClerkAuthGuard at the gateway, session JWT,
 **Out of scope (do NOT slip in):**
 - Per-resource ownership for shipper/hub/dispatcher (e.g. shipper sees only
   legs assigned to them) — needs assignee columns + joins, ~1.5–2d extra.
-  The shipper half is now planned as Phase 10 in
-  [03-phases.md](./03-phases.md) (2.0d); hub/dispatcher ownership stays cut.
+  The shipper half **shipped as Phase 10** (tasks 10.1–10.3, done 17 Jul —
+  see [03-phases.md](./03-phases.md)): `COURIER.user_id` link +
+  `PARCEL.assigned_courier_id`, 403 enforcement on
+  `/couriers/legs/{id}/pickup|deliver`, per-actor E2E captured in
+  [07-e2e-walkthrough.md](./07-e2e-walkthrough.md) § Per-actor authorization
+  matrix. Hub/dispatcher ownership stays cut.
 - Admin UI for role management (roles assigned via Clerk Dashboard).
 - Clerk→DB user sync webhooks.
 - Multi-role users.
