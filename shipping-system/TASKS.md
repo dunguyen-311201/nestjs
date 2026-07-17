@@ -7,6 +7,9 @@ End of day, copy the "Done" bullets straight into your report.
 
 ### Done
 - Fixed Swagger 401 on "Try it out" (`5b69b9a`): none of the 7 specs attached the Clerk token — gateway had `.addBearerAuth()` but no global security requirement, the 6 downstream services had neither (no Authorize button at all when selected in the gateway explorer dropdown). Added `.addBearerAuth()` + `.addSecurityRequirements('bearer')` to every `main.ts`. Build/lint/408 tests green; rebuilt + restarted all 7 HTTP images; live-verified `bearer` scheme + global security in `/api/docs-json` and `/api/docs/order/json` on `:3000`.
+- Long-lived test tokens (`11e7c97`): created Clerk JWT template `testing` (1h lifetime, `role` claim) via Backend API; web panel gained "Get 1h test token" (`getToken({template})`); template tokens carry no `sid` → `VerifiedToken.sessionId` nullable, gateway forwards `x-session-id` only when present. TDD +1 spec (409 green); gateway image rebuilt.
+- Diagnosed web sign-in "Couldn't find your account": test users + keys + served bundle all matched instance `dashing-seahorse-29` — root cause was stale Clerk dev-browser state on `localhost:5173`; clearing site data fixed it.
+- Pushed to GitHub (`4ccd03a..7aa090e`) and synced GitLab (`9caf8c8..ddba405` via `supporter-review`, strip guard clean, upstream still `github`). Stashed/restored an uncommitted `apps/web/src/App.tsx` edit around the sync.
 - Brought the full dockerized stack + `apps/web` (`:5173`) up for the Phase 9 demo (auth 401, RBAC 403, customer ownership).
 
 ## 2026-07-16
