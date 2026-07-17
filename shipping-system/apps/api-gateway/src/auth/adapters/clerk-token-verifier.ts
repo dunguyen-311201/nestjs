@@ -18,9 +18,11 @@ export class ClerkTokenVerifier implements ITokenVerifier {
     // session-token customization; absent or unknown values become null so
     // authentication still succeeds (role enforcement rejects later).
     const role: unknown = (payload as Record<string, unknown>).role;
+    // JWT-template tokens (used for long-lived test tokens) carry no sid;
+    // only session tokens do.
     return {
       userId: payload.sub,
-      sessionId: payload.sid,
+      sessionId: typeof payload.sid === 'string' ? payload.sid : null,
       role: isRole(role) ? role : null,
     };
   }

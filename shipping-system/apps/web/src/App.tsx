@@ -18,8 +18,8 @@ function TokenPanel() {
 
   const [role, setRole] = useState<string>('');
 
-  async function showToken() {
-    const t = await getToken();
+  async function showToken(template?: string) {
+    const t = await getToken(template ? { template } : undefined);
     setToken(t ?? 'No session token available');
     setCopied(false);
     if (t) {
@@ -42,6 +42,9 @@ function TokenPanel() {
   return (
     <section>
       <button onClick={() => void showToken()}>Get session token</button>{' '}
+      <button onClick={() => void showToken('testing')}>
+        Get 1h test token
+      </button>{' '}
       {role && (
         <span>
           role: <strong>{role}</strong>

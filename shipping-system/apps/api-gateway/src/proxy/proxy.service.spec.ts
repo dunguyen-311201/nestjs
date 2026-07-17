@@ -82,7 +82,11 @@ describe('ProxyService', () => {
   describe('buildForwardHeaders', () => {
     interface FakeAuthedRequest {
       headers: Record<string, string | string[] | undefined>;
-      auth?: { userId: string; sessionId: string; role: string | null };
+      auth?: {
+        userId: string;
+        sessionId: string | null;
+        role: string | null;
+      };
     }
 
     function requestWith(overrides: Partial<FakeAuthedRequest>) {
@@ -135,6 +139,18 @@ describe('ProxyService', () => {
         'order.internal',
       );
       expect(headers['x-user-role']).toBeUndefined();
+    });
+
+    it('omits x-session-id when the token carries no session (JWT template)', () => {
+      const headers = service.buildForwardHeaders(
+        requestWith({
+          headers: { 'x-session-id': 'spoofed' },
+          auth: { userId: 'user_1', sessionId: null, role: 'customer' },
+        }),
+        'order.internal',
+      );
+      expect(headers['x-session-id']).toBeUndefined();
+      expect(headers['x-user-id']).toBe('user_1');
     });
 
     it('overrides client-sent identity headers with the verified identity', () => {

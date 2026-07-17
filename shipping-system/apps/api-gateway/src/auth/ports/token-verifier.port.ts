@@ -2,7 +2,7 @@ import { Role } from '@app/contracts';
 
 export interface VerifiedToken {
   userId: string;
-  sessionId: string;
+  sessionId: string | null;
   role: Role | null;
 }
 

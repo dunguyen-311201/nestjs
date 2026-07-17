@@ -26,7 +26,11 @@ export class ProxyService {
   // services can trust them without re-verifying the Clerk JWT.
   buildForwardHeaders(
     req: Request & {
-      auth?: { userId: string; sessionId: string; role: string | null };
+      auth?: {
+        userId: string;
+        sessionId: string | null;
+        role: string | null;
+      };
     },
     host: string,
   ): Record<string, string | string[] | undefined> {
@@ -39,7 +43,9 @@ export class ProxyService {
     delete headers['x-user-role'];
     if (req.auth) {
       headers['x-user-id'] = req.auth.userId;
-      headers['x-session-id'] = req.auth.sessionId;
+      if (req.auth.sessionId) {
+        headers['x-session-id'] = req.auth.sessionId;
+      }
       if (req.auth.role) {
         headers['x-user-role'] = req.auth.role;
       }
