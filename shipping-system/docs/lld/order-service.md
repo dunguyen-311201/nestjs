@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.1 | 2026-07-17 | Du Nguyen | Task 10.1: added `PARCEL.assigned_courier_id` (uuid, nullable, indexed) — the last-mile courier assignment, written by `ParcelEventConsumer` when Dispatcher's leg-assign publishes `parcel.out_for_delivery` (Dispatcher never writes `PARCEL`; same convention as Hub's weight/route write-back on `parcel.hub_received`). Persisted independently of the FSM outcome — an out-of-order event may drop the state transition, but the assignment is still real. Basis for Courier-endpoint ownership enforcement (task 10.2). |
 | v1.0 | 2026-07-03 | Du Nguyen | Initial split from monolithic LLD |
 
 Owns: `CUSTOMER`, `SHIPMENT_ORDER`, `PARCEL`, `PAYMENT`, `PAYMENT_TRANSACTION`. Conventions in [00-conventions.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/lld/00-conventions.md) apply — including the `Idempotency-Key` header on every `POST` below. See [docs/02-HLD.md](file:///home/dunguyen/Training/nestjs/shipping-system/docs/02-HLD.md) for ownership rationale and event contracts.
@@ -146,7 +147,7 @@ Stripe-signed payload (not a user-facing DTO). Verify `Stripe-Signature` header 
 | :--- | :--- | :--- |
 | `CUSTOMER` | — | PK `id` |
 | `SHIPMENT_ORDER` | `idx_shipment_order_sender_id`, `idx_shipment_order_recipient_id`, `idx_shipment_order_status` (for projection sweeps) | PK `id` · FK `sender_id`/`recipient_id` → `CUSTOMER.id` (same schema) |
-| `PARCEL` | `idx_parcel_shipment_order_id`, `idx_parcel_route_id` | PK `id` · FK `shipment_order_id` → `SHIPMENT_ORDER.id` (same schema) · CHECK `declared_weight_grams > 0` |
+| `PARCEL` | `idx_parcel_shipment_order_id`, `idx_parcel_route_id`, `idx_parcel_assigned_courier_id` | PK `id` · FK `shipment_order_id` → `SHIPMENT_ORDER.id` (same schema) · CHECK `declared_weight_grams > 0` · `assigned_courier_id` logical FK to `COURIER.id` (nullable) |
 | `PAYMENT` | `idx_payment_shipment_order_id` | PK `id` · UNIQUE `shipment_order_id` (one payment per order) |
 | `PAYMENT_TRANSACTION` | `idx_payment_transaction_payment_id` | PK `id` · UNIQUE `external_transaction_id` (webhook idempotency) |
 

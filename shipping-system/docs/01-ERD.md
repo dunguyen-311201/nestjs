@@ -59,6 +59,7 @@ erDiagram
 | `id` | uuid PK | Unique identifier of an individual parcel (a pallet is a large parcel). |
 | `shipment_order_id` | uuid FK | The order this parcel belongs to. |
 | `route_id` | uuid FK, nullable | The corridor/route this parcel travels; set once routing is known. |
+| `assigned_courier_id` | uuid FK, nullable | Logical FK to `COURIER.id` — the last-mile courier assigned to this parcel. Written by Order Service consuming `parcel.out_for_delivery` (Dispatcher publishes the assignment but never writes `PARCEL` directly). Added for Phase 10 (shipper per-resource ownership). |
 | `declared_weight_grams` | int | Weight declared by the sender at order creation. |
 | `actual_weight_grams` | int, nullable | Weight measured at hub inbound; null until scanned. |
 | `type` | enum | parcel or pallet; pallets route away from standard conveyor sortation lines. |
@@ -158,6 +159,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | :--- | :--- | :--- |
 | `id` | uuid PK | Unique identifier of a first/last-mile courier. |
 | `zone_id` | uuid FK | The zone the courier operates in. |
+| `user_id` | varchar(64), nullable, unique | Clerk user id of the shipper account operating as this courier; null until provisioned (`scripts/link-courier-user.js`). Added for Phase 10 (shipper per-resource ownership). |
 | `role` | enum | RBAC role separating Courier from Hub Operator, Dispatcher, Admin. |
 | `status` | enum | `Active`, `Inactive`, or `Verified`. Added for task 6.5 (Dispatcher): UC-10's `POST /legs/{id}/assign` 422 "courier not active/verified" guard had no column to check against until this was added — same class of gap as `LINEHAULTRIP.status` (task 6.4). |
 
