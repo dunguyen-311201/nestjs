@@ -12,6 +12,8 @@ async function bootstrap() {
       .setTitle('Dispatcher Service')
       .setDescription('Shipping System - Dispatcher Service')
       .setVersion('1.0')
+      .addBearerAuth()
+      .addSecurityRequirements('bearer')
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);

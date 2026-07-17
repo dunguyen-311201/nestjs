@@ -16,6 +16,8 @@ async function bootstrap() {
       .setTitle('Order Service')
       .setDescription('Shipping System - Order Service')
       .setVersion('1.0')
+      .addBearerAuth()
+      .addSecurityRequirements('bearer')
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);

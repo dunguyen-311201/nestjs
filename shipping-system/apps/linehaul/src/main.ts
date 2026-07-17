@@ -12,6 +12,8 @@ async function bootstrap() {
       .setTitle('Line-haul Service')
       .setDescription('Shipping System - Line-haul Service')
       .setVersion('1.0')
+      .addBearerAuth()
+      .addSecurityRequirements('bearer')
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
