@@ -4,6 +4,7 @@
 
 | Version | Date | Author | Changes |
 | :--- | :--- | :--- | :--- |
+| v1.6 | 2026-07-17 | Du Nguyen | Task 10.2: shipper per-resource ownership enforced on `POST /pickup`/`POST /deliver`. When the gateway-verified `x-user-role` is `shipper`, the caller's `COURIER` is resolved via `x-user-id` → `COURIER.user_id`; a `courier_id` that isn't their own → `403`; `/deliver` additionally requires `PARCEL.assigned_courier_id` (read via the existing cross-schema lookup) to match — unassigned parcels are rejected for shippers too. Admin and identity-less internal calls bypass. `403 Forbidden` (authorization), deliberately distinct from the `422` BR envelope (business-rule failure) and the gateway's `401` (authentication). Pickup checks courier identity only — no assignment exists yet at pickup time. |
 | v1.5 | 2026-07-17 | Du Nguyen | Task 10.1: added `COURIER.user_id` (varchar 64, nullable, unique index) — the Clerk user id of the shipper account operating as this courier, provisioned via `scripts/link-courier-user.js`. Identity link only; ownership enforcement on `/pickup`/`/deliver` is task 10.2. |
 | v1.4 | 2026-07-14 | Du Nguyen | Task 6.1 follow-up: replaced the synchronous in-request NATS publish with a Transactional Outbox (`shipping_courier_db.OUTBOX`, same shape/poller pattern as Order Service's, task 5.6) — a publish failure no longer loses the event, and an `Idempotency-Key` retry after a failed publish can no longer double-write `PROOF_OF_DELIVERY`/`DELIVERY_ATTEMPT`, since the business row and the outbox row now commit atomically in one Postgres transaction and the publish itself happens async, outside the request. API responses changed accordingly (see API Contracts): they no longer return `event`/`event_id`/`published_at` (those implied a synchronous publish that no longer happens), only `status: "recorded"` plus whatever this service's own DB write produced. |
 | v1.3 | 2026-07-14 | Du Nguyen | Task 6.1 implementation: added `DELIVERY_ATTEMPT.direction` — the original schema's `UNIQUE(parcel_id, attempt_number)` couldn't support BR-04's documented "counter resets to zero for the reverse leg" without colliding with the forward leg's own rows 1-3 for the same `parcel_id`. `UNIQUE` is now `(parcel_id, direction, attempt_number)`. Also added the missing `DEFAULT NOW()` on `DELIVERY_ATTEMPT.created_at` (every other table's `created_at` has it; this one didn't, caught by live verification when `TypeORM`'s `@CreateDateColumn`-backed insert relied on the DB default and got a `NOT NULL` violation instead). |
@@ -118,7 +119,7 @@ sequenceDiagram
 | `parcel_id` | uuid | required, must belong to an order in `Confirmed`+ status (BR-08 guard) |
 | `courier_id` | uuid | required, must be an active courier |
 
-**Response `201`**: `{ status: "recorded" }` — the `parcel.picked_up` publish is now async via the Outbox/poller (v1.4), so there is no `event_id`/`published_at` to return synchronously; this service also never creates `TRACKING_EVENT` itself (Tracking does, after consuming the event). **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed`.
+**Response `201`**: `{ status: "recorded" }` — the `parcel.picked_up` publish is now async via the Outbox/poller (v1.4), so there is no `event_id`/`published_at` to return synchronously; this service also never creates `TRACKING_EVENT` itself (Tracking does, after consuming the event). **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed` · `403` shipper caller acting as a courier that isn't their own (v1.6).
 
 ### `POST /couriers/legs/{id}/deliver`
 
@@ -133,7 +134,7 @@ sequenceDiagram
 - `outcome=DELIVERED`: `{ status: "recorded", proof_of_delivery_id }` (`proof_of_delivery_id` is known — this service writes `PROOF_OF_DELIVERY` in the same request/transaction).
 - `outcome=FAILED`: `{ status: "recorded", delivery_attempt_id, attempt_number, rts_triggered }` (`rts_triggered` is `true` only on the 3rd consecutive failure, BR-04).
 
-**Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead.
+**Errors**: `404` leg/parcel not found · `422 BR-04` a 4th delivery attempt submitted after RTS already triggered — must be routed as a reverse-leg attempt instead · `403` shipper caller acting as a courier that isn't their own, or delivering a parcel not assigned to them (v1.6).
 
 **Side effect on failure**: writes a `DELIVERY_ATTEMPT` row (`attempt_number` 1–3); on the 3rd, emits `parcel.rts` instead of allowing a 4th `OUT_FOR_DELIVERY` (BR-04).
 
