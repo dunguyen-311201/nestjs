@@ -15,6 +15,10 @@ export interface RecordDeliveryFailureResult {
 }
 
 export abstract class ICourierRepository {
+  // Resolves which courier a gateway-verified Clerk user operates as
+  // (COURIER.user_id link); null when the account is not provisioned.
+  abstract findCourierIdByUserId(userId: string): Promise<string | null>;
+
   // Highest attempt_number recorded for this parcel within the given
   // direction (the counter restarts at 1 for the reverse leg, scoped
   // by DELIVERY_ATTEMPT.direction). 0 when no attempt has been recorded yet

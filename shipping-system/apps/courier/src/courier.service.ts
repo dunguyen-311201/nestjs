@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { BusinessRuleException } from '@app/dtos';
 import {
@@ -34,6 +38,13 @@ export interface DeliverFailureResult {
 
 export type DeliverResult = DeliverSuccessResult | DeliverFailureResult;
 
+// Gateway-verified identity (x-user-id / x-user-role headers, spoof-proof:
+// the gateway strips client-sent values). Both null on direct internal calls.
+export interface CallerContext {
+  userId: string | null;
+  role: string | null;
+}
+
 @Injectable()
 export class CourierService {
   constructor(
@@ -46,6 +57,7 @@ export class CourierService {
     parcelId: string,
     dto: PickupDto,
     idempotencyKey: string,
+    caller?: CallerContext,
   ): Promise<PickupResult> {
     const cacheKey = `idem:courier:${idempotencyKey}`;
     const cached = await this.idempotencyStore.get<PickupResult>(cacheKey);
@@ -57,6 +69,9 @@ export class CourierService {
     if (!context) {
       throw new NotFoundException(`No parcel found for id ${parcelId}`);
     }
+    // Pickup happens before any last-mile assignment exists, so a shipper is
+    // only checked against their own courier identity, not the parcel.
+    await this.enforceShipperOwnership(caller, dto.courier_id);
     if (!CONFIRMED_OR_LATER.has(context.orderStatus)) {
       throw new BusinessRuleException(
         'BR-08',
@@ -85,6 +100,7 @@ export class CourierService {
     parcelId: string,
     dto: DeliverDto,
     idempotencyKey: string,
+    caller?: CallerContext,
   ): Promise<DeliverResult> {
     const cacheKey = `idem:courier:${idempotencyKey}`;
     const cached = await this.idempotencyStore.get<DeliverResult>(cacheKey);
@@ -96,6 +112,11 @@ export class CourierService {
     if (!context) {
       throw new NotFoundException(`No parcel found for id ${parcelId}`);
     }
+    await this.enforceShipperOwnership(
+      caller,
+      dto.courier_id,
+      context.assignedCourierId,
+    );
 
     const result =
       dto.outcome === DeliveryOutcome.DELIVERED
@@ -104,6 +125,38 @@ export class CourierService {
 
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);
     return result;
+  }
+
+  // Only shippers are scoped to their own resources; admin (and internal
+  // calls carrying no identity) bypass. `assignedCourierId` is passed on
+  // deliver only - undefined skips the assignment check (pickup, where no
+  // assignment exists yet), while null means "not assigned" and is rejected.
+  private async enforceShipperOwnership(
+    caller: CallerContext | undefined,
+    courierIdFromDto: string,
+    assignedCourierId?: string | null,
+  ): Promise<void> {
+    if (caller?.role !== 'shipper') {
+      return;
+    }
+    const ownCourierId = caller.userId
+      ? await this.courierRepository.findCourierIdByUserId(caller.userId)
+      : null;
+    if (!ownCourierId) {
+      throw new ForbiddenException(
+        'This shipper account is not linked to a courier',
+      );
+    }
+    if (courierIdFromDto !== ownCourierId) {
+      throw new ForbiddenException(
+        'A shipper can only act as their own courier',
+      );
+    }
+    if (assignedCourierId !== undefined && assignedCourierId !== ownCourierId) {
+      throw new ForbiddenException(
+        'This parcel is not assigned to the calling courier',
+      );
+    }
   }
 
   private async recordSuccess(

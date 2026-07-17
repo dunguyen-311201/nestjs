@@ -2,6 +2,9 @@ export interface ParcelOrderContext {
   shipmentOrderId: string;
   orderStatus: string;
   parcelDirection: string;
+  // Last-mile courier assignment (null until Dispatcher's leg-assign event
+  // lands); read for shipper ownership enforcement on /deliver.
+  assignedCourierId: string | null;
 }
 
 export abstract class IOrderLookupPort {

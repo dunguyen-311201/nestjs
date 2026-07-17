@@ -8,6 +8,7 @@ import { DeliveryAttempt } from './entities/delivery-attempt.entity';
 import { Outbox } from './entities/outbox.entity';
 import { ShipmentOrder } from './entities/shipment-order.entity';
 import { Parcel } from './entities/parcel.entity';
+import { Courier } from './entities/courier.entity';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { Parcel } from './entities/parcel.entity';
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'postgres',
       schema: 'shipping_courier_db',
-      entities: [ProofOfDelivery, DeliveryAttempt, Outbox],
+      entities: [ProofOfDelivery, DeliveryAttempt, Outbox, Courier],
       synchronize: false,
     }),
     // Read-only mapping onto Order Service's SHIPMENT_ORDER/PARCEL tables,

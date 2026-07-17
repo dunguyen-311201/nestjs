@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest.fn() mocks flagged as false positives */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { BusinessRuleException } from '@app/dtos';
 import { CourierService } from './courier.service';
 import { IOrderLookupPort } from './ports/order-lookup.port';
@@ -20,6 +20,7 @@ describe('CourierService', () => {
       recordPickup: jest.fn(),
       recordDeliverySuccess: jest.fn(),
       recordDeliveryFailure: jest.fn(),
+      findCourierIdByUserId: jest.fn(),
     };
     idempotencyStore = { get: jest.fn(), set: jest.fn() };
     idempotencyStore.get.mockResolvedValue(null);
@@ -45,6 +46,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Created',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
 
       const error = await service
@@ -61,6 +63,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Confirmed',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
 
       const result = await service.pickup(
@@ -124,6 +127,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
       courierRepository.recordDeliverySuccess.mockResolvedValue({
         proofOfDeliveryId: 'pod-1',
@@ -165,6 +169,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
       courierRepository.getLatestAttemptNumber.mockResolvedValue(0);
       courierRepository.recordDeliveryFailure.mockResolvedValue({
@@ -210,6 +215,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
       courierRepository.getLatestAttemptNumber.mockResolvedValue(2);
       courierRepository.recordDeliveryFailure.mockResolvedValue({
@@ -241,6 +247,7 @@ describe('CourierService', () => {
         shipmentOrderId: 'order-1',
         orderStatus: 'Active',
         parcelDirection: 'Forward',
+        assignedCourierId: null,
       });
       courierRepository.getLatestAttemptNumber.mockResolvedValue(3);
 
@@ -282,6 +289,128 @@ describe('CourierService', () => {
 
       expect(result).toBe(cached);
       expect(orderLookup.findParcelOrderContext).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('shipper ownership enforcement (task 10.2)', () => {
+    const shipper = { userId: 'user_ship_1', role: 'shipper' };
+
+    function givenContext(assignedCourierId: string | null) {
+      orderLookup.findParcelOrderContext.mockResolvedValue({
+        shipmentOrderId: 'order-1',
+        orderStatus: 'Confirmed',
+        parcelDirection: 'Forward',
+        assignedCourierId,
+      });
+    }
+
+    it('allows pickup when the shipper acts as their own courier', async () => {
+      givenContext(null);
+      courierRepository.findCourierIdByUserId.mockResolvedValue('courier-1');
+
+      await service.pickup(
+        'parcel-1',
+        { courier_id: 'courier-1' },
+        'idem-1',
+        shipper,
+      );
+
+      expect(courierRepository.findCourierIdByUserId).toHaveBeenCalledWith(
+        'user_ship_1',
+      );
+      expect(courierRepository.recordPickup).toHaveBeenCalled();
+    });
+
+    it('rejects pickup with 403 when courier_id belongs to someone else', async () => {
+      givenContext(null);
+      courierRepository.findCourierIdByUserId.mockResolvedValue('courier-1');
+
+      await expect(
+        service.pickup(
+          'parcel-1',
+          { courier_id: 'courier-2' },
+          'idem-1',
+          shipper,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(courierRepository.recordPickup).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 when the shipper account is not linked to any courier', async () => {
+      givenContext(null);
+      courierRepository.findCourierIdByUserId.mockResolvedValue(null);
+
+      await expect(
+        service.pickup(
+          'parcel-1',
+          { courier_id: 'courier-1' },
+          'idem-1',
+          shipper,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows deliver when the parcel is assigned to the shipper', async () => {
+      givenContext('courier-1');
+      courierRepository.findCourierIdByUserId.mockResolvedValue('courier-1');
+      courierRepository.recordDeliverySuccess.mockResolvedValue({
+        proofOfDeliveryId: 'pod-1',
+      });
+
+      const result = await service.deliver(
+        'parcel-1',
+        { courier_id: 'courier-1', outcome: DeliveryOutcome.DELIVERED },
+        'idem-1',
+        shipper,
+      );
+
+      expect(result.status).toBe('recorded');
+    });
+
+    it('rejects deliver with 403 when the parcel is assigned to another courier', async () => {
+      givenContext('courier-2');
+      courierRepository.findCourierIdByUserId.mockResolvedValue('courier-1');
+
+      await expect(
+        service.deliver(
+          'parcel-1',
+          { courier_id: 'courier-1', outcome: DeliveryOutcome.DELIVERED },
+          'idem-1',
+          shipper,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(courierRepository.recordDeliverySuccess).not.toHaveBeenCalled();
+    });
+
+    it('rejects deliver with 403 when the parcel has no assignment yet', async () => {
+      givenContext(null);
+      courierRepository.findCourierIdByUserId.mockResolvedValue('courier-1');
+
+      await expect(
+        service.deliver(
+          'parcel-1',
+          { courier_id: 'courier-1', outcome: DeliveryOutcome.DELIVERED },
+          'idem-1',
+          shipper,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('does not enforce ownership for admin or missing role', async () => {
+      givenContext('courier-9');
+      courierRepository.recordDeliverySuccess.mockResolvedValue({
+        proofOfDeliveryId: 'pod-1',
+      });
+
+      await service.deliver(
+        'parcel-1',
+        { courier_id: 'courier-1', outcome: DeliveryOutcome.DELIVERED },
+        'idem-1',
+        { userId: 'user_admin', role: 'admin' },
+      );
+      await service.pickup('parcel-1', { courier_id: 'courier-1' }, 'idem-2');
+
+      expect(courierRepository.findCourierIdByUserId).not.toHaveBeenCalled();
     });
   });
 });

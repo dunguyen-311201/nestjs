@@ -27,11 +27,12 @@ describe('OrderLookupAdapter', () => {
     expect(findOneOrder).not.toHaveBeenCalled();
   });
 
-  it('resolves shipmentOrderId + orderStatus + parcelDirection for an existing parcel', async () => {
+  it('resolves shipmentOrderId + orderStatus + parcelDirection + assignedCourierId for an existing parcel', async () => {
     findOneParcel.mockResolvedValue({
       id: 'parcel-1',
       shipmentOrderId: 'order-1',
       direction: 'Forward',
+      assignedCourierId: 'courier-7',
     });
     findOneOrder.mockResolvedValue({ id: 'order-1', status: 'Confirmed' });
 
@@ -41,6 +42,21 @@ describe('OrderLookupAdapter', () => {
       shipmentOrderId: 'order-1',
       orderStatus: 'Confirmed',
       parcelDirection: 'Forward',
+      assignedCourierId: 'courier-7',
     });
+  });
+
+  it('maps a missing assignment to null', async () => {
+    findOneParcel.mockResolvedValue({
+      id: 'parcel-1',
+      shipmentOrderId: 'order-1',
+      direction: 'Forward',
+      assignedCourierId: null,
+    });
+    findOneOrder.mockResolvedValue({ id: 'order-1', status: 'Confirmed' });
+
+    const result = await adapter.findParcelOrderContext('parcel-1');
+
+    expect(result?.assignedCourierId).toBeNull();
   });
 });

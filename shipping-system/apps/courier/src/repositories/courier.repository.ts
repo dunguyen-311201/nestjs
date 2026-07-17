@@ -5,6 +5,7 @@ import { ProofOfDelivery } from '../entities/proof-of-delivery.entity';
 import { DeliveryAttempt } from '../entities/delivery-attempt.entity';
 import { DeliveryAttemptOutcome } from '../entities/delivery-attempt-outcome.enum';
 import { Outbox } from '../entities/outbox.entity';
+import { Courier } from '../entities/courier.entity';
 import {
   ICourierRepository,
   OutboxEventInput,
@@ -15,6 +16,13 @@ import {
 @Injectable()
 export class CourierRepository implements ICourierRepository {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+
+  async findCourierIdByUserId(userId: string): Promise<string | null> {
+    const courier = await this.dataSource
+      .getRepository(Courier)
+      .findOne({ where: { userId } });
+    return courier?.id ?? null;
+  }
 
   async getLatestAttemptNumber(
     parcelId: string,

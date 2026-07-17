@@ -14,4 +14,7 @@ export class Parcel {
 
   @Column({ type: 'varchar', length: 50 })
   direction: string;
+
+  @Column({ name: 'assigned_courier_id', type: 'uuid', nullable: true })
+  assignedCourierId: string | null;
 }

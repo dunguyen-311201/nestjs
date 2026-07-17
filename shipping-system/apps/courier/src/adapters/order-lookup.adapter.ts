@@ -35,6 +35,7 @@ export class OrderLookupAdapter implements IOrderLookupPort {
       shipmentOrderId: parcel.shipmentOrderId,
       orderStatus: order?.status as string,
       parcelDirection: parcel.direction,
+      assignedCourierId: parcel.assignedCourierId,
     };
   }
 }

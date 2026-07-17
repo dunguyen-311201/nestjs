@@ -3,6 +3,7 @@ import { DeliveryAttempt } from '../entities/delivery-attempt.entity';
 import { DeliveryAttemptOutcome } from '../entities/delivery-attempt-outcome.enum';
 import { ProofOfDelivery } from '../entities/proof-of-delivery.entity';
 import { Outbox } from '../entities/outbox.entity';
+import { Courier } from '../entities/courier.entity';
 
 describe('CourierRepository', () => {
   let findMax: jest.Mock;
@@ -76,6 +77,39 @@ describe('CourierRepository', () => {
       );
 
       expect(result).toBe(2);
+    });
+  });
+
+  describe('findCourierIdByUserId', () => {
+    let findOneCourier: jest.Mock;
+
+    beforeEach(() => {
+      findOneCourier = jest.fn();
+      const originalImpl = dataSource.getRepository.getMockImplementation()!;
+      dataSource.getRepository.mockImplementation((entity: unknown) =>
+        entity === Courier
+          ? { findOne: findOneCourier }
+          : (originalImpl(entity) as unknown),
+      );
+    });
+
+    it('returns the courier id linked to the Clerk user', async () => {
+      findOneCourier.mockResolvedValue({ id: 'courier-1' });
+
+      const result = await repository.findCourierIdByUserId('user_1');
+
+      expect(findOneCourier).toHaveBeenCalledWith({
+        where: { userId: 'user_1' },
+      });
+      expect(result).toBe('courier-1');
+    });
+
+    it('returns null when no courier is linked to the user', async () => {
+      findOneCourier.mockResolvedValue(null);
+
+      const result = await repository.findCourierIdByUserId('user_1');
+
+      expect(result).toBeNull();
     });
   });
 
