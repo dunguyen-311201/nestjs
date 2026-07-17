@@ -15,6 +15,7 @@ erDiagram
     PARCEL ||--o{ DELIVERY_ATTEMPT : "records"
     PARCEL ||--o{ TRACKING_EVENT : "tracks"
     ROUTE ||--o{ PARCEL : "directs"
+    COURIER ||--o{ PARCEL : "assigned last-mile"
     HUB ||--o{ LINEHAULTRIP : "originates/terminates"
     DRIVER ||--o{ LINEHAULTRIP : "drives"
     TRUCK ||--o{ LINEHAULTRIP : "transports"
@@ -22,7 +23,7 @@ erDiagram
     ZONE ||--o{ ROUTE : "defines"
     ZONE ||--o{ RATECARD : "prices"
     ZONE ||--o{ COURIER : "deploys"
-    PARCEL ||--o{ PROOF_OF_DELIVERY : "proves"
+    PARCEL ||--o| PROOF_OF_DELIVERY : "proves"
     HUB ||--o{ TRACKING_EVENT : "records"
     COURIER ||--o{ TRACKING_EVENT : "records"
     LINEHAULTRIP ||--o{ TRACKING_EVENT : "associates"
@@ -52,6 +53,7 @@ erDiagram
 | `price_cents` | int | Fixed price in minor units (cents), locked at order creation. |
 | `expected_delivery_at` | timestamp | Locked calculated ETA. |
 | `status` | enum | Projections status (Draft, Created, Confirmed, Active, Complete, Partially_Delivered, Lost, Damaged, Cancelled). |
+| `created_by_user_id` | varchar(64), nullable | Clerk user id of the authenticated account that placed the order (task 9.4, customer ownership); deliberately separate from `sender_id` → CUSTOMER, the physical pickup contact. Null on legacy/pre-auth orders (admin-only, no backfill). Indexed (`idx_shipment_order_created_by_user_id`). |
 
 ### PARCEL
 | Field | Type | Description |
@@ -208,6 +210,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | PARCEL | DELIVERY_ATTEMPT | 1 : N | A parcel has many delivery attempts |
 | PARCEL | TRACKING_EVENT | 1 : N | Each parcel has many scan events (tracking timeline) |
 | ROUTE | PARCEL | 1 : N | A parcel travels along one corridor/route |
+| COURIER | PARCEL | 1 : N | Last-mile assignment (`assigned_courier_id`, logical FK) — written by Order Service on `parcel.out_for_delivery` (task 10.1) |
 | HUB | LINEHAULTRIP | 1 : N | Hub as origin / destination of trips |
 | DRIVER / TRUCK | LINEHAULTRIP | 1 : N | Assigned to trips |
 | HUB / COURIER | TRACKING_EVENT | 1 : N | A scan is recorded at a hub or by a courier |
