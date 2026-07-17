@@ -8,46 +8,17 @@
 
 ## Resume point
 
-- **Current phase:** Phase 9 — Auth & RBAC extension (4.0d) **complete**
-  (9.1–9.4 all done 16 Jul); see `docs/03-phases.md` and
-  `docs/10-authz-plan.md`.
-- **Next task:** **10.3 — Per-actor E2E + docs sync** (last Phase 10 task,
-  0.5d): E2E through the dockerized gateway with real Clerk tokens —
-  shipper delivers an assigned parcel (2xx), another courier's parcel
-  (403), admin bypass; update `docs/07-e2e-walkthrough.md` § actors and
-  `docs/10-authz-plan.md`. Needs a 1h test token for
-  `shipper.test@example.com` (linked to courier `b578dcfe` in 10.1).
-  10.1 + 10.2 are done (17 Jul) — see the log entry below. Remaining
-  follow-ups after Phase 10, in rough priority order: recipient share-link
-  tracking (tracking currently readable by any authenticated customer —
-  documented fallback), role-management UI, Clerk→DB user sync.
+- **Current phase:** Phase 10 — Shipper per-resource ownership (2.0d) **complete** (all tasks 10.1–10.3 done 17 Jul); see `docs/03-phases.md` and `docs/10-authz-plan.md`.
+- **Next steps:** Ready for review. Remaining follow-ups after Phase 10, in rough priority order: recipient share-link tracking (tracking currently readable by any authenticated customer — documented fallback), role-management UI, Clerk→DB user sync.
 
-## 2026-07-17 — Phase 10 planned; tasks 10.1 + 10.2 done
+## 2026-07-17 — Phase 10 complete (tasks 10.1–10.3 done)
 
-- **Phase 10 planned** (`af3fdd7`): 2.0d, 3 tasks in `docs/03-phases.md`
-  (total 20→22d); ownership anchors on `PARCEL` + a Clerk link on
-  `COURIER` since no `LEG` table exists; assignment persisted by Order
-  consuming the existing `parcel.out_for_delivery` (no cross-schema
-  write). ERD drift audit fixed 9.4's missing `created_by_user_id` row
-  and the missing COURIER→PARCEL relationship (`df6916f`).
-- **10.1** (`4f3e179`/`4c9dda2`/`241b64c`): `COURIER.user_id` (unique) +
-  `PARCEL.assigned_courier_id` (indexed), DDL + live ALTER;
-  `ParcelEventConsumer` writes the assignment (kept independent of the
-  FSM outcome — an out-of-order event may drop the transition, the
-  assignment is still real); `scripts/link-courier-user.js`;
-  `shipper.test@example.com` linked to courier `b578dcfe`. +5 specs.
-- **10.2** (`561c760`/`05d39d5`): shipper calls to
-  `/couriers/legs/{id}/pickup|deliver` are scoped to their own courier
-  identity (and, for deliver, their assigned parcel) — 403 Forbidden,
-  deliberately distinct from 422 BR envelope; admin/no-identity bypass.
-  +11 specs, 425 green. **Live-only bug fixed**: `Courier` entity missing
-  from `AppModule.entities` (`EntityMetadataNotFoundError`, same class as
-  5.8's). Full guard matrix live-verified against the rebuilt container.
-- Also this session: Swagger bearer-auth fix all 7 specs (`5b69b9a`),
-  Clerk JWT template `testing` (1h) + web "Get 1h test token" (`11e7c97`),
-  both pushed to GitHub + GitLab sync earlier in the day.
-- **Known gaps / follow-ups**: 10.3 not started (per-actor E2E via
-  gateway with real tokens + docs sync); hub_staff/dispatcher ownership
+- **10.3** (`200adc1`): verified E2E authorization guards through the dockerized API Gateway with real Clerk tokens (1h testing tokens). Shipper delivers assigned parcel (201), another courier's parcel (403), wrong courier ID (403), no token (401), admin bypass (201). Added the authorization matrix run to `docs/07-e2e-walkthrough.md` and synced `docs/10-authz-plan.md`.
+- **Phase 10 planned** (`af3fdd7`): 2.0d, 3 tasks in `docs/03-phases.md` (total 20→22d); ownership anchors on `PARCEL` + a Clerk link on `COURIER` since no `LEG` table exists; assignment persisted by Order consuming the existing `parcel.out_for_delivery` (no cross-schema write). ERD drift audit fixed 9.4's missing `created_by_user_id` row and the missing COURIER→PARCEL relationship (`df6916f`).
+- **10.1** (`4f3e179`/`4c9dda2`/`241b64c`): `COURIER.user_id` (unique) + `PARCEL.assigned_courier_id` (indexed), DDL + live ALTER; `ParcelEventConsumer` writes the assignment (kept independent of the FSM outcome — an out-of-order event may drop the transition, the assignment is still real); `scripts/link-courier-user.js`; `shipper.test@example.com` linked to courier `b578dcfe`. +5 specs.
+- **10.2** (`561c760`/`05d39d5`): shipper calls to `/couriers/legs/{id}/pickup|deliver` are scoped to their own courier identity (and, for deliver, their assigned parcel) — 403 Forbidden, deliberately distinct from 422 BR envelope; admin/no-identity bypass. +11 specs, 425 green. **Live-only bug fixed**: `Courier` entity missing from `AppModule.entities` (`EntityMetadataNotFoundError`, same class as 5.8's). Full guard matrix live-verified against the rebuilt container.
+- Also this session: Swagger bearer-auth fix all 7 specs (`5b69b9a`), Clerk JWT template `testing` (1h) + web "Get 1h test token" (`11e7c97`), both pushed to GitHub + GitLab sync earlier in the day.
+- **Known gaps / follow-ups**: hub_staff/dispatcher ownership
   stays cut; reassignment flows unmodeled (a second
   `parcel.out_for_delivery` simply overwrites the assignment).
 
