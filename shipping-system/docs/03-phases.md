@@ -4,7 +4,7 @@
 A domestic parcel shipping system built on a hub-and-spoke network with NestJS microservices and a NATS event backbone. This estimation covers one end-to-end vertical slice with full workflow coverage for every actor: Sender, Recipient, Courier, Hub Operator, Dispatcher, and System.
 
 ## Timeline
-- Estimated time: 16 days (original slice) + 4 days Auth & RBAC extension (Phase 9) = 20 days
+- Estimated time: 16 days (original slice) + 4 days Auth & RBAC extension (Phase 9) + 2 days shipper per-resource ownership (Phase 10) = 22 days
 - Actual time: *(track as work progresses; Phase 9.1 done 16 Jul)*
 
 ## Actor Coverage
@@ -25,6 +25,7 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 | **Week 2** | Exception states + state machine; operational services (Courier, Hub, Line-haul, Dispatcher); Payment (Stripe) + PII |
 | **Week 3** | Slice wired end to end; full workflow documented; critical-path tests; unit tests, demo (all actors via API), defer-list |
 | **14–17 Jul (ext.)** | Auth & RBAC extension: Clerk authentication at the gateway (done 16 Jul) + 3-day role-based authorization ([docs/10-authz-plan.md](./10-authz-plan.md)) |
+| **17 Jul → (ext.)** | Phase 10 — shipper per-resource ownership (2.0d): courier↔Clerk identity link, persisted parcel assignment, Courier-endpoint enforcement, per-actor E2E |
 
 ## Details Estimation
 
@@ -47,7 +48,8 @@ A domestic parcel shipping system built on a hub-and-spoke network with NestJS m
 | 8 | Testing, Demo & Docs | 1.0 |
 | — | **Subtotal (original slice)** | **16.0** |
 | 9 | Auth & RBAC (extension) | 4.0 |
-| — | **Total** | **20.0** |
+| 10 | Shipper per-resource ownership | 2.0 |
+| — | **Total** | **22.0** |
 
 ### Phase 1 — Analysis (1.0d)
 - **1.1** Domain research & actor mapping
@@ -121,4 +123,37 @@ scans; dispatcher assigns; admin sees all. Full design + permission matrix in
 
 Out of scope (explicit cuts): per-resource ownership for shipper/hub
 (assignee columns), role-management UI, Clerk→DB user sync, multi-role users.
+
+### Phase 10 — Shipper per-resource ownership (2.0d)
+
+First Phase 9 follow-up (was an explicit Phase 9 cut). Goal: a shipper
+sees/acts on only work assigned to them. There is no `LEG` table (Dispatcher's
+`/legs/{id}/assign` is validation-only and publishes `parcel.out_for_delivery`
+with `parcel_id` + `courier_id`), so ownership anchors on `PARCEL` plus a
+Clerk-account link on `COURIER`; the assignment is persisted by Order Service
+consuming the existing event — no cross-schema write, same convention Hub set.
+
+- **10.1** Identity link + assignment persistence (0.75d):
+  `COURIER.user_id` (varchar 64, nullable, unique index) linking the
+  shipper's Clerk account to a courier row (DDL + live ALTER + provisioning
+  script); `PARCEL.assigned_courier_id` (uuid, nullable) written by Order's
+  `ParcelEventConsumer` on `parcel.out_for_delivery`; ERD/LLD/authz-plan
+  docs updated — including `dispatcher-service.md`'s v1.1 rationale, whose
+  "nothing downstream reads a persisted assignment" clause stops being true
+  here (the no-cross-schema-write-by-Dispatcher part still stands).
+- **10.2** Enforcement in Courier Service (0.75d): on
+  `POST /couriers/legs/{id}/pickup|deliver` with `x-user-role: shipper`,
+  resolve the caller's `COURIER` via `x-user-id` and reject a `courier_id`
+  that isn't their own; `/deliver` additionally requires
+  `PARCEL.assigned_courier_id` to match. Admin bypasses. Pickup happens
+  before any assignment exists (assignment is last-mile only), so pickup
+  enforces only courier-identity, not parcel assignment. TDD red-first.
+- **10.3** Per-actor E2E + docs sync (0.5d): link `shipper.test@example.com`
+  to a seed courier; E2E — shipper delivers an assigned parcel (2xx),
+  another courier's parcel (403), admin bypass; update
+  `docs/07-e2e-walkthrough.md` § actors, `docs/10-authz-plan.md`.
+
+Out of scope (explicit cuts, unchanged): per-resource ownership for
+hub_staff, reassignment / multi-courier flows, role-management UI,
+Clerk→DB user sync.
 

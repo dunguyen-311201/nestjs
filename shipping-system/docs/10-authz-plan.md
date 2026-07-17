@@ -77,6 +77,8 @@ Authentication already exists (ClerkAuthGuard at the gateway, session JWT,
 **Out of scope (do NOT slip in):**
 - Per-resource ownership for shipper/hub/dispatcher (e.g. shipper sees only
   legs assigned to them) — needs assignee columns + joins, ~1.5–2d extra.
+  The shipper half is now planned as Phase 10 in
+  [03-phases.md](./03-phases.md) (2.0d); hub/dispatcher ownership stays cut.
 - Admin UI for role management (roles assigned via Clerk Dashboard).
 - Clerk→DB user sync webhooks.
 - Multi-role users.
