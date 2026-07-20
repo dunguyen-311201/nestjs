@@ -13,6 +13,7 @@ export interface CreateOrderResult {
   price_cents: number;
   expected_delivery_at: Date;
   status: string;
+  share_token: string;
 }
 
 export interface OrderSummary {
@@ -127,6 +128,7 @@ export class OrderService {
       price_cents: order.priceCents,
       expected_delivery_at: order.expectedDeliveryAt,
       status: order.status,
+      share_token: order.shareToken,
     };
 
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);

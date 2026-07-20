@@ -11,4 +11,14 @@ export class TrackingController {
   ): Promise<TrackingResult> {
     return this.trackingService.getTracking(trackingId);
   }
+
+  // Public, unauthenticated recipient share link - see PUBLIC_ROUTES in the
+  // gateway's ClerkAuthGuard. The token itself is the authorization; there
+  // is no session/role check downstream of it.
+  @Get('share/:token')
+  async getTrackingByShareToken(
+    @Param('token') token: string,
+  ): Promise<TrackingResult> {
+    return this.trackingService.getTrackingByShareToken(token);
+  }
 }

@@ -9,7 +9,8 @@
 ## Resume point
 
 - **Current phase:** Phase 10 — Shipper per-resource ownership (2.0d) **complete** (all tasks 10.1–10.3 done 17 Jul); see `docs/03-phases.md` and `docs/10-authz-plan.md`.
-- **Next steps:** Ready for review. Remaining follow-ups after Phase 10, in rough priority order: recipient share-link tracking (tracking currently readable by any authenticated customer — documented fallback), role-management UI, Clerk→DB user sync.
+- **20 Jul:** Recipient share-link tracking implemented (out-of-phase follow-up, not a numbered task) — `SHIPMENT_ORDER.share_token` (DB-generated), `POST /orders` returns it, public `GET /tracking/share/{token}` on Tracking Service, gateway `PUBLIC_ROUTES` entry. Live-verified end-to-end.
+- **Next steps:** Ready for review. Remaining follow-ups: role-management UI, Clerk→DB user sync.
 
 ## 2026-07-17 — Phase 10 complete (tasks 10.1–10.3 done)
 

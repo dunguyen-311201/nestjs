@@ -16,4 +16,10 @@ export abstract class IOrderLookupPort {
   abstract findShipmentOrderIdByParcelId(
     parcelId: string,
   ): Promise<string | null>;
+
+  // Recipient share-link: resolves an unauthenticated recipient's opaque
+  // share_token to the shipment_order_id it belongs to.
+  abstract findShipmentOrderIdByShareToken(
+    shareToken: string,
+  ): Promise<string | null>;
 }

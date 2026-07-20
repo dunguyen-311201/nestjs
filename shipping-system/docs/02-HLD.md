@@ -176,15 +176,16 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 
 **Authentication (implemented):** every route below requires a Clerk session JWT (`Authorization: Bearer`), verified at the gateway by a global `ClerkAuthGuard` behind an `ITokenVerifier` port (`@clerk/backend` adapter, `CLERK_SECRET_KEY`). Public exceptions: `GET /health`, Swagger docs, and `POST /payments/webhook` (authenticated by `Stripe-Signature` instead). The proxy strips any client-sent `x-user-id`/`x-session-id` and injects the gateway-verified identity, so downstream services trust these headers without re-verifying the JWT. A minimal React app (`apps/web`, Vite + `@clerk/clerk-react`) provides sign-in and session-token retrieval.
 
-**Authorization (planned):** role-to-endpoint enforcement (`customer`, `shipper`, `hub_staff`, `dispatcher`, `admin` from Clerk `publicMetadata.role`) via a gateway `ROUTE_ACCESS` map — see [docs/10-authz-plan.md](./10-authz-plan.md) for the permission matrix and 3-day plan. The actor column below maps to those roles (Sender → `customer`, Courier → `shipper`, Hub Operator → `hub_staff`, Dispatcher → `dispatcher`). **Recipient** is the open case: the tracking timeline is currently planned as customer-owned (`GET /tracking/*` restricted to the order's creator + admin per the plan's matrix), which drops the original "shared tracking link" idea — the plan's documented fallback is any authenticated `customer`; a true recipient share-link would be a later extension.
+**Authorization (implemented):** role-to-endpoint enforcement (`customer`, `shipper`, `hub_staff`, `dispatcher`, `admin` from Clerk `publicMetadata.role`) via a gateway `ROUTE_ACCESS` map — see [docs/10-authz-plan.md](./10-authz-plan.md) for the permission matrix. The actor column below maps to those roles (Sender → `customer`, Courier → `shipper`, Hub Operator → `hub_staff`, Dispatcher → `dispatcher`). **Recipient** is unauthenticated by design: `GET /tracking/{tracking_id}` stays customer/admin-only, and a separate public `GET /tracking/share/{share_token}` resolves `SHIPMENT_ORDER.share_token` (DB-generated at order creation, returned in the `POST /orders` response) to the same tracking payload — the token itself is the authorization, no Clerk session required.
 
 | Actor | Endpoint | Purpose |
 | :--- | :--- | :--- |
-| **Sender** | `POST` `/orders` | Create an order; returns order + locked price |
+| **Sender** | `POST` `/orders` | Create an order; returns order + locked price + `share_token` |
 | **Sender** | `GET` `/orders/{id}/quote` | Preview price before creation |
 | **Sender** | `POST` `/orders/{id}/checkout` | Create a Stripe Checkout/PaymentIntent session |
 | **Stripe System** | `POST` `/payments/webhook` | Receive async payment succeeded/failed webhooks |
-| **Recipient** | `GET` `/tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
+| **Customer/Admin** | `GET` `/tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
+| **Recipient** | `GET` `/tracking/share/{share_token}` | Public, unauthenticated version of the above — resolves the order's `share_token` and returns the same payload. |
 | **Courier** | `POST` `/couriers/parcels/{id}/pickup` | Record a pickup scan |
 | **Courier** | `POST` `/couriers/parcels/{id}/deliver` | Record delivery + upload POD |
 | **Hub Operator** | `POST` `/hubs/{id}/receive` | `HUB_RECEIVE` scan |

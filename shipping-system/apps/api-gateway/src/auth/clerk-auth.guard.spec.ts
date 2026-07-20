@@ -156,6 +156,7 @@ describe('ClerkAuthGuard', () => {
     ['GET', '/api/docs-json'],
     ['GET', '/api/docs/order/json'],
     ['POST', '/payments/webhook'],
+    ['GET', '/tracking/share/tok-1'],
   ])('allows public route %s %s without a token', async (method, path) => {
     const req: FakeRequest = { method, path, headers: {} };
     await expect(

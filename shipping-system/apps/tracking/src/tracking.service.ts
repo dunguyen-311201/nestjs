@@ -30,6 +30,15 @@ export class TrackingService {
     private readonly statusCachePort: IStatusCachePort,
   ) {}
 
+  async getTrackingByShareToken(shareToken: string): Promise<TrackingResult> {
+    const shipmentOrderId =
+      await this.orderLookupPort.findShipmentOrderIdByShareToken(shareToken);
+    if (!shipmentOrderId) {
+      throw new NotFoundException('No shipment order found for this link');
+    }
+    return this.getTracking(shipmentOrderId);
+  }
+
   async getTracking(shipmentOrderId: string): Promise<TrackingResult> {
     const parcels =
       await this.orderLookupPort.findParcelsByShipmentOrderId(shipmentOrderId);

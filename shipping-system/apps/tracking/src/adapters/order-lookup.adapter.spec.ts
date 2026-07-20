@@ -56,4 +56,26 @@ describe('OrderLookupAdapter', () => {
 
     expect(result).toBeNull();
   });
+
+  it('resolves the shipment_order_id for a given share_token', async () => {
+    shipmentOrderRepository.findOne.mockResolvedValue({
+      id: 'order-1',
+      shareToken: 'token-1',
+    });
+
+    const result = await adapter.findShipmentOrderIdByShareToken('token-1');
+
+    expect(shipmentOrderRepository.findOne).toHaveBeenCalledWith({
+      where: { shareToken: 'token-1' },
+    });
+    expect(result).toBe('order-1');
+  });
+
+  it('returns null when the share_token does not resolve to any order', async () => {
+    shipmentOrderRepository.findOne.mockResolvedValue(null);
+
+    const result = await adapter.findShipmentOrderIdByShareToken('unknown');
+
+    expect(result).toBeNull();
+  });
 });

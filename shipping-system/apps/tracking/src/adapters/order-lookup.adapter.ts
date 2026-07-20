@@ -41,4 +41,13 @@ export class OrderLookupAdapter implements IOrderLookupPort {
     });
     return parcel?.shipmentOrderId ?? null;
   }
+
+  async findShipmentOrderIdByShareToken(
+    shareToken: string,
+  ): Promise<string | null> {
+    const order = await this.shipmentOrderRepository.findOne({
+      where: { shareToken },
+    });
+    return order?.id ?? null;
+  }
 }

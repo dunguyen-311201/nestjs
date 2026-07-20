@@ -68,10 +68,13 @@ describe('OrderService', () => {
       priceCents: 5000,
       expectedDeliveryAt: new Date('2026-07-15T00:00:00Z'),
       status: ShipmentOrderStatus.CREATED,
+      shareToken: 'share-token-1',
     } as ShipmentOrder;
     repository.createOrder.mockResolvedValue(createdOrder);
 
     const result = await service.createOrder(createOrderDto(), 'idem-key-1');
+
+    expect(result.share_token).toBe('share-token-1');
 
     expect(pricing.getPrice).toHaveBeenCalledWith(
       'HN01',
@@ -90,6 +93,7 @@ describe('OrderService', () => {
       price_cents: 5000,
       expected_delivery_at: createdOrder.expectedDeliveryAt,
       status: ShipmentOrderStatus.CREATED,
+      share_token: 'share-token-1',
     });
   });
 

@@ -20,6 +20,9 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   { method: 'GET', pattern: /^\/health$/ },
   { method: 'GET', pattern: /^\/api\/docs(-json)?(\/.*)?$/ },
   { method: 'POST', pattern: /^\/payments\/webhook$/ },
+  // Recipient share link: the opaque share_token in the path IS the
+  // authorization - recipients are never Clerk-authenticated.
+  { method: 'GET', pattern: /^\/tracking\/share\/[^/]+$/ },
 ];
 
 @Injectable()

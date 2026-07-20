@@ -124,6 +124,10 @@ CREATE TABLE IF NOT EXISTS shipping_order_db.SHIPMENT_ORDER (
     created_by_user_id VARCHAR(64),
     expected_delivery_at TIMESTAMP NOT NULL,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Draft', 'Created', 'Confirmed', 'Active', 'Complete', 'Partially_Delivered', 'Lost', 'Damaged', 'Cancelled')),
+    -- Unguessable recipient share-link token, DB-generated at insert (and
+    -- for pre-existing rows, backfilled by the ALTER TABLE default). No
+    -- expiry/revocation in this scope.
+    share_token UUID NOT NULL DEFAULT gen_random_uuid(),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -264,6 +268,7 @@ CREATE INDEX IF NOT EXISTS idx_shipment_order_created_by_user_id ON shipping_ord
 CREATE INDEX IF NOT EXISTS idx_shipment_order_sender_id ON shipping_order_db.SHIPMENT_ORDER(sender_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_recipient_id ON shipping_order_db.SHIPMENT_ORDER(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_order_rate_card_id ON shipping_order_db.SHIPMENT_ORDER(rate_card_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shipment_order_share_token ON shipping_order_db.SHIPMENT_ORDER(share_token);
 
 CREATE INDEX IF NOT EXISTS idx_parcel_shipment_order_id ON shipping_order_db.PARCEL(shipment_order_id);
 CREATE INDEX IF NOT EXISTS idx_parcel_route_id ON shipping_order_db.PARCEL(route_id);

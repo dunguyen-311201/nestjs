@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 // Read-only mapping onto Order Service's SHIPMENT_ORDER table
 // (shipping_order_db). Tracking only ever reads this to confirm a
@@ -8,4 +8,7 @@ import { Entity, PrimaryGeneratedColumn } from 'typeorm';
 export class ShipmentOrder {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'share_token', type: 'uuid' })
+  shareToken: string;
 }

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Generated,
   Index,
   JoinColumn,
   ManyToOne,
@@ -59,6 +60,14 @@ export class ShipmentOrder {
   @Index('idx_shipment_order_status')
   @Column({ type: 'varchar', length: 50 })
   status: ShipmentOrderStatus;
+
+  // DB-generated (gen_random_uuid() default) - never set by the app.
+  // @Generated tells TypeORM to read the value back via INSERT...RETURNING,
+  // same as the id column, instead of it staying undefined post-save.
+  @Index('idx_shipment_order_share_token', { unique: true })
+  @Generated('uuid')
+  @Column({ name: 'share_token', type: 'uuid' })
+  shareToken: string;
 
   @OneToMany(() => Parcel, (parcel) => parcel.shipmentOrder)
   parcels: Parcel[];

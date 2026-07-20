@@ -3,13 +3,19 @@ import { TrackingService } from './tracking.service';
 import { TrackingEventType } from './entities/tracking-event.entity';
 
 describe('TrackingService', () => {
-  let orderLookupPort: { findParcelsByShipmentOrderId: jest.Mock };
+  let orderLookupPort: {
+    findParcelsByShipmentOrderId: jest.Mock;
+    findShipmentOrderIdByShareToken: jest.Mock;
+  };
   let trackingEventRepository: { findTimelineByParcelIds: jest.Mock };
   let statusCachePort: { getStatus: jest.Mock };
   let service: TrackingService;
 
   beforeEach(() => {
-    orderLookupPort = { findParcelsByShipmentOrderId: jest.fn() };
+    orderLookupPort = {
+      findParcelsByShipmentOrderId: jest.fn(),
+      findShipmentOrderIdByShareToken: jest.fn(),
+    };
     trackingEventRepository = { findTimelineByParcelIds: jest.fn() };
     statusCachePort = { getStatus: jest.fn().mockResolvedValue(null) };
     service = new TrackingService(
@@ -84,5 +90,35 @@ describe('TrackingService', () => {
 
     expect(statusCachePort.getStatus).toHaveBeenCalledWith('order-1');
     expect(result.status).toBe('Complete');
+  });
+
+  describe('getTrackingByShareToken', () => {
+    it('throws NotFoundException when the share token does not resolve', async () => {
+      orderLookupPort.findShipmentOrderIdByShareToken.mockResolvedValue(null);
+
+      await expect(
+        service.getTrackingByShareToken('bad-token'),
+      ).rejects.toThrow(NotFoundException);
+      expect(
+        orderLookupPort.findParcelsByShipmentOrderId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('resolves the token to an order and returns the same tracking payload', async () => {
+      orderLookupPort.findShipmentOrderIdByShareToken.mockResolvedValue(
+        'order-1',
+      );
+      orderLookupPort.findParcelsByShipmentOrderId.mockResolvedValue([
+        { id: 'parcel-1', state: 'Delivered' },
+      ]);
+      trackingEventRepository.findTimelineByParcelIds.mockResolvedValue([]);
+
+      const result = await service.getTrackingByShareToken('good-token');
+
+      expect(
+        orderLookupPort.findShipmentOrderIdByShareToken,
+      ).toHaveBeenCalledWith('good-token');
+      expect(result.shipment_order_id).toBe('order-1');
+    });
   });
 });
