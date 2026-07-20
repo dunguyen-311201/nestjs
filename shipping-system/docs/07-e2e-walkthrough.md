@@ -153,7 +153,7 @@ unblocked for this order.
 ## UC-05 — Courier pickup scan
 
 ```bash
-curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:3000/couriers/legs/0f6939d9-cb97-4b06-b5b3-fe51206e0718/pickup \
+curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:3000/couriers/parcels/0f6939d9-cb97-4b06-b5b3-fe51206e0718/pickup \
   -H "Content-Type: application/json" -H "Idempotency-Key: e2e-pickup-$(date +%s)" \
   -d '{"courier_id":"b578dcfe-0b3e-4f4b-9acf-b5e3e35ca36f"}'
 ```
@@ -234,7 +234,7 @@ rejected it**:
 ## UC-06 — Courier delivery attempt
 
 ```bash
-curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:3000/couriers/legs/0f6939d9-cb97-4b06-b5b3-fe51206e0718/deliver \
+curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:3000/couriers/parcels/0f6939d9-cb97-4b06-b5b3-fe51206e0718/deliver \
   -H "Content-Type: application/json" -H "Idempotency-Key: e2e-deliver-$(date +%s)" \
   -d '{"courier_id":"b578dcfe-0b3e-4f4b-9acf-b5e3e35ca36f","outcome":"DELIVERED","signature_url":"https://example.com/sig.png"}'
 ```
@@ -254,7 +254,7 @@ too, for the same reason as the previous step:
 
 > **Update (task 7.3)**: this gap is now closed. `POST /trips/{id}/depart`
 > (Line-haul) publishes `parcel.loaded_for_linehaul` per parcel, and
-> `POST /legs/{id}/assign` (Dispatcher) publishes `parcel.out_for_delivery`.
+> `POST /parcels/{id}/assign-courier` (Dispatcher) publishes `parcel.out_for_delivery`.
 > The full sequence below now genuinely reaches `Delivered` — verified by
 > the automated integration test at
 > `apps/api-gateway/src/happy-path.integration.spec.ts`
@@ -361,7 +361,7 @@ built each guard:
 Captured 2026-07-17 (task 10.3), all through the gateway (`:3000`) with real
 Clerk 1h test tokens. Setup: two fresh orders were staged through the full
 flow above (create → webhook payment → pickup → origin hub → trip
-depart → destination hub → dispatcher `POST /legs/{id}/assign`), leaving two
+depart → destination hub → dispatcher `POST /parcels/{id}/assign-courier`), leaving two
 `OutForDelivery` parcels with persisted assignments (task 10.1):
 
 - parcel `411ecaac` — `assigned_courier_id = b578dcfe`, the courier row
@@ -372,7 +372,7 @@ The shipper's pickup scan itself was also made with the shipper token
 (courier-identity check passes on their own `courier_id` → 201) — pickup
 enforces identity only, since assignment doesn't exist yet at pickup time.
 
-`POST /couriers/legs/{parcel_id}/deliver` matrix (task 10.2's guards):
+`POST /couriers/parcels/{parcel_id}/deliver` matrix (task 10.2's guards):
 
 | # | Caller | Body `courier_id` | Parcel | Result |
 | - | :--- | :--- | :--- | :--- |

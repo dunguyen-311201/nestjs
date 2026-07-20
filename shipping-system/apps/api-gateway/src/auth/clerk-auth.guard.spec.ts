@@ -67,15 +67,15 @@ describe('ClerkAuthGuard', () => {
       ['customer', 'POST', '/orders/o-1/checkout'],
       ['customer', 'GET', '/payments/p-1'],
       ['customer', 'GET', '/tracking/o-1'],
-      ['shipper', 'POST', '/couriers/legs/l-1/pickup'],
-      ['shipper', 'POST', '/couriers/legs/l-1/deliver'],
+      ['shipper', 'POST', '/couriers/parcels/l-1/pickup'],
+      ['shipper', 'POST', '/couriers/parcels/l-1/deliver'],
       ['hub_staff', 'POST', '/hubs/h-1/receive'],
       ['dispatcher', 'POST', '/trips'],
       ['dispatcher', 'POST', '/trips/t-1/assign'],
-      ['dispatcher', 'POST', '/legs/l-1/assign'],
+      ['dispatcher', 'POST', '/parcels/l-1/assign-courier'],
       ['admin', 'GET', '/orders'],
       ['admin', 'POST', '/hubs/h-1/receive'],
-      ['admin', 'POST', '/legs/l-1/assign'],
+      ['admin', 'POST', '/parcels/l-1/assign-courier'],
       ['admin', 'GET', '/some-future-route'],
     ] as const)('allows %s to %s %s', async (role, method, path) => {
       const req = reqFor(method, path);
@@ -87,10 +87,10 @@ describe('ClerkAuthGuard', () => {
 
     it.each([
       ['customer', 'POST', '/hubs/h-1/receive'],
-      ['customer', 'POST', '/legs/l-1/assign'],
+      ['customer', 'POST', '/parcels/l-1/assign-courier'],
       ['shipper', 'GET', '/orders'],
       ['shipper', 'POST', '/trips'],
-      ['hub_staff', 'POST', '/couriers/legs/l-1/pickup'],
+      ['hub_staff', 'POST', '/couriers/parcels/l-1/pickup'],
       ['dispatcher', 'GET', '/tracking/o-1'],
       ['customer', 'GET', '/some-future-route'],
     ] as const)(

@@ -163,7 +163,7 @@ Transactional Outbox for Order Creation (`docs/02-HLD.md` § Idempotency and out
 | `zone_id` | uuid FK | The zone the courier operates in. |
 | `user_id` | varchar(64), nullable, unique | Clerk user id of the shipper account operating as this courier; null until provisioned (`scripts/link-courier-user.js`). Added for Phase 10 (shipper per-resource ownership). |
 | `role` | enum | RBAC role separating Courier from Hub Operator, Dispatcher, Admin. |
-| `status` | enum | `Active`, `Inactive`, or `Verified`. Added for task 6.5 (Dispatcher): UC-10's `POST /legs/{id}/assign` 422 "courier not active/verified" guard had no column to check against until this was added — same class of gap as `LINEHAULTRIP.status` (task 6.4). |
+| `status` | enum | `Active`, `Inactive`, or `Verified`. Added for task 6.5 (Dispatcher): UC-10's `POST /parcels/{id}/assign-courier` 422 "courier not active/verified" guard had no column to check against until this was added — same class of gap as `LINEHAULTRIP.status` (task 6.4). |
 
 ### DRIVER
 | Field | Type | Description |

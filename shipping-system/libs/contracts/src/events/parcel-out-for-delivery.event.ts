@@ -2,7 +2,7 @@ import { BaseEventV1 } from '../base-event';
 
 /**
  * Published by Dispatcher on `parcel.out_for_delivery`, from
- * `POST /legs/{id}/assign` (task 7.3) - assigning a courier to the final
+ * `POST /parcels/{id}/assign-courier` (task 7.3) - assigning a courier to the final
  * leg is the moment a parcel becomes ready for last-mile dispatch.
  * Consumed by Tracking, Order. The docblock previously said "Published by
  * Courier", which was never actually implemented anywhere and predates the

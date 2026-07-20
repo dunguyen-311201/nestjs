@@ -185,13 +185,13 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 | **Sender** | `POST` `/orders/{id}/checkout` | Create a Stripe Checkout/PaymentIntent session |
 | **Stripe System** | `POST` `/payments/webhook` | Receive async payment succeeded/failed webhooks |
 | **Recipient** | `GET` `/tracking/{tracking_id}` | End-to-end tracking timeline from scan events. `{tracking_id}` = `ORDER.id`; the response aggregates the scan timeline across every parcel under that order. |
-| **Courier** | `POST` `/couriers/legs/{id}/pickup` | Record a pickup scan |
-| **Courier** | `POST` `/couriers/legs/{id}/deliver` | Record delivery + upload POD |
+| **Courier** | `POST` `/couriers/parcels/{id}/pickup` | Record a pickup scan |
+| **Courier** | `POST` `/couriers/parcels/{id}/deliver` | Record delivery + upload POD |
 | **Hub Operator** | `POST` `/hubs/{id}/receive` | `HUB_RECEIVE` scan |
 | **Dispatcher** | `POST` `/trips`, `POST /trips/{id}/assign` | Create trip, assign driver/truck |
 | **Dispatcher** | `POST` `/trips/{id}/depart` | Manually mark trip as departed (fallback) |
 | **Dispatcher** | `POST` `/trips/{id}/arrive` | Manually mark trip as arrived (fallback) |
-| **Dispatcher** | `POST` `/legs/{id}/assign` | Assign courier to a leg |
+| **Dispatcher** | `POST` `/parcels/{id}/assign-courier` | Assign courier to a leg |
 
 ---
 
@@ -247,7 +247,7 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
     1. `POST /orders/{id}/checkout` generates a Stripe Session and creates an `Unpaid` `PAYMENT` record.
     2. Upon checkout completion, Stripe webhook `POST /payments/webhook` writes `PAYMENT_TRANSACTION` and publishes `payment.succeeded`.
 *   **Dispatch Guard (BR-08)**:
-    *   Courier service blocks first-mile pickup assignment (`POST /legs/{id}/assign`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer).
+    *   Courier service blocks first-mile pickup assignment (`POST /parcels/{id}/assign-courier`) for prepaid orders unless `ORDER.status` has advanced to `Confirmed` (triggered by the `payment.succeeded` consumer).
     *   Hub receive scan (`POST /hubs/{id}/receive`) rejects unpaid prepaid parcels if `ORDER.status` has not advanced to `Confirmed`, routing them to a temporary holding area.
 
 ### Notification Delivery (BR-09)

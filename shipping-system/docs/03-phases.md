@@ -128,7 +128,7 @@ Out of scope (explicit cuts): per-resource ownership for shipper/hub
 
 First Phase 9 follow-up (was an explicit Phase 9 cut). Goal: a shipper
 sees/acts on only work assigned to them. There is no `LEG` table (Dispatcher's
-`/legs/{id}/assign` is validation-only and publishes `parcel.out_for_delivery`
+`/parcels/{id}/assign-courier` is validation-only and publishes `parcel.out_for_delivery`
 with `parcel_id` + `courier_id`), so ownership anchors on `PARCEL` plus a
 Clerk-account link on `COURIER`; the assignment is persisted by Order Service
 consuming the existing event — no cross-schema write, same convention Hub set.
@@ -142,7 +142,7 @@ consuming the existing event — no cross-schema write, same convention Hub set.
   "nothing downstream reads a persisted assignment" clause stops being true
   here (the no-cross-schema-write-by-Dispatcher part still stands).
 - **10.2** Enforcement in Courier Service (0.75d): on
-  `POST /couriers/legs/{id}/pickup|deliver` with `x-user-role: shipper`,
+  `POST /couriers/parcels/{id}/pickup|deliver` with `x-user-role: shipper`,
   resolve the caller's `COURIER` via `x-user-id` and reject a `courier_id`
   that isn't their own; `/deliver` additionally requires
   `PARCEL.assigned_courier_id` to match. Admin bypasses. Pickup happens

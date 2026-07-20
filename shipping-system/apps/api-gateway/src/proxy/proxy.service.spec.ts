@@ -36,11 +36,11 @@ describe('ProxyService', () => {
       );
     });
 
-    it('resolves /tracking, /couriers, /hubs, /trips, /legs to their own services', () => {
+    it('resolves /tracking, /couriers, /hubs, /trips, /parcels to their own services', () => {
       expect(service.resolveTarget('/tracking/order-1')).toBe(
         'http://localhost:3003',
       );
-      expect(service.resolveTarget('/couriers/legs/1/pickup')).toBe(
+      expect(service.resolveTarget('/couriers/parcels/1/pickup')).toBe(
         'http://localhost:3004',
       );
       expect(service.resolveTarget('/hubs/1/receive')).toBe(
@@ -53,7 +53,7 @@ describe('ProxyService', () => {
       expect(service.resolveTarget('/trips/trip-123/assign')).toBe(
         'http://localhost:3007',
       );
-      expect(service.resolveTarget('/legs/1/assign')).toBe(
+      expect(service.resolveTarget('/parcels/1/assign-courier')).toBe(
         'http://localhost:3007',
       );
     });

@@ -43,10 +43,10 @@ Authentication already exists (ClerkAuthGuard at the gateway, session JWT,
 | `POST /orders`, `GET /orders` (own) | ✅ | | | | ✅ (all) |
 | `/payments/*` (except webhook) | ✅ | | | | ✅ |
 | `GET /tracking/*` (own order) | ✅ | | | | ✅ |
-| `/couriers/*`, `POST /legs/:id/pickup|deliver` | | ✅ | | | ✅ |
+| `/couriers/parcels/:id/pickup|deliver` | | ✅ | | | ✅ |
 | `/hubs/*` | | | ✅ | | ✅ |
 | `/trips/*` | | | | ✅ | ✅ |
-| `/legs/:id/assign`, `/trips/:id/assign` | | | | ✅ | ✅ |
+| `/parcels/:id/assign-courier`, `/trips/:id/assign` | | | | ✅ | ✅ |
 | `POST /payments/webhook`, `/health`, docs | public (unchanged) | | | | |
 
 ## 3-day plan
@@ -80,7 +80,7 @@ Authentication already exists (ClerkAuthGuard at the gateway, session JWT,
   The shipper half **shipped as Phase 10** (tasks 10.1–10.3, done 17 Jul —
   see [03-phases.md](./03-phases.md)): `COURIER.user_id` link +
   `PARCEL.assigned_courier_id`, 403 enforcement on
-  `/couriers/legs/{id}/pickup|deliver`, per-actor E2E captured in
+  `/couriers/parcels/{id}/pickup|deliver`, per-actor E2E captured in
   [07-e2e-walkthrough.md](./07-e2e-walkthrough.md) § Per-actor authorization
   matrix. Hub/dispatcher ownership stays cut.
 - Admin UI for role management (roles assigned via Clerk Dashboard).

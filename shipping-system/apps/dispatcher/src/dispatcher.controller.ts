@@ -17,7 +17,7 @@ export class DispatcherController {
     return this.dispatcherService.assignTrip(tripId, dto, idempotencyKey);
   }
 
-  @Post('legs/:id/assign')
+  @Post('parcels/:id/assign-courier')
   async assignLeg(
     @Param('id') parcelId: string,
     @Body() dto: AssignLegDto,

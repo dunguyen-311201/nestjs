@@ -31,7 +31,7 @@ Owns: `COURIER`, `PROOF_OF_DELIVERY`, `DELIVERY_ATTEMPT`, `OUTBOX`. Conventions 
 
 - **Preconditions**: Parcel is `OutForDelivery`; a courier leg exists.
 - **Postconditions (success)**: `DELIVERED` scan event + `PROOF_OF_DELIVERY` row; `SHIPMENT_ORDER.status` eventually `Complete`.
-- **Main flow**: Courier calls `POST /couriers/legs/{id}/deliver` with POD → `parcel.delivered` published → Tracking appends scan, Order advances state, Notification fires.
+- **Main flow**: Courier calls `POST /couriers/parcels/{id}/deliver` with POD → `parcel.delivered` published → Tracking appends scan, Order advances state, Notification fires.
 - **Alternate flow (failed attempt)**: Courier calls the same endpoint with a failure reason → `DELIVERY_FAILED` scan appended → this service counts attempts for the parcel.
 - **Exception flow (3rd failure)**: On the 3rd `DELIVERY_FAILED`, this service emits `parcel.rts` instead of re-dispatching → `PARCEL.direction = Reverse_RTS`, attempt counter resets to zero for the reverse leg, tracking ID unchanged (BR-04) → parcel re-enters the flow at UC-05 (pickup-equivalent) headed back to the original sender's zone.
 
@@ -48,7 +48,7 @@ sequenceDiagram
     participant Tracking as Tracking Service
     participant Order as Order Service
 
-    Courier->>Courier: POST /couriers/legs/{id}/pickup
+    Courier->>Courier: POST /couriers/parcels/{id}/pickup
     Courier->>DB: INSERT OUTBOX row (parcel.picked_up), 201 { status: "recorded" }
     Poller->>DB: poll PENDING rows (500ms)
     Poller--)NATS: publish parcel.picked_up
@@ -70,7 +70,7 @@ sequenceDiagram
     participant Order as Order Service
     participant Notification
 
-    Courier->>Courier: POST /couriers/legs/{id}/deliver (success)
+    Courier->>Courier: POST /couriers/parcels/{id}/deliver (success)
     Courier->>DB: INSERT PROOF_OF_DELIVERY + OUTBOX row (parcel.delivered), same transaction
     Courier-->>Courier: 201 { status: "recorded", proof_of_delivery_id }
     Poller->>DB: poll PENDING rows (500ms)
@@ -95,7 +95,7 @@ sequenceDiagram
     participant Notification
 
     loop up to 3 attempts
-        Courier->>Courier: POST /couriers/legs/{id}/deliver (failure)
+        Courier->>Courier: POST /couriers/parcels/{id}/deliver (failure)
         Courier->>DB: INSERT DELIVERY_ATTEMPT + OUTBOX row (parcel.delivery_failed), same transaction
         Poller--)NATS: publish parcel.delivery_failed
         NATS--)Tracking: append DELIVERY_FAILED scan event
@@ -112,7 +112,7 @@ sequenceDiagram
 
 ## API Contracts
 
-### `POST /couriers/legs/{id}/pickup`
+### `POST /couriers/parcels/{id}/pickup`
 
 | Field | Type | Validation |
 | :--- | :--- | :--- |
@@ -121,7 +121,7 @@ sequenceDiagram
 
 **Response `201`**: `{ status: "recorded" }` — the `parcel.picked_up` publish is now async via the Outbox/poller (v1.4), so there is no `event_id`/`published_at` to return synchronously; this service also never creates `TRACKING_EVENT` itself (Tracking does, after consuming the event). **Errors**: `404` parcel/courier not found · `422 BR-08` parent order not yet `Confirmed` · `403` shipper caller acting as a courier that isn't their own (v1.6).
 
-### `POST /couriers/legs/{id}/deliver`
+### `POST /couriers/parcels/{id}/deliver`
 
 | Field | Type | Validation |
 | :--- | :--- | :--- |

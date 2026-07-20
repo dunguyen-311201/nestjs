@@ -61,12 +61,12 @@ This script demonstrates:
 1. Reseeding the database with clean seed data.
 2. Creating a prepaid Stripe order via `POST /orders`.
 3. Confirming payment via Stripe Webhook simulation (unlocking the dispatch gate).
-4. Courier pickup scan (`POST /couriers/legs/{id}/pickup`), transitioning state to `InTransit`.
+4. Courier pickup scan (`POST /couriers/parcels/{id}/pickup`), transitioning state to `InTransit`.
 5. Origin hub scan (`POST /hubs/{id}/receive`), updating actual weight and route.
 6. Line-haul trip creation, truck/driver assignment, departure, and destination hub arrival.
 7. Destination hub inbound scan and corrective re-routing check.
 8. Courier last-mile leg assignment, transitioning state to `OutForDelivery`.
-9. Courier last-mile delivery success (`POST /couriers/legs/{id}/deliver`), transitioning state to `Delivered` and shipment order status to `Complete`.
+9. Courier last-mile delivery success (`POST /couriers/parcels/{id}/deliver`), transitioning state to `Delivered` and shipment order status to `Complete`.
 10. Fetching the final tracking timeline history and checking notification email emulator logs.
 
 ---

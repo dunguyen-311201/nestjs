@@ -232,7 +232,7 @@ async function main() {
   console.log('\n' + yellow('--- Step 3: Courier Pick-up Scan ---'));
   const courierId = 'a354903c-86fe-468f-8c6e-4001f10e046b'; // Active courier in origin region REG-100
   
-  const pickupRes = await fetch(`${gatewayUrl}/couriers/legs/${parcelId}/pickup`, {
+  const pickupRes = await fetch(`${gatewayUrl}/couriers/parcels/${parcelId}/pickup`, {
     method: 'POST',
     headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
@@ -418,7 +418,7 @@ async function main() {
   console.log('\n' + yellow('--- Step 10: Assigning Last-Mile Courier (Dispatcher) ---'));
   const destCourierId = 'f248fcf6-b127-4375-9c34-eef04be4de76'; // Active courier in dest zone REG-101
 
-  const legAssignRes = await fetch(`${gatewayUrl}/legs/${parcelId}/assign`, {
+  const legAssignRes = await fetch(`${gatewayUrl}/parcels/${parcelId}/assign-courier`, {
     method: 'POST',
     headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',
@@ -447,7 +447,7 @@ async function main() {
   // Step 11: Deliver Parcel
   console.log('\n' + yellow('--- Step 11: Courier Last-Mile Delivery (Delivered) ---'));
   
-  const deliverRes = await fetch(`${gatewayUrl}/couriers/legs/${parcelId}/deliver`, {
+  const deliverRes = await fetch(`${gatewayUrl}/couriers/parcels/${parcelId}/deliver`, {
     method: 'POST',
     headers: getAuthHeaders(demoToken, {
       'Content-Type': 'application/json',

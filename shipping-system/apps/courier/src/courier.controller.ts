@@ -9,7 +9,7 @@ import {
 import { PickupDto } from './dto/pickup.dto';
 import { DeliverDto } from './dto/deliver.dto';
 
-@Controller('couriers/legs')
+@Controller('couriers/parcels')
 export class CourierController {
   constructor(private readonly courierService: CourierService) {}
 

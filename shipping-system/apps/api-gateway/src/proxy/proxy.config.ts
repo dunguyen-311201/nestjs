@@ -45,7 +45,7 @@ export const PROXY_ROUTES: ProxyRoute[] = [
     defaultTarget: 'http://localhost:3006',
   },
   {
-    prefix: '/legs',
+    prefix: '/parcels',
     envKey: 'DISPATCHER_SERVICE_URL',
     defaultTarget: 'http://localhost:3007',
   },

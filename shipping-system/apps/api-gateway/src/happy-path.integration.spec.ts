@@ -181,7 +181,7 @@ const runIntegration = process.env.RUN_INTEGRATION_TEST === 'true';
       // 7. Courier pickup
       const courierId = 'a354903c-86fe-468f-8c6e-4001f10e046b'; // Active courier in REG-100
       const courierPickupRes = await fetch(
-        `${gatewayUrl}/couriers/legs/${parcelId}/pickup`,
+        `${gatewayUrl}/couriers/parcels/${parcelId}/pickup`,
         {
           method: 'POST',
           headers: {
@@ -316,7 +316,7 @@ const runIntegration = process.env.RUN_INTEGRATION_TEST === 'true';
       // 16. Dispatcher - Assign courier to leg - publishes
       // parcel.out_for_delivery (InHub -> OutForDelivery, task 7.3)
       const legAssignRes = await fetch(
-        `${gatewayUrl}/legs/${parcelId}/assign`,
+        `${gatewayUrl}/parcels/${parcelId}/assign-courier`,
         {
           method: 'POST',
           headers: {
@@ -350,7 +350,7 @@ const runIntegration = process.env.RUN_INTEGRATION_TEST === 'true';
       // 17. Courier - Deliver Parcel
       const destCourierId = 'f248fcf6-b127-4375-9c34-eef04be4de76'; // Active courier in dest zone REG-101
       const courierDeliverRes = await fetch(
-        `${gatewayUrl}/couriers/legs/${parcelId}/deliver`,
+        `${gatewayUrl}/couriers/parcels/${parcelId}/deliver`,
         {
           method: 'POST',
           headers: {

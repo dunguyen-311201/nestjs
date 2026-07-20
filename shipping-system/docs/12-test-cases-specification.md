@@ -17,12 +17,16 @@ Tài liệu này cung cấp danh sách kịch bản kiểm thử (Test Cases Spe
 ### 1.2 Danh sách Tài khoản & Role Kiểm thử
 Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script tạo token thử nghiệm 1 giờ:
 
-| Role | Email thử nghiệm | Mã Courier ID / User ID | Quyền hạn chính |
+Giá trị `role` claim thật trong JWT là chữ thường snake_case (`libs/contracts/src/auth/role.ts`): `admin`, `shipper`, `hub_staff`, `dispatcher`, `customer`.
+
+| Role (claim thật) | Email thử nghiệm | Mã Courier ID / User ID | Quyền hạn chính |
 | :--- | :--- | :--- | :--- |
-| **ADMIN** | `admin.test@example.com` | `user_admin_01` | Toàn quyền truy cập tất cả API & bypass kiểm tra ownership |
-| **SHIPPER (Courier 1)** | `shipper.test@example.com` | `b578dcfe-...` | Thực hiện Pickup & Delivery các bưu kiện được phân công |
-| **SHIPPER (Courier 2)** | `courier2.test@example.com` | `c689edff-...` | Dùng để kiểm thử lỗi 403 Forbidden khi giao nhầm bưu kiện của Courier 1 |
-| **CUSTOMER** | `customer.test@example.com` | `user_cust_01` | Tạo đơn hàng, xem danh sách đơn của chính mình, tra cứu tracking |
+| **admin** | `admin.test@example.com` | `user_admin_01` | Toàn quyền truy cập tất cả API & bypass kiểm tra ownership |
+| **shipper** (Courier 1) | `shipper.test@example.com` | `b578dcfe-...` | Thực hiện Pickup & Delivery các bưu kiện được phân công |
+| **shipper** (Courier 2) | `courier2.test@example.com` | `c689edff-...` | Dùng để kiểm thử lỗi 403 Forbidden khi giao nhầm bưu kiện của Courier 1 |
+| **customer** | `customer.test@example.com` | `user_cust_01` | Tạo đơn hàng, xem danh sách đơn của chính mình, tra cứu tracking |
+| **hub_staff** | *(chưa có tài khoản seed sẵn — cần tạo trước khi chạy Suite 4)* | — | Quét nhập kho (`POST /hubs/:id/receive`) |
+| **dispatcher** | *(chưa có tài khoản seed sẵn — cần tạo trước khi chạy Suite 5)* | — | Tạo/khởi hành/kết thúc chuyến line-haul (`/trips`) |
 
 ### 1.3 Dữ liệu Seed Sẵn có (Pre-seeded Master Data)
 * **Origin Hub:** `Hub-REG-100` (Khu vực Hà Nội)
@@ -101,14 +105,13 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 * **Pre-conditions:** Đơn hàng ID từ `TC-ORD-001` ở trạng thái `Created`.
 * **Steps:**
   ```bash
-  curl -s -X POST http://localhost:3000/payments/checkout \
+  curl -s -X POST http://localhost:3000/orders/<ORDER_ID>/checkout \
     -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
-    -H "Content-Type: application/json" \
-    -d '{"shipment_order_id": "<ORDER_ID>"}'
+    -H "Content-Type: application/json"
   ```
 * **Expected Result:**
   * HTTP Status: `201 Created`.
-  * Response Body chứa `checkout_url` (đường dẫn Stripe Checkout) và `payment_id`.
+  * Response Body chứa `checkout_url` (đường dẫn Stripe Checkout) và `stripe_session_id`.
 
 #### TC-PAY-002: Giả lập Stripe Webhook Thanh toán Thành công
 * **Mô tả:** Giả lập sự kiện Stripe gửi Webhook báo thanh toán hoàn tất.
@@ -119,7 +122,7 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
     -d '{
       "id": "evt_test_success",
       "type": "checkout.session.completed",
-      "data": { "object": { "metadata": { "shipment_order_id": "<ORDER_ID>" }, "payment_intent": "pi_123" } }
+      "data": { "object": { "client_reference_id": "<ORDER_ID>", "payment_intent": "pi_123" } }
     }'
   ```
 * **Expected Result:**
@@ -133,51 +136,51 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 * **Steps:** Shipper thực hiện quét Pickup bưu kiện của đơn chưa thanh toán này.
 * **Expected Result:**
   * HTTP Status: `422 Unprocessable Entity`.
-  * Response Code: `PREPAID_PAYMENT_REQUIRED` (Không thể lấy hàng khi đơn trả trước chưa hoàn tất thanh toán).
+  * Response Body: `BusinessRuleException` với code `BR-08`, message `"Parent order is not yet Confirmed - pickup is blocked until payment is confirmed"`. Áp dụng chung cho mọi order chưa `Confirmed`, không riêng `PREPAID_STRIPE`.
 
 ---
 
 ### 🚚 Suite 3: Nghiệp vụ Courier / Shipper (Pickup & Delivery)
 
 #### TC-COU-001: Shipper Quét Pickup Bưu kiện
-* **Mô tả:** Shipper lấy bưu kiện từ người gửi.
+* **Mô tả:** Shipper lấy bưu kiện từ người gửi. `:id` trong path là **parcel id**.
 * **Pre-conditions:** Đơn hàng đã thanh toán thành công (`Paid`).
 * **Steps:**
   ```bash
-  curl -s -X POST http://localhost:3000/couriers/legs/leg-001/pickup \
+  curl -s -X POST http://localhost:3000/couriers/parcels/<PARCEL_ID>/pickup \
     -H "Authorization: Bearer <SHIPPER_TOKEN>" \
     -H "Content-Type: application/json" \
     -H "Idempotency-Key: tc-cou-001-$(date +%s)" \
-    -d '{"parcel_id": "<PARCEL_ID>", "courier_id": "b578dcfe-..."}'
+    -d '{"courier_id": "b578dcfe-..."}'
   ```
 * **Expected Result:**
-  * HTTP Status: `200 OK` (hoặc `201`).
-  * Trạng thái Bưu kiện chuyển sang `Picked_Up` hoặc `Out_for_Pickup`.
-  * Event `parcel.out_for_delivery` hoặc `parcel.picked_up` được ghi vào `TrackingEvent`.
+  * HTTP Status: `200 OK`.
+  * Trạng thái Bưu kiện chuyển sang `Picked_Up`.
+  * Event tương ứng được ghi vào `TrackingEvent`.
   * Cột `assigned_courier_id` trong bảng `PARCEL` được cập nhật gán cho Courier `b578dcfe-...` (Phase 10).
 
 #### TC-COU-002: Shipper Giao bưu kiện được phân công (Happy Delivery)
-* **Mô tả:** Shipper thực hiện giao bưu kiện đã được phân công thành công cho người nhận.
+* **Mô tả:** Shipper thực hiện giao bưu kiện đã được phân công thành công cho người nhận. `DeliverDto` là body phẳng (flat) — không có object `proof_of_delivery`, và `parcel_id` lấy từ URL, không truyền trong body.
 * **Pre-conditions:** Bưu kiện đã trải qua các bước luân chuyển và được gán `assigned_courier_id` cho Shipper 1.
 * **Steps:**
   ```bash
-  curl -s -X POST http://localhost:3000/couriers/legs/leg-001/deliver \
+  curl -s -X POST http://localhost:3000/couriers/parcels/<ASSIGNED_PARCEL_ID>/deliver \
     -H "Authorization: Bearer <SHIPPER_1_TOKEN>" \
     -H "Content-Type: application/json" \
     -H "Idempotency-Key: tc-cou-002-$(date +%s)" \
-    -d '{"parcel_id": "<ASSIGNED_PARCEL_ID>", "courier_id": "b578dcfe-...", "proof_of_delivery": {"signature": "Alice", "photo_url": "http://img.com/pod.jpg"}}'
+    -d '{"courier_id": "b578dcfe-...", "outcome": "DELIVERED", "signature_url": "http://img.com/sig.jpg", "photo_url": "http://img.com/pod.jpg"}'
   ```
 * **Expected Result:**
   * HTTP Status: `200 OK`.
   * Trạng thái Bưu kiện chuyển sang `Delivered`.
-  * Lưu thông tin `proof_of_delivery` vào Database.
+  * Lưu thông tin proof (`signature_url`, `photo_url`) vào Database.
 
 #### TC-COU-003: Shipper Giao bưu kiện CỦA COURIER KHÁC (Phase 10 Ownership Guard)
 * **Mô tả:** Shipper 2 cố tình gọi API giao bưu kiện đang được gán cho Shipper 1.
 * **Steps:** Dùng `<SHIPPER_2_TOKEN>` để gọi endpoint `/deliver` đối với `<ASSIGNED_PARCEL_ID>` của Shipper 1.
 * **Expected Result:**
   * HTTP Status: `403 Forbidden`.
-  * Response Body: `Shipper is not assigned to this parcel` (Khác với lỗi 422 lỗi nghiệp vụ, đây là lỗi vi phạm phân quyền 403).
+  * Response Body: `"This parcel is not assigned to the calling courier"` (Khác với lỗi 422 lỗi nghiệp vụ, đây là lỗi vi phạm phân quyền 403).
 
 #### TC-COU-004: Vi phạm State Machine (FSM Guard Test)
 * **Mô tả:** Cố tình giao bưu kiện khi bưu kiện vừa tạo xong (chưa qua Pickup hay Inbound Hub).
@@ -190,38 +193,31 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 
 ### 🏭 Suite 4: Xử lý tại Hub & Phân loại (Hub Sortation)
 
-#### TC-HUB-001: Quét Nhập kho tại Hub Gốc (Inbound Scan)
+Chỉ có **một** route nhận bưu kiện tại Hub: `POST /hubs/:id/receive`, trong đó `:id` là **hub id** (UUID, path param — không truyền `hub_id`/`operator_id` trong body). Không có route "outbound scan" riêng biệt.
+
+#### TC-HUB-001: Quét Nhập kho tại Hub Gốc (Receive Scan)
 * **Mô tả:** Nhân viên Hub quét nhập kho bưu kiện sau khi Shipper mang về.
 * **Pre-conditions:** Bưu kiện ở trạng thái `Picked_Up`.
 * **Steps:**
   ```bash
-  curl -s -X POST http://localhost:3000/hubs/scan/inbound \
-    -H "Authorization: Bearer <ADMIN_OR_HUB_TOKEN>" \
+  curl -s -X POST http://localhost:3000/hubs/<ORIGIN_HUB_ID>/receive \
+    -H "Authorization: Bearer <HUB_STAFF_TOKEN>" \
     -H "Content-Type: application/json" \
-    -d '{"parcel_id": "<PARCEL_ID>", "hub_id": "Hub-REG-100", "operator_id": "op-1"}'
+    -d '{"parcel_id": "<PARCEL_ID>"}'
   ```
 * **Expected Result:**
   * HTTP Status: `200 OK`.
   * Trạng thái Bưu kiện chuyển sang `Inbound_Hub`.
 
-#### TC-HUB-002: Quét Xuất kho tại Hub Gốc (Outbound Scan)
-* **Mô tả:** Quét xuất kho để chuẩn bị lên xe Line-haul đi Hub Đích.
-* **Steps:**
-  ```bash
-  curl -s -X POST http://localhost:3000/hubs/scan/outbound \
-    -H "Authorization: Bearer <ADMIN_OR_HUB_TOKEN>" \
-    -H "Content-Type: application/json" \
-    -d '{"parcel_id": "<PARCEL_ID>", "hub_id": "Hub-REG-100", "operator_id": "op-1"}'
-  ```
-* **Expected Result:**
-  * HTTP Status: `200 OK`.
-  * Trạng thái Bưu kiện chuyển sang `Outbound_Hub`.
+#### TC-HUB-002: (Đã gộp vào TC-HUB-001 — không có route outbound riêng)
+* **Ghi chú:** Tài liệu bản trước liệt kê một route `/hubs/scan/outbound` không tồn tại trong code. Việc chuyển tiếp bưu kiện lên xe line-haul được xử lý qua Suite 5 (`POST /trips`, `/trips/:id/depart`) chứ không phải một scan riêng tại Hub.
 
 #### TC-HUB-003: Quét Nhập kho Nhầm Hub (BR-02 Misrouted Guard Test)
 * **Mô tả:** Cố tình quét nhập kho tại một Hub không nằm trên Route định tuyến của bưu kiện.
-* **Steps:** Gọi `/hubs/scan/inbound` với `hub_id: "Hub-WRONG-999"`.
+* **Steps:** Gọi `POST /hubs/<WRONG_HUB_ID>/receive` với `parcel_id` của một bưu kiện thuộc route khác.
 * **Expected Result:**
-  * HTTP Status: `422 Unprocessable Entity` hoặc Bưu kiện rơi vào trạng thái ngoại lệ `Misrouted` theo Business Rule BR-02.
+  * HTTP Status: `200 OK` (**không phải lỗi** — hệ thống chấp nhận scan và tự xử lý ngoại lệ).
+  * Hệ thống phát sự kiện `PARCEL_MISROUTED` cộng một sự kiện re-route sửa lại hành trình cho bưu kiện (BR-02), thay vì trả về lỗi 422.
 
 ---
 
@@ -232,9 +228,9 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 * **Steps:**
   ```bash
   curl -s -X POST http://localhost:3000/trips \
-    -H "Authorization: Bearer <ADMIN_TOKEN>" \
+    -H "Authorization: Bearer <DISPATCHER_TOKEN>" \
     -H "Content-Type: application/json" \
-    -d '{"origin_hub_id": "Hub-REG-100", "destination_hub_id": "Hub-REG-101"}'
+    -d '{"origin_hub_id": "<ORIGIN_HUB_ID>", "dest_hub_id": "<DEST_HUB_ID>", "parcel_ids": ["<PARCEL_ID>"]}'
   ```
 * **Expected Result:**
   * HTTP Status: `201 Created`.
@@ -254,15 +250,15 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 ### 🔍 Suite 6: Tra cứu Tracking & Read Projections
 
 #### TC-TRK-001: Tra cứu Timeline Chi tiết Đơn hàng
-* **Mô tả:** Kiểm tra timeline và trạng thái projection tổng hợp.
+* **Mô tả:** Kiểm tra timeline và trạng thái projection tổng hợp. Route param thực tế tên `:trackingId` (dùng shipment_order_id làm giá trị).
 * **Steps:**
   ```bash
   curl -s http://localhost:3000/tracking/<SHIPMENT_ORDER_ID> | python3 -m json.tool
   ```
 * **Expected Result:**
   * HTTP Status: `200 OK`.
-  * Response chứa thông tin `status` tổng hợp của đơn hàng (ví dụ: `In_Transit` hoặc `Delivered`).
-  * Mảng `timeline` liệt kê toàn bộ lịch sử quét bưu kiện theo thứ tự thời gian tăng dần.
+  * Response chứa `status` tổng hợp ở top-level (ví dụ: `In_Transit` hoặc `Delivered`).
+  * Mảng `parcels[]` — mỗi phần tử là một bưu kiện, và `timeline` nằm **lồng bên trong từng phần tử của `parcels[]`** (không phải mảng top-level), liệt kê lịch sử quét theo thứ tự thời gian tăng dần.
 
 #### TC-TRK-002: Kiểm tra Tự động Tính toán Status Projection (BR-05)
 * **Mô tả:** Đơn có 2 bưu kiện: Parcel 1 đã `Delivered`, Parcel 2 mới `Inbound_Hub`.
@@ -278,7 +274,7 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 * **Expected Result:** `401 Unauthorized`.
 
 #### TC-AUT-002: Customer cố tình truy cập API dành cho Courier/Hub
-* **Mô tả:** Dùng Token Customer gọi API quét giao hàng `/couriers/legs/leg-1/deliver`.
+* **Mô tả:** Dùng Token Customer gọi API quét giao hàng `/couriers/parcels/<PARCEL_ID>/deliver`.
 * **Expected Result:** `403 Forbidden`.
 
 #### TC-AUT-003: Admin Bypass kiểm tra Ownership
@@ -297,7 +293,7 @@ Lấy Token từ giao diện Web Panel (`http://localhost:5173`) hoặc script t
 
 #### TC-IDM-002: Re-publish NATS Event với cùng `Nats-Msg-Id`
 * **Mô tả:** Giả lập NATS gửi lại event `order.created` trùng `event_id`.
-* **Expected Result:** NATS Broker drop bản ghi trùng trong window 2 phút; Consumer nếu nhận được sau 2 phút sẽ ngắt bằng `ON CONFLICT DO NOTHING`, không sinh ra bưu kiện lặp.
+* **Expected Result:** NATS Broker drop bản ghi trùng trong window 2 phút (`Nats-Msg-Id` header); Consumer nếu nhận được sau 2 phút vẫn tự chặn bằng ràng buộc unique trên `tracking_event.event_id` (TypeORM `.orIgnore()`, tương đương `ON CONFLICT DO NOTHING`), không sinh ra bưu kiện lặp.
 
 ---
 
@@ -310,9 +306,9 @@ Tester sử dụng bảng biểu bên dưới để ghi nhận kết quả trong
 | **TC-ORD-001** | Tạo đơn hàng Happy Path | CUSTOMER | HTTP 201, trả về Price & Status Created | [ ] Pass | |
 | **TC-ORD-002** | Tạo đơn thiếu Idempotency-Key | CUSTOMER | HTTP 400 Bad Request | [ ] Pass | |
 | **TC-ORD-004** | Customer xem danh sách đơn | CUSTOMER | HTTP 200, chỉ thấy đơn của mình | [ ] Pass | |
-| **TC-PAY-003** | Pickup đơn chưa thanh toán | SHIPPER | HTTP 422 PREPAID_PAYMENT_REQUIRED | [ ] Pass | |
+| **TC-PAY-003** | Pickup đơn chưa thanh toán | SHIPPER | HTTP 422, BR-08 | [ ] Pass | |
 | **TC-COU-002** | Shipper giao đơn được phân công | SHIPPER 1 | HTTP 200, status Delivered | [ ] Pass | |
 | **TC-COU-003** | Shipper giao đơn người khác | SHIPPER 2 | HTTP 403 Forbidden | [ ] Pass | |
-| **TC-HUB-001** | Quét Inbound tại Hub Gốc | HUB OPERATOR | HTTP 200, status Inbound_Hub | [ ] Pass | |
+| **TC-HUB-001** | Quét nhập kho tại Hub Gốc | hub_staff | HTTP 200, status Inbound_Hub | [ ] Pass | |
 | **TC-AUT-001** | Gọi API không Token | Unauthenticated | HTTP 401 Unauthorized | [ ] Pass | |
 | **TC-IDM-001** | Gửi trùng Idempotency-Key | CUSTOMER | Không sinh trùng đơn DB | [ ] Pass | |

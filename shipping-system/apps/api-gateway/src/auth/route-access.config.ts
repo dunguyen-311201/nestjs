@@ -16,5 +16,5 @@ export const ROUTE_ACCESS: RouteAccess[] = [
   { pattern: /^\/couriers(\/.*)?$/, roles: ['shipper'] },
   { pattern: /^\/hubs(\/.*)?$/, roles: ['hub_staff'] },
   { pattern: /^\/trips(\/.*)?$/, roles: ['dispatcher'] },
-  { pattern: /^\/legs(\/.*)?$/, roles: ['dispatcher'] },
+  { pattern: /^\/parcels(\/.*)?$/, roles: ['dispatcher'] },
 ];
