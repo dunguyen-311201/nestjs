@@ -15,3 +15,4 @@ export * from './events/parcel-delivered.event';
 export * from './events/parcel-delivery-failed.event';
 export * from './events/parcel-rts.event';
 export * from './events/parcel-lost-suspected.event';
+export * from './events/parcel-damaged.event';

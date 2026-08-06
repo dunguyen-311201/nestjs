@@ -18,6 +18,7 @@ export const NATS_SUBJECTS = {
   PARCEL_DELIVERY_FAILED: 'parcel.delivery_failed',
   PARCEL_RTS: 'parcel.rts',
   PARCEL_LOST_SUSPECTED: 'parcel.lost_suspected',
+  PARCEL_DAMAGED: 'parcel.damaged',
 } as const;
 
 // Per-order projection-write subject - a recompute trigger, not a domain

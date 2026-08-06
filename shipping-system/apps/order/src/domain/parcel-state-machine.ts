@@ -13,6 +13,7 @@ export enum TrackingEventType {
   DELIVERED = 'DELIVERED',
   MISROUTED = 'MISROUTED',
   RTS = 'RTS',
+  DAMAGED = 'DAMAGED',
 }
 
 type TransitionKey = `${ParcelState}:${TrackingEventType}`;
@@ -127,10 +128,9 @@ export class ParcelStateMachine {
     };
   }
 
-  // Administrative action with no scan-event or BR backing it in this
-  // scoped slice (no `DAMAGED` value in TRACKING_EVENT.event_type, no
-  // business rule describes how this fires) - allowed from any
-  // non-terminal state.
+  // Triggered by Hub's `parcel.damaged` event (hub staff reports physical
+  // damage in place of a normal receive/arrival scan) - allowed from any
+  // non-terminal state, since damage can be discovered at any hub stop.
   static markDamaged(currentState: ParcelState): ParcelState {
     if (TERMINAL_STATES.has(currentState)) {
       throw new Error(

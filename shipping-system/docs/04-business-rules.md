@@ -49,7 +49,8 @@ BR-05 states the general principle ("least-advanced status among its parcels") b
 - **Checkout abandoned** → the Stripe Checkout Session auto-expires (Stripe default 24h) with no completion; on `checkout.session.expired`, `SHIPMENT_ORDER.status` is auto-cancelled to `Cancelled` (only if still `Created` — a race with a completing webhook is a no-op), and `checkout()` can no longer be retried for that order (BR-08).
 - **Failed delivery** ×3 → RTS, `direction = Reverse`, tracking ID kept (BR-04).
 - **Misrouted** → wrong-hub scan → blocked + corrective re-route (BR-02).
-- **Lost/Damaged** → terminal state → order `Partially_Delivered` (BR-05).
+- **Lost (suspected)** → Tracking's hourly SLA sweep (UC-15, `LostParcelSweepService`) flags a parcel still in transit (`DEPARTED_LINEHAUL`/`OUT_FOR_DELIVERY`) past its order's `expected_delivery_at` with no further scan → `parcel.lost_suspected` → `PARCEL.state = Lost` → terminal → order `Partially_Delivered` (BR-05).
+- **Damaged** → hub staff reports physical damage during a scan (`POST /hubs/:id/receive` with `damaged: true`, replacing the normal receive/arrival scan for that call) → `parcel.damaged` → `PARCEL.state = Damaged` → terminal → order `Partially_Delivered` (BR-05).
 
 ## Deferred (out of scope for this slice)
 

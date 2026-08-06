@@ -66,6 +66,11 @@ export class TrackingEventConsumer {
     return this.handle(NATS_SUBJECTS.PARCEL_RTS, payload);
   }
 
+  @EventPattern(NATS_SUBJECTS.PARCEL_DAMAGED)
+  onDamaged(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_DAMAGED, payload);
+  }
+
   private async handle(
     subject: string,
     payload: ParcelLifecyclePayload,

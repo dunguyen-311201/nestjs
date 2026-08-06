@@ -4,6 +4,7 @@ import { BusinessRuleException } from '@app/dtos';
 import {
   NATS_SUBJECTS,
   ParcelArrivedAtHubEventV1,
+  ParcelDamagedEventV1,
   ParcelHubReceivedEventV1,
   ParcelMisroutedEventV1,
 } from '@app/contracts';
@@ -66,15 +67,31 @@ export class HubService {
       );
     }
 
-    const events: OutboxEventInput[] = dto.linehaul_trip_id
-      ? await this.buildTransitScanEvents(hub, dto, context.routeId)
-      : [this.buildOriginScanEvent(hub.id, dto)];
+    const events: OutboxEventInput[] = dto.damaged
+      ? [this.buildDamagedEvent(hub.id, dto)]
+      : dto.linehaul_trip_id
+        ? await this.buildTransitScanEvents(hub, dto, context.routeId)
+        : [this.buildOriginScanEvent(hub.id, dto)];
 
     await this.hubRepository.recordScan(events);
 
     const result: ReceiveResult = { status: 'recorded' };
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);
     return result;
+  }
+
+  private buildDamagedEvent(hubId: string, dto: ReceiveDto): OutboxEventInput {
+    const payload: ParcelDamagedEventV1 = {
+      event_id: randomUUID(),
+      occurred_at: new Date().toISOString(),
+      parcel_id: dto.parcel_id,
+      hub_id: hubId,
+    };
+    return {
+      eventId: payload.event_id,
+      eventType: NATS_SUBJECTS.PARCEL_DAMAGED,
+      payload: payload as unknown as Record<string, unknown>,
+    };
   }
 
   private buildOriginScanEvent(

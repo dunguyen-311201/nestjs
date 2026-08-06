@@ -66,13 +66,20 @@ export class ParcelEventConsumer {
     return this.handle(NATS_SUBJECTS.PARCEL_LOST_SUSPECTED, payload);
   }
 
+  @EventPattern(NATS_SUBJECTS.PARCEL_DAMAGED)
+  onDamaged(payload: ParcelLifecyclePayload): Promise<void> {
+    return this.handle(NATS_SUBJECTS.PARCEL_DAMAGED, payload);
+  }
+
   private async handle(
     subject: string,
     payload: ParcelLifecyclePayload,
   ): Promise<void> {
     const eventType = mapSubjectToEventType(subject);
     if (
-      (!eventType && subject !== NATS_SUBJECTS.PARCEL_LOST_SUSPECTED) ||
+      (!eventType &&
+        subject !== NATS_SUBJECTS.PARCEL_LOST_SUSPECTED &&
+        subject !== NATS_SUBJECTS.PARCEL_DAMAGED) ||
       !payload?.parcel_id
     ) {
       return;
@@ -120,6 +127,9 @@ export class ParcelEventConsumer {
     try {
       if (subject === NATS_SUBJECTS.PARCEL_LOST_SUSPECTED) {
         const nextState = ParcelStateMachine.markLostSuspected(parcel.state);
+        await this.orderRepository.updateParcelState(parcel.id, nextState);
+      } else if (subject === NATS_SUBJECTS.PARCEL_DAMAGED) {
+        const nextState = ParcelStateMachine.markDamaged(parcel.state);
         await this.orderRepository.updateParcelState(parcel.id, nextState);
       } else if (subject === NATS_SUBJECTS.PARCEL_RTS) {
         const rtsResult = ParcelStateMachine.applyRts(parcel.state);

@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS shipping_tracking_db.TRACKING_EVENT (
     hub_id UUID,                  -- Logical FK to HUB.id
     courier_id UUID,              -- Logical FK to COURIER.id
     linehaul_trip_id UUID,        -- Logical FK to LINEHAULTRIP.id
-    event_type VARCHAR(50) NOT NULL CHECK (event_type IN ('PICKUP', 'HUB_RECEIVE', 'DEPARTED_LINEHAUL', 'ARRIVED_AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED', 'DELIVERED', 'MISROUTED', 'RTS')),
+    event_type VARCHAR(50) NOT NULL CHECK (event_type IN ('PICKUP', 'HUB_RECEIVE', 'DEPARTED_LINEHAUL', 'ARRIVED_AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED', 'DELIVERED', 'MISROUTED', 'RTS', 'DAMAGED')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

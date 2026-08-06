@@ -189,6 +189,36 @@ describe('HubService', () => {
     ]);
   });
 
+  it('records only parcel.damaged (no hub_received) when the scan reports damage', async () => {
+    hubRepository.findHubById.mockResolvedValue({
+      id: 'hub-1',
+      zoneId: 'zone-1',
+    });
+    orderLookup.findParcelOrderContext.mockResolvedValue({
+      shipmentOrderId: 'order-1',
+      orderStatus: 'Confirmed',
+      routeId: 'route-1',
+    });
+
+    const result = await service.receive(
+      'hub-1',
+      { parcel_id: 'parcel-1', damaged: true },
+      'idem-1',
+    );
+
+    expect(result).toEqual({ status: 'recorded' });
+    expect(hubRepository.recordScan).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventType: NATS_SUBJECTS.PARCEL_DAMAGED,
+        payload: expect.objectContaining({
+          parcel_id: 'parcel-1',
+          hub_id: 'hub-1',
+        }) as unknown,
+      }),
+    ]);
+    expect(hubRepository.findRouteById).not.toHaveBeenCalled();
+  });
+
   it('replays the cached response on a repeated Idempotency-Key', async () => {
     const cached = { status: 'recorded' };
     idempotencyStore.get.mockResolvedValue(cached);

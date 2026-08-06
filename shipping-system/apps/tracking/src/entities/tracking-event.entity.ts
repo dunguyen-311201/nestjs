@@ -15,6 +15,7 @@ export enum TrackingEventType {
   DELIVERED = 'DELIVERED',
   MISROUTED = 'MISROUTED',
   RTS = 'RTS',
+  DAMAGED = 'DAMAGED',
 }
 
 // Append-only: this service never issues an UPDATE/DELETE against this

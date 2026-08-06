@@ -226,6 +226,32 @@ describe('ParcelEventConsumer', () => {
     expect(orderRepository.updateParcelState).not.toHaveBeenCalled();
   });
 
+  it('processes DAMAGED event by changing state to Damaged', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.IN_HUB,
+    });
+
+    await consumer.onDamaged({ parcel_id: 'parcel-1' });
+
+    expect(orderRepository.updateParcelState).toHaveBeenCalledWith(
+      'parcel-1',
+      ParcelState.DAMAGED,
+    );
+  });
+
+  it('drops DAMAGED event when the parcel is already terminal, without throwing', async () => {
+    orderRepository.findParcelById.mockResolvedValue({
+      id: 'parcel-1',
+      state: ParcelState.DELIVERED,
+    });
+
+    await expect(
+      consumer.onDamaged({ parcel_id: 'parcel-1' }),
+    ).resolves.not.toThrow();
+    expect(orderRepository.updateParcelState).not.toHaveBeenCalled();
+  });
+
   it('exposes one handler per consumed subject', () => {
     expect(typeof consumer.onPickedUp).toBe('function');
     expect(typeof consumer.onHubReceived).toBe('function');
@@ -236,5 +262,6 @@ describe('ParcelEventConsumer', () => {
     expect(typeof consumer.onMisrouted).toBe('function');
     expect(typeof consumer.onRts).toBe('function');
     expect(typeof consumer.onLostSuspected).toBe('function');
+    expect(typeof consumer.onDamaged).toBe('function');
   });
 });

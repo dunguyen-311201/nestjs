@@ -71,6 +71,7 @@ describe('TrackingEventConsumer', () => {
     expect(typeof consumer.onDelivered).toBe('function');
     expect(typeof consumer.onMisrouted).toBe('function');
     expect(typeof consumer.onRts).toBe('function');
+    expect(typeof consumer.onDamaged).toBe('function');
   });
 
   it('maps parcel.misrouted using scanned_hub_id (sanity check the shared mapper is still used)', async () => {

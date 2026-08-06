@@ -30,6 +30,17 @@ describe('mapSubjectToTrackingEvent', () => {
     expect(result?.hubId).toBe('hub-1');
   });
 
+  it('maps parcel.damaged to a DAMAGED row', () => {
+    const result = mapSubjectToTrackingEvent(NATS_SUBJECTS.PARCEL_DAMAGED, {
+      event_id: 'evt-2b',
+      parcel_id: 'parcel-1',
+      hub_id: 'hub-1',
+    });
+
+    expect(result?.eventType).toBe(TrackingEventType.DAMAGED);
+    expect(result?.hubId).toBe('hub-1');
+  });
+
   it('maps parcel.loaded_for_linehaul to a DEPARTED_LINEHAUL row', () => {
     const result = mapSubjectToTrackingEvent(
       NATS_SUBJECTS.PARCEL_LOADED_FOR_LINEHAUL,

@@ -133,7 +133,7 @@ describe('ParcelStateMachine', () => {
     });
   });
 
-  describe('markDamaged: administrative action, no documented trigger event', () => {
+  describe("markDamaged: triggered by Hub's parcel.damaged event", () => {
     it.each([
       ParcelState.CREATED,
       ParcelState.IN_TRANSIT,

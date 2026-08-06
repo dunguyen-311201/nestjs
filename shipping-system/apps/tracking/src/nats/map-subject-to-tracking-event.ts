@@ -27,6 +27,7 @@ const SUBJECT_TO_EVENT_TYPE: Partial<Record<string, TrackingEventType>> = {
   [NATS_SUBJECTS.PARCEL_DELIVERED]: TrackingEventType.DELIVERED,
   [NATS_SUBJECTS.PARCEL_MISROUTED]: TrackingEventType.MISROUTED,
   [NATS_SUBJECTS.PARCEL_RTS]: TrackingEventType.RTS,
+  [NATS_SUBJECTS.PARCEL_DAMAGED]: TrackingEventType.DAMAGED,
 };
 
 export const CONSUMED_SUBJECTS = Object.keys(SUBJECT_TO_EVENT_TYPE);
