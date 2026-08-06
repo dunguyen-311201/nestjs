@@ -1,12 +1,12 @@
 import { OrderLookupAdapter } from './order-lookup.adapter';
 
 describe('OrderLookupAdapter', () => {
-  let shipmentOrderRepository: { findOne: jest.Mock };
+  let shipmentOrderRepository: { findOne: jest.Mock; find: jest.Mock };
   let parcelRepository: { find: jest.Mock; findOne: jest.Mock };
   let adapter: OrderLookupAdapter;
 
   beforeEach(() => {
-    shipmentOrderRepository = { findOne: jest.fn() };
+    shipmentOrderRepository = { findOne: jest.fn(), find: jest.fn() };
     parcelRepository = { find: jest.fn(), findOne: jest.fn() };
     adapter = new OrderLookupAdapter(
       shipmentOrderRepository as never,
@@ -77,5 +77,32 @@ describe('OrderLookupAdapter', () => {
     const result = await adapter.findShipmentOrderIdByShareToken('unknown');
 
     expect(result).toBeNull();
+  });
+
+  describe('findSlaBreachedParcelIds', () => {
+    it('returns ids of non-terminal parcels belonging to SLA-breached orders', async () => {
+      shipmentOrderRepository.find.mockResolvedValue([
+        { id: 'order-1' },
+        { id: 'order-2' },
+      ]);
+      parcelRepository.find.mockResolvedValue([
+        { id: 'parcel-1', shipmentOrderId: 'order-1', state: 'InTransit' },
+        { id: 'parcel-2', shipmentOrderId: 'order-2', state: 'OutForDelivery' },
+      ]);
+
+      const now = new Date('2026-08-06T00:00:00Z');
+      const result = await adapter.findSlaBreachedParcelIds(now);
+
+      expect(result).toEqual(['parcel-1', 'parcel-2']);
+    });
+
+    it('returns an empty array without querying parcels when no order has breached its SLA', async () => {
+      shipmentOrderRepository.find.mockResolvedValue([]);
+
+      const result = await adapter.findSlaBreachedParcelIds(new Date());
+
+      expect(result).toEqual([]);
+      expect(parcelRepository.find).not.toHaveBeenCalled();
+    });
   });
 });

@@ -22,4 +22,10 @@ export abstract class IOrderLookupPort {
   abstract findShipmentOrderIdByShareToken(
     shareToken: string,
   ): Promise<string | null>;
+
+  // UC-15 passive lost-parcel sweep: parcels whose order's
+  // expected_delivery_at is already in the past and whose state hasn't
+  // reached a terminal one yet (Delivered/Lost/Damaged) - once a parcel is
+  // flagged Lost it naturally drops out of future sweeps.
+  abstract findSlaBreachedParcelIds(now: Date): Promise<string[]>;
 }

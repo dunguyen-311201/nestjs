@@ -13,6 +13,7 @@ Owns: `TRACKING_EVENT`. Conventions in [00-conventions.md](file:///home/dunguyen
 - **Sole writer, append-only**: enforced at the DB role level (no `UPDATE`/`DELETE` grant), not just by convention — see BR-03.
 - **Cache boundary**: `ORDER.status` is served from Redis (write-through by Order's projection consumer); the per-parcel scan timeline always reads Postgres directly — deliberately not cached, since it's high-cardinality and low-reuse per request.
 - **Passive detection lives here, not in Order**: the lost-parcel SLA sweep runs inside Tracking because it already owns `TRACKING_EVENT` and needs no cross-service query to find candidates.
+- **SLA threshold: `SHIPMENT_ORDER.expected_delivery_at`, not `PARCEL.sla_expected_delivery`.** The latter column exists on `PARCEL` but Order never writes it (only the order-level `expected_delivery_at` is populated at creation from the rate card's SLA days), so it would always read `NULL`. `LostParcelSweepService.sweep()` (`@Cron`, `apps/tracking/src/lost-parcel-sweep.service.ts`) instead reads `SHIPMENT_ORDER.expected_delivery_at` (mirrored read-only onto Tracking's `ShipmentOrder` entity) via `IOrderLookupPort.findSlaBreachedParcelIds` — correct for this slice since all parcels in an order share one SLA. Candidates: non-terminal parcels (`state` not `Delivered`/`Lost`/`Damaged`) on a breached order whose latest `TRACKING_EVENT` is `DEPARTED_LINEHAUL`/`OUT_FOR_DELIVERY`. Once flagged `Lost`, a parcel drops out of future sweeps on its own.
 
 ## Use Cases
 

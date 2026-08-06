@@ -231,8 +231,8 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 *   **Weight Mismatch**:
     *   *Ingestion*: Hub measures and publishes `actual_weight_grams` in `parcel.hub_received`.
     *   *Action*: Order service records the weight. Discrepancy comparison is audited, and adjustment billing is deferred to post-delivery (does not hold up the physical parcel, BR-06). Recommend deferring this decision the same way weight-based re-pricing is out of scope for this slice.
-*   **Passive Lost-Parcel Detection**:
-    *   *Trigger*: A cron sweep job in **Tracking Service** checks for in-transit parcels (`DEPARTED_LINEHAUL`, `OUT_FOR_DELIVERY`) that have breached their delivery SLA with no subsequent scans.
+*   **Passive Lost-Parcel Detection** (implemented — `LostParcelSweepService`, `apps/tracking/src/lost-parcel-sweep.service.ts`):
+    *   *Trigger*: A `@Cron` sweep job in **Tracking Service** (hourly by default, `LOST_PARCEL_SWEEP_CRON` env override) checks for in-transit parcels (`DEPARTED_LINEHAUL`, `OUT_FOR_DELIVERY`) whose order has breached `SHIPMENT_ORDER.expected_delivery_at` with no subsequent scan.
     *   *Action*: Tracking emits `parcel.lost_suspected` -> Order service consumes it and sets `PARCEL.state = Lost` -> `ORDER.status` cascades to `Partially_Delivered`.
 
 ### Idempotency and outbox mechanics (Order Creation only)

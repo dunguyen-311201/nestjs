@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, LessThan, Not, Repository } from 'typeorm';
 import { ShipmentOrder } from '../entities/shipment-order.entity';
 import { Parcel } from '../entities/parcel.entity';
 import {
@@ -49,5 +49,22 @@ export class OrderLookupAdapter implements IOrderLookupPort {
       where: { shareToken },
     });
     return order?.id ?? null;
+  }
+
+  async findSlaBreachedParcelIds(now: Date): Promise<string[]> {
+    const breachedOrders = await this.shipmentOrderRepository.find({
+      where: { expectedDeliveryAt: LessThan(now) },
+    });
+    if (breachedOrders.length === 0) {
+      return [];
+    }
+
+    const parcels = await this.parcelRepository.find({
+      where: {
+        shipmentOrderId: In(breachedOrders.map((order) => order.id)),
+        state: Not(In(['Delivered', 'Lost', 'Damaged'])),
+      },
+    });
+    return parcels.map((parcel) => parcel.id);
   }
 }

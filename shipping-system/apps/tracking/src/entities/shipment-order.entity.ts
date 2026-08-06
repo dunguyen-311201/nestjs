@@ -11,4 +11,7 @@ export class ShipmentOrder {
 
   @Column({ name: 'share_token', type: 'uuid' })
   shareToken: string;
+
+  @Column({ name: 'expected_delivery_at', type: 'timestamp' })
+  expectedDeliveryAt: Date;
 }

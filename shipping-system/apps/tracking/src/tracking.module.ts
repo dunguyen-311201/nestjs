@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ScheduleModule } from '@nestjs/schedule';
 import Redis from 'ioredis';
 import { TrackingController } from './tracking.controller';
 import { TrackingService } from './tracking.service';
@@ -24,9 +25,13 @@ import {
 } from './nats/jetstream-client.provider';
 import { IStatusTriggerPublisher } from './ports/status-trigger-publisher.port';
 import { JetStreamStatusTriggerPublisher } from './adapters/jetstream-status-trigger.adapter';
+import { IEventPublisher } from './ports/event-publisher.port';
+import { NatsEventPublisher } from './adapters/nats-event-publisher.adapter';
+import { LostParcelSweepService } from './lost-parcel-sweep.service';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([TrackingEvent]),
     TypeOrmModule.forFeature([ShipmentOrder, Parcel], 'order'),
     ClientsModule.register([
@@ -42,9 +47,11 @@ import { JetStreamStatusTriggerPublisher } from './adapters/jetstream-status-tri
   controllers: [TrackingController, TrackingEventConsumer],
   providers: [
     TrackingService,
+    LostParcelSweepService,
     { provide: ITrackingEventRepository, useClass: TrackingEventRepository },
     { provide: IOrderLookupPort, useClass: OrderLookupAdapter },
     { provide: IStatusCachePort, useClass: RedisStatusCacheAdapter },
+    { provide: IEventPublisher, useClass: NatsEventPublisher },
     {
       provide: IStatusTriggerPublisher,
       useClass: JetStreamStatusTriggerPublisher,
