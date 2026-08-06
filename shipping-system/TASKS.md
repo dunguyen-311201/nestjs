@@ -3,6 +3,12 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-08-06
+
+### Done
+- Wrote `docs/reference/progress-report-2026-08-06.md` for the supporter, summarizing all 10 completed phases + ad-hoc work + quality highlights + open items, after a ~2.5-week training pause.
+- Resolved the long-standing "RateCard versioning" open decision: confirmed the schema already implements append-only versioning (`RATECARD.effective_from`/`effective_to` + unique constraint on `(origin_zone_id, dest_zone_id, parcel_type, effective_from)`, `RateCardPricingAdapter` picks the valid-at-now row, `PARCEL.rate_card_id`+`price_cents` lock the quote). Moved the item from `CLAUDE.md`'s "Open decisions" to "Decided", updated the progress report's open-items list, and fixed a stale cross-reference in `docs/02-HLD.md:233`.
+
 ## 2026-07-20
 
 ### Done

@@ -230,7 +230,7 @@ The gateway handles authentication, RBAC, request routing, and validation; OpenA
 ### Weight mismatch reconciliation and passive lost-parcel detection (BR-06 + ERD design note)
 *   **Weight Mismatch**:
     *   *Ingestion*: Hub measures and publishes `actual_weight_grams` in `parcel.hub_received`.
-    *   *Action*: Order service records the weight. Discrepancy comparison is audited, and adjustment billing is deferred to post-delivery (does not hold up the physical parcel, BR-06). Recommend deferring this the same way RateCard versioning is deferred.
+    *   *Action*: Order service records the weight. Discrepancy comparison is audited, and adjustment billing is deferred to post-delivery (does not hold up the physical parcel, BR-06). Recommend deferring this decision the same way weight-based re-pricing is out of scope for this slice.
 *   **Passive Lost-Parcel Detection**:
     *   *Trigger*: A cron sweep job in **Tracking Service** checks for in-transit parcels (`DEPARTED_LINEHAUL`, `OUT_FOR_DELIVERY`) that have breached their delivery SLA with no subsequent scans.
     *   *Action*: Tracking emits `parcel.lost_suspected` -> Order service consumes it and sets `PARCEL.state = Lost` -> `ORDER.status` cascades to `Partially_Delivered`.

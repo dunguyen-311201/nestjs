@@ -45,13 +45,10 @@ This is a deliberately reduced scope to fit a 16-day timeline. Payment (BR-08) a
 - `dtos/` — shared validation classes and rules (barcode formats, common request DTOs).
 - `crypto/` — field-level encrypt/decrypt helpers for PII. Reused by Order and Courier services.
 
-## Open decisions (confirm before relying on)
-
-- RateCard versioning (append-only?) — deferred; rely on locked price_cents for now.
-
 ## Decided
 
 - **ADR-002 ORM:** TypeORM (Accepted). Use `@nestjs/typeorm` + `@InjectRepository`; each service's `DataSource` is scoped to its own Postgres schema via TypeORM's `schema` option (not a separate `database`) — see ADR-003.
+- **RateCard versioning:** append-only. `RATECARD.effective_from`/`effective_to` define a validity window per `(origin_zone_id, dest_zone_id, parcel_type)`, enforced by a unique constraint on `(origin_zone_id, dest_zone_id, parcel_type, effective_from)`. `RateCardPricingAdapter` looks up the row valid at request time; `PARCEL.rate_card_id` + `price_cents` lock the quote at order creation so later rate changes never affect existing parcels.
 
 ## Git Remotes — dual push, different content per remote
 
