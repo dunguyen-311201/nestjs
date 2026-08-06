@@ -66,4 +66,10 @@ export abstract class IOrderRepository {
     shipmentOrderId: string,
     status: ShipmentOrderStatus,
   ): Promise<void>;
+  // Atomic conditional cancel (only if still Created) - guards against a
+  // race with a checkout.session.completed webhook that already confirmed
+  // the order.
+  abstract cancelIfPending(
+    shipmentOrderId: string,
+  ): Promise<'cancelled' | 'skipped'>;
 }

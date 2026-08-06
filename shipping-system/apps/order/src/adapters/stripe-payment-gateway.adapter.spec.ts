@@ -77,6 +77,33 @@ describe('StripePaymentGateway', () => {
       });
     });
 
+    it('maps a checkout.session.expired event to the shared WebhookEvent shape', () => {
+      constructEvent.mockReturnValue({
+        id: 'evt_3',
+        type: 'checkout.session.expired',
+        data: {
+          object: {
+            client_reference_id: 'order-1',
+            payment_intent: null,
+            payment_status: 'unpaid',
+          },
+        },
+      });
+
+      const result = gateway.constructWebhookEvent(
+        Buffer.from('{}'),
+        'sig_header',
+      );
+
+      expect(result).toEqual({
+        id: 'evt_3',
+        type: 'checkout.session.expired',
+        shipmentOrderId: 'order-1',
+        externalReferenceId: null,
+        status: 'unpaid',
+      });
+    });
+
     it('maps any other event type with a null shipment_order_id (caller ignores it)', () => {
       constructEvent.mockReturnValue({
         id: 'evt_2',

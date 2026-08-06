@@ -55,6 +55,12 @@ docker compose down && docker compose up -d
 4. Complete the checkout using Stripe's test credit card (Card number: `4242 4242 4242 4242`, Expiry: any future date, CVC: any 3 digits).
 5. After payment, verify in the terminal that the Stripe CLI forwards the webhook and the status projection transitions the order to `Confirmed`.
 
+**Abandoned checkout (auto-cancel):** the `stripe listen` command above forwards all event types by default, so `checkout.session.expired` reaches `POST /payments/webhook` without any extra config. To test it without waiting the full 24h expiry:
+```bash
+docker run --rm -it --ipc=host --net=host stripe/stripe-cli:latest trigger checkout.session.expired
+```
+This won't carry a real `client_reference_id`, so it won't cancel a specific order — it only exercises the handler path. To see an actual order auto-cancel, create a real Checkout Session (step 2 above), let it expire naturally, and confirm `SHIPMENT_ORDER.status` becomes `Cancelled`.
+
 ---
 
 ## 2. Resend Email Integration (Free Tier)

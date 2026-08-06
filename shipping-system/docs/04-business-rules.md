@@ -46,6 +46,7 @@ BR-05 states the general principle ("least-advanced status among its parcels") b
 ## Exception Branches
 
 - **Payment not completed** → order stays blocked pre-dispatch; no pickup or hub inbound is accepted until `payment.succeeded` (BR-08).
+- **Checkout abandoned** → the Stripe Checkout Session auto-expires (Stripe default 24h) with no completion; on `checkout.session.expired`, `SHIPMENT_ORDER.status` is auto-cancelled to `Cancelled` (only if still `Created` — a race with a completing webhook is a no-op), and `checkout()` can no longer be retried for that order (BR-08).
 - **Failed delivery** ×3 → RTS, `direction = Reverse`, tracking ID kept (BR-04).
 - **Misrouted** → wrong-hub scan → blocked + corrective re-route (BR-02).
 - **Lost/Damaged** → terminal state → order `Partially_Delivered` (BR-05).

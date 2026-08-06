@@ -55,7 +55,10 @@ export class StripePaymentGateway implements IPaymentGateway {
       this.webhookSecret,
     );
 
-    if (event.type !== 'checkout.session.completed') {
+    if (
+      event.type !== 'checkout.session.completed' &&
+      event.type !== 'checkout.session.expired'
+    ) {
       return {
         id: event.id,
         type: event.type,

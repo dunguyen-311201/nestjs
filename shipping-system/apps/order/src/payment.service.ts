@@ -36,6 +36,9 @@ export class PaymentService {
     if (order.status === ShipmentOrderStatus.CONFIRMED) {
       throw new ConflictException('Order is already Confirmed');
     }
+    if (order.status === ShipmentOrderStatus.CANCELLED) {
+      throw new ConflictException('Order is Cancelled');
+    }
 
     const payment =
       await this.paymentRepository.findByShipmentOrderId(shipmentOrderId);
@@ -59,6 +62,16 @@ export class PaymentService {
 
   async handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
     const event = this.paymentGateway.constructWebhookEvent(rawBody, signature);
+
+    // An abandoned Checkout Session (customer never completes payment)
+    // auto-expires on Stripe's side after 24h; that's the only signal we
+    // get for an abandoned checkout, so it's what auto-cancels the order.
+    if (event.type === 'checkout.session.expired') {
+      if (event.shipmentOrderId) {
+        await this.orderRepository.cancelIfPending(event.shipmentOrderId);
+      }
+      return;
+    }
 
     // Stripe requires a 200 ack for event types this handler doesn't act
     // on, so it doesn't retry a webhook endpoint it would otherwise think

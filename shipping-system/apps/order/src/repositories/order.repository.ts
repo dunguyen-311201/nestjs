@@ -181,4 +181,16 @@ export class OrderRepository implements IOrderRepository {
       .getRepository(ShipmentOrder)
       .update(shipmentOrderId, { status });
   }
+
+  async cancelIfPending(
+    shipmentOrderId: string,
+  ): Promise<'cancelled' | 'skipped'> {
+    const result = await this.dataSource
+      .getRepository(ShipmentOrder)
+      .update(
+        { id: shipmentOrderId, status: ShipmentOrderStatus.CREATED },
+        { status: ShipmentOrderStatus.CANCELLED },
+      );
+    return result.affected ? 'cancelled' : 'skipped';
+  }
 }

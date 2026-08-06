@@ -10,14 +10,16 @@ import { ShipmentOrderStatus } from './entities/shipment-order-status.enum';
 import { PaymentStatus } from './entities/payment-status.enum';
 
 describe('PaymentService', () => {
-  let orderRepository: jest.Mocked<Pick<IOrderRepository, 'findById'>>;
+  let orderRepository: jest.Mocked<
+    Pick<IOrderRepository, 'findById' | 'cancelIfPending'>
+  >;
   let paymentRepository: jest.Mocked<IPaymentRepository>;
   let paymentGateway: jest.Mocked<IPaymentGateway>;
   let eventPublisher: jest.Mocked<IEventPublisher>;
   let service: PaymentService;
 
   beforeEach(() => {
-    orderRepository = { findById: jest.fn() };
+    orderRepository = { findById: jest.fn(), cancelIfPending: jest.fn() };
     paymentRepository = {
       findByShipmentOrderId: jest.fn(),
       confirmPayment: jest.fn(),
@@ -75,6 +77,19 @@ describe('PaymentService', () => {
       orderRepository.findById.mockResolvedValue({
         id: 'order-1',
         status: ShipmentOrderStatus.CONFIRMED,
+        priceCents: 5000,
+      } as never);
+
+      await expect(service.checkout('order-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(paymentGateway.createCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('throws 409 when the order was cancelled (e.g. an expired checkout)', async () => {
+      orderRepository.findById.mockResolvedValue({
+        id: 'order-1',
+        status: ShipmentOrderStatus.CANCELLED,
         priceCents: 5000,
       } as never);
 
@@ -167,6 +182,37 @@ describe('PaymentService', () => {
 
       expect(paymentRepository.confirmPayment).not.toHaveBeenCalled();
       expect(eventPublisher.publish).not.toHaveBeenCalled();
+    });
+
+    it('cancels the order on a checkout.session.expired event', async () => {
+      paymentGateway.constructWebhookEvent.mockReturnValue({
+        id: 'evt-3',
+        type: 'checkout.session.expired',
+        shipmentOrderId: 'order-1',
+        externalReferenceId: null,
+        status: 'unpaid',
+      });
+      orderRepository.cancelIfPending.mockResolvedValue('cancelled');
+
+      await service.handleWebhookEvent(rawBody, 'sig');
+
+      expect(orderRepository.cancelIfPending).toHaveBeenCalledWith('order-1');
+      expect(paymentRepository.confirmPayment).not.toHaveBeenCalled();
+      expect(eventPublisher.publish).not.toHaveBeenCalled();
+    });
+
+    it('does not cancel on checkout.session.expired when the shipmentOrderId is missing', async () => {
+      paymentGateway.constructWebhookEvent.mockReturnValue({
+        id: 'evt-4',
+        type: 'checkout.session.expired',
+        shipmentOrderId: null,
+        externalReferenceId: null,
+        status: 'unpaid',
+      });
+
+      await service.handleWebhookEvent(rawBody, 'sig');
+
+      expect(orderRepository.cancelIfPending).not.toHaveBeenCalled();
     });
 
     it('propagates the signature-verification error for the controller to map to 400', async () => {

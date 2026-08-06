@@ -282,4 +282,28 @@ describe('OrderRepository', () => {
       status: ShipmentOrderStatus.COMPLETE,
     });
   });
+
+  describe('cancelIfPending', () => {
+    it('cancels the order and returns "cancelled" when it is still Created', async () => {
+      const update = jest.fn().mockResolvedValue({ affected: 1 });
+      getRepository.mockReturnValue({ update });
+
+      const result = await repository.cancelIfPending('order-1');
+
+      expect(update).toHaveBeenCalledWith(
+        { id: 'order-1', status: ShipmentOrderStatus.CREATED },
+        { status: ShipmentOrderStatus.CANCELLED },
+      );
+      expect(result).toBe('cancelled');
+    });
+
+    it('returns "skipped" without cancelling when the order already moved past Created', async () => {
+      const update = jest.fn().mockResolvedValue({ affected: 0 });
+      getRepository.mockReturnValue({ update });
+
+      const result = await repository.cancelIfPending('order-1');
+
+      expect(result).toBe('skipped');
+    });
+  });
 });
