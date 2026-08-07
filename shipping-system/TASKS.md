@@ -3,6 +3,12 @@
 One entry per day. Add a new `## YYYY-MM-DD` section at the top (newest first).
 End of day, copy the "Done" bullets straight into your report.
 
+## 2026-08-07
+
+### Done
+- **Edge-case audit gap #1 fixed (TDD, BR-04)**: closed the delivery-attempt race condition in `apps/courier/src/repositories/courier.repository.ts` — `recordDeliveryFailure` now takes a Postgres advisory transaction lock (`pg_advisory_xact_lock(hashtext('<parcel_id>:<direction>'))`) before reading `MAX(attempt_number)`, serializing concurrent `DELIVERY_FAILED` events for the same parcel+direction so two near-simultaneous failures can no longer compute the same next attempt number. Lock is scoped to the transaction (auto-released on commit/rollback), no new dependency. +1 spec (`courier.repository.spec.ts`), 452/453 tests green (1 pre-existing skip), build/lint clean. **Live-verified**: ran two real concurrent `psql` transactions against the dockerized Postgres reproducing the exact race — confirmed they serialize and produce `attempt_number` 1 and 2 (not a duplicate), matching the fixed code's approach.
+- Remaining high-severity gaps #2–#7 from `docs/reference/edge-case-audit-2026-08-06.md` still open, in priority order: Dispatcher courier double-assign guard, Notification redelivery dedup, distinct RTS-completed terminal state, Idempotency-Key body-hash validation, PII key-rotation doc, Gateway downstream timeout.
+
 ## 2026-08-06
 
 ### Done

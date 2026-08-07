@@ -64,6 +64,15 @@ export class CourierRepository implements ICourierRepository {
     rtsOutboxEvent: OutboxEventInput,
   ): Promise<RecordDeliveryFailureResult> {
     return this.dataSource.transaction(async (manager) => {
+      // Serializes concurrent failure events for the same parcel+direction:
+      // without this, two transactions can both read the same MAX(attempt_number)
+      // before either commits, then race to insert the same next attempt_number.
+      // The advisory lock is held only for this transaction's lifetime and blocks
+      // a second transaction from reading MAX until the first has committed.
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${parcelId}:${direction}`,
+      ]);
+
       const attemptRepo = manager.getRepository(DeliveryAttempt);
       const latest = await this.queryLatestAttemptNumber(
         attemptRepo,

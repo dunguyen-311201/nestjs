@@ -186,9 +186,15 @@ describe('CourierRepository', () => {
         throw new Error(`Unexpected repository target: ${String(entity)}`);
       });
       const managerSave = jest.fn().mockResolvedValue(undefined);
+      const managerQuery = jest.fn().mockResolvedValue(undefined);
       return {
-        manager: { getRepository: managerGetRepository, save: managerSave },
+        manager: {
+          getRepository: managerGetRepository,
+          save: managerSave,
+          query: managerQuery,
+        },
         managerSave,
+        managerQuery,
       };
     }
 
@@ -221,6 +227,30 @@ describe('CourierRepository', () => {
       });
       expect(managerSave).toHaveBeenCalledTimes(1);
       expect(managerSave).toHaveBeenCalledWith(Outbox, failedOutboxEvent);
+    });
+
+    it('takes a per-(parcel, direction) advisory lock before computing the next attempt number, to serialize concurrent failures', async () => {
+      const { manager, managerQuery } = transactionManager(null);
+      dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
+        cb(manager),
+      );
+      insertAttempt.mockResolvedValue({ identifiers: [{ id: 'attempt-1' }] });
+
+      await repository.recordDeliveryFailure(
+        'parcel-1',
+        'Forward',
+        'no answer',
+        failedOutboxEvent,
+        rtsOutboxEvent,
+      );
+
+      expect(managerQuery).toHaveBeenCalledWith(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        ['parcel-1:Forward'],
+      );
+      const lockCallOrder = managerQuery.mock.invocationCallOrder[0];
+      const insertCallOrder = insertAttempt.mock.invocationCallOrder[0];
+      expect(lockCallOrder).toBeLessThan(insertCallOrder);
     });
 
     it('saves both the failed-event and rts-event OUTBOX rows on the 3rd consecutive failure', async () => {
