@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest.fn() mocks flagged as false positives */
 import { NotificationService } from './notification.service';
 import { IEmailProvider } from './ports/email-provider.port';
+import { IIdempotencyStore } from './ports/idempotency-store.port';
 import {
   OrderCreatedEventV1,
   PaymentSucceededEventV1,
@@ -11,13 +12,18 @@ import {
 
 describe('NotificationService', () => {
   let emailProvider: jest.Mocked<IEmailProvider>;
+  let idempotencyStore: jest.Mocked<IIdempotencyStore>;
   let service: NotificationService;
 
   beforeEach(() => {
     emailProvider = {
       send: jest.fn().mockResolvedValue(undefined),
     };
-    service = new NotificationService(emailProvider);
+    idempotencyStore = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new NotificationService(emailProvider, idempotencyStore);
   });
 
   describe('handleOrderCreated', () => {
@@ -134,6 +140,44 @@ describe('NotificationService', () => {
       // Should complete successfully without throwing
       await expect(service.handleParcelRts(event)).resolves.not.toThrow();
       expect(emailProvider.send).toHaveBeenCalled();
+    });
+  });
+
+  describe('redelivery dedup', () => {
+    const event: ParcelRtsEventV1 = {
+      event_id: 'evt-redelivered',
+      occurred_at: '2026-07-15T00:00:00Z',
+      parcel_id: 'parcel-123',
+    };
+
+    it('skips sending when this event_id has already been notified', async () => {
+      idempotencyStore.get.mockResolvedValueOnce(true);
+
+      await service.handleParcelRts(event);
+
+      expect(idempotencyStore.get).toHaveBeenCalledWith(
+        `idem:notification:${event.event_id}`,
+      );
+      expect(emailProvider.send).not.toHaveBeenCalled();
+    });
+
+    it('marks the event_id as notified only after a successful send', async () => {
+      await service.handleParcelRts(event);
+
+      expect(emailProvider.send).toHaveBeenCalledTimes(1);
+      expect(idempotencyStore.set).toHaveBeenCalledWith(
+        `idem:notification:${event.event_id}`,
+        true,
+        24 * 60 * 60,
+      );
+    });
+
+    it('does not mark the event_id as notified when the send fails, so a redelivery can retry', async () => {
+      emailProvider.send.mockRejectedValueOnce(new Error('SMTP timeout'));
+
+      await service.handleParcelRts(event);
+
+      expect(idempotencyStore.set).not.toHaveBeenCalled();
     });
   });
 });
