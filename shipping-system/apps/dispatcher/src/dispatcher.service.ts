@@ -10,7 +10,6 @@ import { IDispatcherRepository } from './ports/dispatcher-repository.port';
 import { ICourierLookupPort } from './ports/courier-lookup.port';
 import { IOrderLookupPort } from './ports/order-lookup.port';
 import { IIdempotencyStore } from './ports/idempotency-store.port';
-import { IOutboxRepository } from './ports/outbox-repository.port';
 import { AssignTripDto } from './dto/assign-trip.dto';
 import { AssignLegDto } from './dto/assign-leg.dto';
 
@@ -27,7 +26,6 @@ export class DispatcherService {
     private readonly courierLookup: ICourierLookupPort,
     private readonly orderLookup: IOrderLookupPort,
     private readonly idempotencyStore: IIdempotencyStore,
-    private readonly outboxRepository: IOutboxRepository,
   ) {}
 
   async assignTrip(
@@ -121,11 +119,25 @@ export class DispatcherService {
       parcel_id: parcelId,
       courier_id: dto.courier_id,
     };
-    await this.outboxRepository.insert({
-      eventId: payload.event_id,
-      eventType: NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY,
-      payload: payload as unknown as Record<string, unknown>,
-    });
+    // Re-checks the parcel's live state/assignment under a per-parcel lock
+    // and writes the OUTBOX row atomically - closes the double-assign race
+    // where two concurrent calls with different idempotency keys could
+    // both pass validation and both publish this event with different
+    // couriers (edge-case audit, 2026-08-06, gap #2).
+    const outcome = await this.dispatcherRepository.reserveCourierAssignment(
+      parcelId,
+      {
+        eventId: payload.event_id,
+        eventType: NATS_SUBJECTS.PARCEL_OUT_FOR_DELIVERY,
+        payload: payload as unknown as Record<string, unknown>,
+      },
+    );
+    if (outcome === 'parcel_terminal') {
+      throw new ConflictException('parcel already in a terminal state');
+    }
+    if (outcome === 'already_assigned') {
+      throw new ConflictException('parcel already assigned to a courier');
+    }
 
     const result: AssignmentResult = { status: 'recorded' };
     await this.idempotencyStore.set(cacheKey, result, IDEMPOTENCY_TTL_SECONDS);

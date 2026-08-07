@@ -1,6 +1,10 @@
 import { Driver } from '../entities/driver.entity';
 import { Truck } from '../entities/truck.entity';
 import { LinehaulTrip } from '../entities/linehaul-trip.entity';
+import { OutboxEventInput } from './outbox-repository.port';
+
+export type CourierAssignmentOutcome =
+  'assigned' | 'parcel_terminal' | 'already_assigned';
 
 export abstract class IDispatcherRepository {
   abstract findTripById(id: string): Promise<LinehaulTrip | null>;
@@ -16,4 +20,14 @@ export abstract class IDispatcherRepository {
     driverId: string,
     truckId: string,
   ): Promise<void>;
+  // Guards against the double-assign race (two concurrent assign calls for
+  // the same parcel, different idempotency keys): takes a per-parcel
+  // Postgres advisory lock, re-checks the parcel's live state/assignment
+  // (cross-schema read - shipping_order_db and shipping_network_db are
+  // schemas of the same physical database, ADR-003) and writes the OUTBOX
+  // row in the same transaction, so only one concurrent caller can win.
+  abstract reserveCourierAssignment(
+    parcelId: string,
+    outboxEvent: OutboxEventInput,
+  ): Promise<CourierAssignmentOutcome>;
 }
